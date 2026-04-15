@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String  @id // matches Supabase auth.users.id (UUID)
+  email     String  @unique
+  name      String?
+  avatarUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folders      Folder[]
+  decks        Deck[]
+  subscription Subscription?
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeCustomerId     String   @unique
+  stripeSubscriptionId String?  @unique
+  status               String   @default("inactive") // active, canceled, past_due, inactive
+  currentPeriodEnd     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Folder {
+  id    String  @id @default(cuid())
+  name  String
+  emoji String? @default("\ud83d\udcc1")
+  color String? @default("#6366f1") // indigo-500
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  decks Deck[]
+
+  @@index([userId])
+}
+
+model Deck {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  emoji       String? @default("\ud83d\udcda")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  folderId String?
+  folder   Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  cards Card[]
+
+  @@index([userId])
+  @@index([folderId])
+}
+
+model Card {
+  id       String  @id @default(cuid())
+  front    String
+  back     String
+  imageUrl String?
+  hint     String?
+  tags     String? // comma-separated
+  position Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deckId String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  reviews ReviewLog[]
+
+  // SM-2 spaced repetition state
+  easeFactor   Float    @default(2.5)
+  interval     Int      @default(0)
+  repetitions  Int      @default(0)
+  nextReviewAt DateTime @default(now())
+
+  @@index([deckId])
+  @@index([nextReviewAt])
+}
+
+model ReviewLog {
+  id         String   @id @default(cuid())
+  quality    Int      // 1=Again, 3=Good, 5=Easy
+  easeFactor Float
+  interval   Int
+  reviewedAt DateTime @default(now())
+
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([reviewedAt])
+}
