@@ -18,7 +18,6 @@ interface Deck {
   name: string;
   emoji: string | null;
   dueCount: number;
-  lastReviewedAt: string | null;
   _count: { cards: number };
 }
 
@@ -48,18 +47,7 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
     { label: "1 month", value: 30 },
   ];
 
-  const now = new Date();
-  const cutoffDate = recencyCutoff > 0
-    ? new Date(now.getTime() - recencyCutoff * 86400000)
-    : null;
-
-  const filteredDecks = cutoffDate
-    ? decks.filter(
-        (d) => !d.lastReviewedAt || new Date(d.lastReviewedAt) < cutoffDate
-      )
-    : decks;
-
-  const selectedDue = filteredDecks
+  const selectedDue = decks
     .filter((d) => selectedDeckIds.includes(d.id))
     .reduce((sum, d) => sum + d.dueCount, 0);
 
@@ -78,6 +66,9 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
       autoFlip: String(autoFlip),
       orientation,
     });
+    if (recencyCutoff > 0) {
+      params.set("recencyCutoff", String(recencyCutoff));
+    }
     router.push(`/review/session?${params.toString()}`);
   }
 
@@ -94,18 +85,11 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Select Packs</CardTitle>
-            {cutoffDate && filteredDecks.length !== decks.length && (
-              <span className="text-xs text-muted-foreground">
-                {decks.length - filteredDecks.length} pack{decks.length - filteredDecks.length !== 1 ? "s" : ""} hidden by recency filter
-              </span>
-            )}
-          </div>
+          <CardTitle>Select Packs</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {filteredDecks.map((deck) => (
+            {decks.map((deck) => (
               <label
                 key={deck.id}
                 className="flex items-center gap-3 rounded-lg p-3 hover:bg-accent cursor-pointer"
@@ -119,11 +103,6 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
                 <span className="text-lg">{deck.emoji || "\ud83d\udcda"}</span>
                 <div className="flex-1 min-w-0">
                   <span className="font-medium">{deck.name}</span>
-                  {deck.lastReviewedAt && (
-                    <p className="text-xs text-muted-foreground">
-                      Last reviewed {formatTimeAgo(new Date(deck.lastReviewedAt))}
-                    </p>
-                  )}
                 </div>
                 <span className="text-sm text-muted-foreground">
                   {deck._count.cards} cards
@@ -133,11 +112,6 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
                 )}
               </label>
             ))}
-            {filteredDecks.length === 0 && decks.length > 0 && (
-              <p className="text-muted-foreground text-sm">
-                All packs were reviewed within the cutoff period. Try reducing the recency filter.
-              </p>
-            )}
             {decks.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 No packs created yet. Create a pack first!
@@ -153,7 +127,7 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-3">
-            Hide packs you&apos;ve reviewed within a certain time period
+            Skip individual cards you&apos;ve reviewed within a certain time period
           </p>
           <div className="flex gap-2 flex-wrap">
             {RECENCY_OPTIONS.map((opt) => (
@@ -262,18 +236,3 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
   );
 }
 
-function formatTimeAgo(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-  return `${Math.floor(diffDays / 30)}mo ago`;
-}

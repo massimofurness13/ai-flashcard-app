@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic";
 export default async function ReviewPage() {
   const userId = await ensureUser();
 
+  const now = new Date();
+
   const decks = await prisma.deck.findMany({
     where: { userId },
     include: {
@@ -15,22 +17,12 @@ export default async function ReviewPage() {
     orderBy: { name: "asc" },
   });
 
-  const now = new Date();
   const decksWithDue = await Promise.all(
     decks.map(async (deck) => {
       const dueCount = await prisma.card.count({
         where: { deckId: deck.id, nextReviewAt: { lte: now } },
       });
-      const lastReview = await prisma.reviewLog.findFirst({
-        where: { card: { deckId: deck.id } },
-        orderBy: { reviewedAt: "desc" },
-        select: { reviewedAt: true },
-      });
-      return {
-        ...deck,
-        dueCount,
-        lastReviewedAt: lastReview?.reviewedAt.toISOString() || null,
-      };
+      return { ...deck, dueCount };
     })
   );
 

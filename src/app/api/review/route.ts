@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const deckIds = searchParams.get("deckIds");
   const limit = parseInt(searchParams.get("limit") || "20", 10);
+  const recencyCutoffDays = parseInt(searchParams.get("recencyCutoff") || "0", 10);
 
   const now = new Date();
 
@@ -21,6 +22,16 @@ export async function GET(request: NextRequest) {
 
   if (deckIds) {
     where.deckId = { in: deckIds.split(",") };
+  }
+
+  // Filter out individual cards reviewed within the recency cutoff
+  if (recencyCutoffDays > 0) {
+    const cutoffDate = new Date(now.getTime() - recencyCutoffDays * 86400000);
+    where.reviews = {
+      none: {
+        reviewedAt: { gte: cutoffDate },
+      },
+    };
   }
 
   const cards = await prisma.card.findMany({

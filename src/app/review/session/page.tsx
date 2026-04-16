@@ -27,11 +27,13 @@ function ReviewSessionContent() {
   const limit = searchParams.get("limit") || "10";
   const autoFlip = parseInt(searchParams.get("autoFlip") || "0", 10);
   const orientation = (searchParams.get("orientation") || "front") as "front" | "back" | "mixed";
+  const recencyCutoff = searchParams.get("recencyCutoff") || "0";
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (deckIds) params.set("deckIds", deckIds);
     params.set("limit", limit);
+    if (recencyCutoff !== "0") params.set("recencyCutoff", recencyCutoff);
 
     fetch(`/api/review?${params.toString()}`)
       .then((res) => res.json())
@@ -39,7 +41,7 @@ function ReviewSessionContent() {
         setCards(data.cards);
         setLoading(false);
       });
-  }, [deckIds, limit]);
+  }, [deckIds, limit, recencyCutoff]);
 
   function handleComplete(reviewStats: ReviewStats) {
     setStats(reviewStats);
