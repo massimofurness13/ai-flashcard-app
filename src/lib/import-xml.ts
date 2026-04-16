@@ -1,56 +1,157 @@
 import { XMLParser } from "fast-xml-parser";
 import type { ParsedCard } from "./import-csv";
 
-const FRONT_KEYS = ["front", "question", "term", "word", "prompt"];
-const BACK_KEYS = ["back", "answer", "definition", "meaning", "response"];
-const HINT_KEYS = ["hint", "clue", "mnemonic", "note"];
-const TAGS_KEYS = ["tags", "tag", "category", "label"];
+const FRONT_NAMES = ["front", "question", "term", "word", "prompt", "text"];
+const BACK_NAMES = ["back", "answer", "definition", "meaning", "response", "translation"];
+const HINT_NAMES = ["hint", "clue", "mnemonic", "note"];
+const TAGS_NAMES = ["tags", "tag", "category", "label"];
 
-function matchKey(obj: Record<string, unknown>, candidates: string[]): string | undefined {
-  const keys = Object.keys(obj);
-  for (const candidate of candidates) {
-    const match = keys.find((k) => k.toLowerCase() === candidate);
-    if (match && typeof obj[match] === "string") return obj[match] as string;
+function matchesList(value: string, list: string[]): boolean {
+  return list.includes(value.toLowerCase());
+}
+
+// ---- Strategy 1: Standard tag-name based cards ----
+// e.g. <card><front>...</front><back>...</back></card>
+function tryTagNameCards(parsed: unknown): ParsedCard[] {
+  const cards = findCardArrays(parsed);
+  const results: ParsedCard[] = [];
+
+  for (const card of cards) {
+    if (!card || typeof card !== "object" || Array.isArray(card)) continue;
+    const rec = card as Record<string, unknown>;
+    const front = matchByTagName(rec, FRONT_NAMES);
+    const back = matchByTagName(rec, BACK_NAMES);
+    if (!front || !back) continue;
+
+    const entry: ParsedCard = { front: front.trim(), back: back.trim() };
+    if (!entry.front || !entry.back) continue;
+
+    const hint = matchByTagName(rec, HINT_NAMES)?.trim();
+    const tags = matchByTagName(rec, TAGS_NAMES)?.trim();
+    if (hint) entry.hint = hint;
+    if (tags) entry.tags = tags;
+    results.push(entry);
+  }
+
+  return results;
+}
+
+function matchByTagName(obj: Record<string, unknown>, names: string[]): string | undefined {
+  for (const key of Object.keys(obj)) {
+    if (matchesList(key, names)) {
+      const val = obj[key];
+      if (typeof val === "string") return val;
+      if (typeof val === "number") return String(val);
+    }
   }
   return undefined;
 }
 
-function isCardLike(obj: unknown): obj is Record<string, unknown> {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
-  const rec = obj as Record<string, unknown>;
-  const keys = Object.keys(rec).map((k) => k.toLowerCase());
-  return (
-    keys.some((k) => FRONT_KEYS.includes(k)) &&
-    keys.some((k) => BACK_KEYS.includes(k))
-  );
+// ---- Strategy 2: Attribute-based cards (e.g. TTS flashcard apps) ----
+// e.g. <card><tts name="Text">...</tts><tts name="Translation">...</tts></card>
+function tryAttributeCards(content: string): ParsedCard[] {
+  const attrParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    trimValues: true,
+  });
+
+  let parsed: unknown;
+  try {
+    parsed = attrParser.parse(content);
+  } catch {
+    return [];
+  }
+
+  const cards = findCardArrays(parsed);
+  const results: ParsedCard[] = [];
+
+  for (const card of cards) {
+    if (!card || typeof card !== "object" || Array.isArray(card)) continue;
+    const rec = card as Record<string, unknown>;
+
+    // Look for arrays of elements with @_name attributes
+    // e.g. { tts: [ { "@_name": "Text", "#text": "..." }, { "@_name": "Translation", "#text": "..." } ] }
+    let front: string | undefined;
+    let back: string | undefined;
+    let hint: string | undefined;
+
+    for (const value of Object.values(rec)) {
+      const items = Array.isArray(value) ? value : [value];
+      for (const item of items) {
+        if (!item || typeof item !== "object") continue;
+        const el = item as Record<string, unknown>;
+        const name = (el["@_name"] as string) || "";
+        const text = extractText(el);
+        if (!text) continue;
+
+        if (matchesList(name, FRONT_NAMES)) front = text;
+        else if (matchesList(name, BACK_NAMES)) back = text;
+        else if (matchesList(name, HINT_NAMES)) hint = text;
+        // If we haven't matched front yet, first element is front
+        else if (!front) front = text;
+        // If front is set but back isn't, next element is back
+        else if (!back) back = text;
+      }
+    }
+
+    if (front && back) {
+      const entry: ParsedCard = { front: front.trim(), back: back.trim() };
+      if (!entry.front || !entry.back) continue;
+      if (hint) entry.hint = hint.trim();
+      results.push(entry);
+    }
+  }
+
+  return results;
 }
 
-function findCardNodes(parsed: unknown): Record<string, unknown>[] {
+function extractText(el: Record<string, unknown>): string | undefined {
+  // fast-xml-parser puts text content in #text when attributes are present
+  if (typeof el["#text"] === "string") return el["#text"];
+  if (typeof el["#text"] === "number") return String(el["#text"]);
+  // Or it might be a direct string value
+  for (const val of Object.values(el)) {
+    if (typeof val === "string" && !val.startsWith("@")) return val;
+  }
+  return undefined;
+}
+
+// ---- Shared: find arrays of card-like objects in parsed tree ----
+function findCardArrays(parsed: unknown): unknown[] {
   if (!parsed || typeof parsed !== "object") return [];
 
-  // If it's an array, check each element
   if (Array.isArray(parsed)) {
-    if (parsed.length > 0 && isCardLike(parsed[0])) return parsed;
-    // Recurse into array elements
+    if (parsed.length > 0 && parsed[0] && typeof parsed[0] === "object") return parsed;
     for (const item of parsed) {
-      const found = findCardNodes(item);
+      const found = findCardArrays(item);
       if (found.length > 0) return found;
     }
     return [];
   }
 
   const obj = parsed as Record<string, unknown>;
+  // Look for keys named "card", "cards", "item", "entry" etc.
+  const cardKeyNames = ["card", "cards", "item", "entry", "row"];
 
-  // Check each value in the object
-  for (const value of Object.values(obj)) {
-    if (Array.isArray(value)) {
-      if (value.length > 0 && isCardLike(value[0])) return value;
-    } else if (isCardLike(value)) {
-      return [value as Record<string, unknown>];
+  for (const [key, value] of Object.entries(obj)) {
+    if (cardKeyNames.includes(key.toLowerCase())) {
+      if (Array.isArray(value)) return value;
+      // If it's a single object, it might be a wrapper (e.g. "cards" containing "card")
+      // or a single card. Recurse into it first.
+      if (value && typeof value === "object") {
+        const deeper = findCardArrays(value);
+        if (deeper.length > 0) return deeper;
+        // If nothing found deeper, treat this object as a single card
+        return [value];
+      }
     }
-    // Recurse deeper
+  }
+
+  // Recurse into all object values
+  for (const value of Object.values(obj)) {
     if (value && typeof value === "object") {
-      const found = findCardNodes(value);
+      const found = findCardArrays(value);
       if (found.length > 0) return found;
     }
   }
@@ -58,36 +159,22 @@ function findCardNodes(parsed: unknown): Record<string, unknown>[] {
   return [];
 }
 
+// ---- Main entry point ----
 export function parseXML(content: string): ParsedCard[] {
-  const parser = new XMLParser({ ignoreAttributes: true, trimValues: true });
-
-  let parsed: unknown;
+  // Strategy 1: Parse with attributes ignored, match by tag names
+  const simpleParser = new XMLParser({ ignoreAttributes: true, trimValues: true });
   try {
-    parsed = parser.parse(content);
+    const parsed = simpleParser.parse(content);
+    const cards = tryTagNameCards(parsed);
+    if (cards.length > 0) return cards;
   } catch {
-    return [];
+    // Fall through to next strategy
   }
 
-  const nodes = findCardNodes(parsed);
+  // Strategy 2: Parse with attributes, match by @name attributes
+  // Handles formats like <tts name="Text">...</tts>
+  const attrCards = tryAttributeCards(content);
+  if (attrCards.length > 0) return attrCards;
 
-  const results: ParsedCard[] = [];
-
-  for (const node of nodes) {
-    const front = matchKey(node, FRONT_KEYS);
-    const back = matchKey(node, BACK_KEYS);
-    if (!front || !back) continue;
-
-    const trimmedFront = front.trim();
-    const trimmedBack = back.trim();
-    if (!trimmedFront || !trimmedBack) continue;
-
-    const card: ParsedCard = { front: trimmedFront, back: trimmedBack };
-    const hint = matchKey(node, HINT_KEYS)?.trim();
-    const tags = matchKey(node, TAGS_KEYS)?.trim();
-    if (hint) card.hint = hint;
-    if (tags) card.tags = tags;
-    results.push(card);
-  }
-
-  return results;
+  return [];
 }
