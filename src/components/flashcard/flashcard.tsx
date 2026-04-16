@@ -62,6 +62,11 @@ export function Flashcard({
 
         {/* Back face */}
         <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
+          {showImage && (
+            <div className="h-32 mb-4 rounded-lg overflow-hidden">
+              <FlashcardImage imageUrl={imageUrl} cardText={front} />
+            </div>
+          )}
           <div className="flex-1 flex items-center justify-center">
             <p className="text-lg text-center text-card-foreground">{back}</p>
           </div>

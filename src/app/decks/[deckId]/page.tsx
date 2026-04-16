@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { prisma } from "@/lib/db";
 import { ensureUser } from "@/lib/auth";
 import { isProUser } from "@/lib/subscription";
@@ -55,12 +56,14 @@ export default async function DeckPage({
   const isPro = await isProUser(userId);
 
   return (
-    <DeckView
-      deck={deck}
-      overallGrade={overallGrade}
-      avgMastery={avgMastery}
-      gradeDistribution={gradeDistribution}
-      isPro={isPro}
-    />
+    <Suspense>
+      <DeckView
+        deck={deck}
+        overallGrade={overallGrade}
+        avgMastery={avgMastery}
+        gradeDistribution={gradeDistribution}
+        isPro={isPro}
+      />
+    </Suspense>
   );
 }

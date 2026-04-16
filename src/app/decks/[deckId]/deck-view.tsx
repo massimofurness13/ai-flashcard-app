@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,59 @@ interface DeckViewProps {
 
 export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, isPro = false }: DeckViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [imageGenProgress, setImageGenProgress] = useState<{ done: number; total: number } | null>(null);
+  const imageGenStarted = useRef(false);
+
+  // Background image generation after save from generate page
+  useEffect(() => {
+    if (searchParams.get("generating") !== "true") return;
+    if (imageGenStarted.current) return;
+    imageGenStarted.current = true;
+
+    const storageKey = `pending-images-${deck.id}`;
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return;
+
+    let pendingCards: { cardId: string; front: string; back: string }[];
+    try {
+      pendingCards = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!pendingCards.length) return;
+
+    setImageGenProgress({ done: 0, total: pendingCards.length });
+
+    (async () => {
+      for (let i = 0; i < pendingCards.length; i++) {
+        const card = pendingCards[i];
+        try {
+          const genRes = await fetch("/api/images/generate-ai", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ front: card.front, back: card.back }),
+          });
+          const genData = await genRes.json();
+          if (genRes.ok && genData.imageUrl) {
+            await fetch(`/api/cards/${card.cardId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ imageUrl: genData.imageUrl }),
+            });
+          }
+        } catch {
+          // Skip failed images
+        }
+        setImageGenProgress({ done: i + 1, total: pendingCards.length });
+      }
+      sessionStorage.removeItem(storageKey);
+      setImageGenProgress(null);
+      // Clean up URL param and refresh card data
+      router.replace(`/decks/${deck.id}`);
+      router.refresh();
+    })();
+  }, [searchParams, deck.id, router]);
 
   async function handleDelete() {
     if (!confirm("Delete this pack and all its cards? This cannot be undone.")) return;
@@ -125,6 +179,32 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
           cardCount={deck._count.cards}
         />
       </div>
+
+      {imageGenProgress && (
+        <CardUI>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <svg className="animate-spin h-5 w-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-medium">
+                  Generating AI images... {imageGenProgress.done} / {imageGenProgress.total}
+                </p>
+                <div className="mt-2 w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all duration-300"
+                    style={{
+                      width: `${(imageGenProgress.done / imageGenProgress.total) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </CardUI>
+      )}
 
       {deck.cards.length > 0 && (
         <CardUI>

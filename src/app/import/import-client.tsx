@@ -125,7 +125,7 @@ export function ImportClient({ decks, isPro }: { decks: Deck[]; isPro: boolean }
           }`}
           onClick={() => setTab("csv")}
         >
-          CSV / TSV
+          CSV / TSV / XML
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
@@ -164,24 +164,26 @@ export function ImportClient({ decks, isPro }: { decks: Deck[]; isPro: boolean }
                 <>
                   <p className="font-medium">Click to upload a file</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    CSV or TSV file with at least 2 columns (front, back)
+                    CSV, TSV, or XML file with front/back fields
                   </p>
                 </>
               )}
               <input
                 ref={fileRef}
                 type="file"
-                accept=".csv,.tsv,.txt"
+                accept=".csv,.tsv,.txt,.xml"
                 className="hidden"
                 onChange={handleFileUpload}
               />
             </div>
 
             <div className="text-sm text-muted-foreground space-y-1">
-              <p className="font-medium">Expected format:</p>
+              <p className="font-medium">CSV / TSV format:</p>
               <p>Column 1: Front (question) | Column 2: Back (answer)</p>
               <p>Optional: Column 3: Hint | Column 4: Tags</p>
               <p>First row can be a header (auto-detected)</p>
+              <p className="font-medium mt-3">XML format:</p>
+              <p>{"<cards><card><front>...</front><back>...</back></card></cards>"}</p>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

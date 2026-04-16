@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const router = useRouter();
   const [topic, setTopic] = useState("");
   const [material, setMaterial] = useState("");
+  const [generateImages, setGenerateImages] = useState(false);
   const [targetDeckId, setTargetDeckId] = useState("");
   const [newDeckName, setNewDeckName] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -40,6 +41,66 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const [error, setError] = useState("");
   const [generatingImages, setGeneratingImages] = useState(false);
   const [imageProgress, setImageProgress] = useState(0);
+  const [imageTotalNeeded, setImageTotalNeeded] = useState(0);
+  const [pendingImageIndices, setPendingImageIndices] = useState<Set<number>>(new Set());
+
+  const abortRef = useRef(false);
+  const imageUploadRef = useRef<HTMLInputElement>(null);
+  const [uploadTargetIndex, setUploadTargetIndex] = useState<number | null>(null);
+
+  // Shared image generation helper
+  const generateImagesForCards = useCallback(
+    async (currentCards: GeneratedCard[]) => {
+      const needingImages = currentCards
+        .map((c, i) => ({ front: c.front, back: c.back, index: i }))
+        .filter((_, i) => !currentCards[i].imageUrl);
+
+      if (needingImages.length === 0) return;
+
+      setGeneratingImages(true);
+      setImageProgress(0);
+      setImageTotalNeeded(needingImages.length);
+      setPendingImageIndices(new Set(needingImages.map((c) => c.index)));
+      abortRef.current = false;
+
+      for (let i = 0; i < needingImages.length; i++) {
+        if (abortRef.current) break;
+        const card = needingImages[i];
+        setPendingImageIndices((prev) => {
+          const next = new Set(prev);
+          next.add(card.index);
+          return next;
+        });
+        try {
+          const res = await fetch("/api/images/generate-ai", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ front: card.front, back: card.back }),
+          });
+          const data = await res.json();
+          if (res.ok && data.imageUrl) {
+            setCards((prev) =>
+              prev.map((c, idx) =>
+                idx === card.index ? { ...c, imageUrl: data.imageUrl } : c
+              )
+            );
+          }
+        } catch {
+          // Skip failed images — user can regenerate individually
+        }
+        setPendingImageIndices((prev) => {
+          const next = new Set(prev);
+          next.delete(card.index);
+          return next;
+        });
+        setImageProgress(i + 1);
+      }
+
+      setGeneratingImages(false);
+      setPendingImageIndices(new Set());
+    },
+    []
+  );
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -75,6 +136,12 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       }
 
       setCards(generated);
+
+      // Auto-trigger image generation if toggle is ON
+      if (generateImages) {
+        // Small delay so the edit UI renders first
+        setTimeout(() => generateImagesForCards(generated), 100);
+      }
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -87,7 +154,6 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
 
     let deckId = targetDeckId;
 
-    // Create new deck if needed
     if (!deckId && newDeckName.trim()) {
       const res = await fetch("/api/decks", {
         method: "POST",
@@ -104,7 +170,6 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       return;
     }
 
-    // Save all cards to the deck
     const res = await fetch(`/api/decks/${deckId}/cards`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -119,50 +184,98 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     });
 
     if (res.ok) {
-      router.push(`/decks/${deckId}`);
+      const createdCards = await res.json();
+      const cardsArray = Array.isArray(createdCards) ? createdCards : [createdCards];
+
+      // If images are still generating or some cards lack images with toggle ON,
+      // store pending info for background generation on deck view
+      const pendingCards = cardsArray
+        .map((saved: { id: string }, i: number) => ({
+          cardId: saved.id,
+          front: cards[i].front.slice(0, 200),
+          back: cards[i].back.slice(0, 200),
+        }))
+        .filter((_: unknown, i: number) => !cards[i].imageUrl);
+
+      // Stop current image generation
+      abortRef.current = true;
+
+      if (generateImages && pendingCards.length > 0) {
+        sessionStorage.setItem(
+          `pending-images-${deckId}`,
+          JSON.stringify(pendingCards)
+        );
+        router.push(`/decks/${deckId}?generating=true`);
+      } else {
+        router.push(`/decks/${deckId}`);
+      }
       router.refresh();
     }
 
     setSaving(false);
   }
 
-  async function handleGenerateImages() {
-    setGeneratingImages(true);
-    setImageProgress(0);
-    setError("");
-
-    const cardsNeedingImages = cards
-      .map((c, i) => ({ front: c.front, back: c.back, index: i }))
-      .filter((c) => !cards[c.index].imageUrl);
-
+  async function handleRegenerateImage(index: number) {
+    const card = cards[index];
+    setPendingImageIndices((prev) => new Set(prev).add(index));
     try {
-      // Generate images one at a time for progress feedback
-      for (let i = 0; i < cardsNeedingImages.length; i++) {
-        const card = cardsNeedingImages[i];
-        try {
-          const res = await fetch("/api/images/generate-ai", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ front: card.front, back: card.back }),
-          });
-          const data = await res.json();
-          if (res.ok && data.imageUrl) {
-            setCards((prev) =>
-              prev.map((c, idx) =>
-                idx === card.index ? { ...c, imageUrl: data.imageUrl } : c
-              )
-            );
-          }
-        } catch {
-          // Skip failed images silently — user can regenerate individually
-        }
-        setImageProgress(i + 1);
+      const res = await fetch("/api/images/generate-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ front: card.front, back: card.back }),
+      });
+      const data = await res.json();
+      if (res.ok && data.imageUrl) {
+        setCards((prev) =>
+          prev.map((c, i) => (i === index ? { ...c, imageUrl: data.imageUrl } : c))
+        );
       }
     } catch {
-      setError("Image generation encountered an error.");
-    } finally {
-      setGeneratingImages(false);
+      // Silently fail — user can retry
     }
+    setPendingImageIndices((prev) => {
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+  }
+
+  function triggerUpload(index: number) {
+    setUploadTargetIndex(index);
+    imageUploadRef.current?.click();
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || uploadTargetIndex === null) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setPendingImageIndices((prev) => new Set(prev).add(uploadTargetIndex));
+    try {
+      const res = await fetch("/api/images/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        const idx = uploadTargetIndex;
+        setCards((prev) =>
+          prev.map((c, i) => (i === idx ? { ...c, imageUrl: data.url } : c))
+        );
+      }
+    } catch {
+      // Silently fail
+    }
+    setPendingImageIndices((prev) => {
+      const next = new Set(prev);
+      next.delete(uploadTargetIndex);
+      return next;
+    });
+    setUploadTargetIndex(null);
+    // Reset file input
+    if (imageUploadRef.current) imageUploadRef.current.value = "";
   }
 
   function updateCard(index: number, field: keyof GeneratedCard, value: string) {
@@ -175,9 +288,16 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     setCards((prev) => prev.filter((_, i) => i !== index));
   }
 
-  // Step 1: Input form
-  // Step 2: Generating progress
-  // Step 3: Edit cards + save
+  function handleStartOver() {
+    abortRef.current = true;
+    setCards([]);
+    setExpectedCount(0);
+    setGeneratedCount(0);
+    setImageProgress(0);
+    setGeneratingImages(false);
+    setPendingImageIndices(new Set());
+  }
+
   const step = cards.length > 0 ? "edit" : generating ? "generating" : "input";
 
   if (!isPro) {
@@ -203,6 +323,15 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
         </p>
       </div>
 
+      {/* Hidden file input for per-card image upload */}
+      <input
+        ref={imageUploadRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
+
       {step === "input" && (
         <form onSubmit={handleGenerate} className="space-y-4 max-w-lg">
           <Input
@@ -222,6 +351,31 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
             onChange={(e) => setMaterial(e.target.value)}
             rows={6}
           />
+
+          {/* AI Image Generation Toggle */}
+          <label className="flex items-center justify-between p-4 rounded-lg border border-border cursor-pointer hover:bg-accent/50 transition-colors">
+            <div>
+              <p className="font-medium text-sm">Generate AI Images</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Automatically create illustrations for each card
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={generateImages}
+              onClick={() => setGenerateImages(!generateImages)}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
+                generateImages ? "bg-primary" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  generateImages ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </label>
 
           {error && (
             <p className="text-sm text-destructive">{error}</p>
@@ -264,12 +418,9 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
-              {cards.length} / {cards.length} cards generated
+              {cards.length} cards generated
             </h2>
-            <Button
-              variant="outline"
-              onClick={() => { setCards([]); setExpectedCount(0); setGeneratedCount(0); setImageProgress(0); }}
-            >
+            <Button variant="outline" onClick={handleStartOver}>
               Start Over
             </Button>
           </div>
@@ -278,54 +429,56 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
             Review and edit your cards below, then save them to a pack.
           </p>
 
-          {/* AI Image Generation for all cards */}
-          {isPro && (
+          {/* Image generation progress banner */}
+          {generatingImages && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <svg className="animate-spin h-5 w-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">
+                      Generating images... {imageProgress} / {imageTotalNeeded}
+                    </p>
+                    <div className="mt-2 w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all duration-300"
+                        style={{
+                          width: `${(imageProgress / Math.max(imageTotalNeeded, 1)) * 100}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  You can edit cards and save while images generate
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Manual generate images button (when toggle was OFF) */}
+          {!generatingImages && !generateImages && cards.some((c) => !c.imageUrl) && (
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium">AI Images</p>
                     <p className="text-sm text-muted-foreground">
-                      {generatingImages
-                        ? `Generating ${imageProgress} / ${cards.filter((c) => !c.imageUrl).length + imageProgress} images...`
-                        : cards.some((c) => c.imageUrl)
-                          ? `${cards.filter((c) => c.imageUrl).length} of ${cards.length} cards have images`
-                          : "Generate illustrations for all cards"}
+                      {cards.some((c) => c.imageUrl)
+                        ? `${cards.filter((c) => c.imageUrl).length} of ${cards.length} cards have images`
+                        : "Generate illustrations for all cards"}
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    onClick={handleGenerateImages}
-                    disabled={generatingImages}
-                  >
-                    {generatingImages ? (
-                      <span className="flex items-center gap-2">
-                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        Generating...
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                        </svg>
-                        Generate AI Images
-                      </span>
-                    )}
+                  <Button variant="outline" onClick={() => generateImagesForCards(cards)}>
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                    </svg>
+                    Generate AI Images
                   </Button>
                 </div>
-                {generatingImages && (
-                  <div className="mt-3 w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all duration-300"
-                      style={{
-                        width: `${(imageProgress / Math.max(cards.filter((c) => !c.imageUrl).length, 1)) * 100}%`,
-                      }}
-                    />
-                  </div>
-                )}
               </CardContent>
             </Card>
           )}
@@ -367,29 +520,77 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                     onChange={(e) => updateCard(index, "hint", e.target.value)}
                     placeholder="Optional hint"
                   />
-                  {card.imageUrl && (
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={card.imageUrl}
-                        alt={`Image for card ${index + 1}`}
-                        className="w-16 h-16 object-cover rounded-lg border border-border"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setCards((prev) =>
-                            prev.map((c, i) =>
-                              i === index ? { ...c, imageUrl: undefined } : c
-                            )
-                          )
-                        }
-                        className="text-muted-foreground text-xs"
-                      >
-                        Remove image
-                      </Button>
-                    </div>
-                  )}
+
+                  {/* Per-card image section */}
+                  <div className="flex items-center gap-3 pt-1">
+                    {pendingImageIndices.has(index) ? (
+                      <div className="w-16 h-16 rounded-lg border border-border bg-muted flex items-center justify-center">
+                        <svg className="animate-spin h-5 w-5 text-muted-foreground" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    ) : card.imageUrl ? (
+                      <>
+                        <img
+                          src={card.imageUrl}
+                          alt={`Image for card ${index + 1}`}
+                          className="w-16 h-16 object-cover rounded-lg border border-border"
+                        />
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => handleRegenerateImage(index)}
+                          >
+                            Regenerate
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => triggerUpload(index)}
+                          >
+                            Upload
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs text-muted-foreground"
+                            onClick={() =>
+                              setCards((prev) =>
+                                prev.map((c, i) =>
+                                  i === index ? { ...c, imageUrl: undefined } : c
+                                )
+                              )
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => handleRegenerateImage(index)}
+                        >
+                          Generate Image
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => triggerUpload(index)}
+                        >
+                          Upload Image
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -432,7 +633,11 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                 onClick={handleSave}
                 disabled={saving || cards.length === 0 || (!targetDeckId && !newDeckName.trim())}
               >
-                {saving ? "Saving..." : `Save ${cards.length} Cards to Pack`}
+                {saving
+                  ? "Saving..."
+                  : generatingImages
+                    ? `Save ${cards.length} Cards (images will continue in background)`
+                    : `Save ${cards.length} Cards to Pack`}
               </Button>
             </CardContent>
           </Card>
