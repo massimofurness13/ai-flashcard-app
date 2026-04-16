@@ -108,11 +108,6 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
     router.refresh();
   }
 
-  const now = new Date();
-  const dueCards = deck.cards.filter(
-    (c) => new Date(c.nextReviewAt) <= now
-  ).length;
-
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -131,12 +126,9 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
           {deck.description && (
             <p className="text-muted-foreground mt-1">{deck.description}</p>
           )}
-          <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
-            <span>{deck._count.cards} cards</span>
-            {dueCards > 0 && (
-              <Badge variant="warning">{dueCards} due for review</Badge>
-            )}
-          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {deck._count.cards} cards
+          </p>
         </div>
 
         <div className="flex items-center gap-2">

@@ -3,14 +3,13 @@
 import { CreateMenu } from "@/components/home/create-menu";
 import { FolderGroup } from "@/components/home/folder-group";
 import { DeckCard } from "@/components/deck/deck-card";
-import { Badge } from "@/components/ui/badge";
 
 interface Deck {
   id: string;
   name: string;
   emoji: string | null;
   _count: { cards: number };
-  dueCount: number;
+  grade: string;
 }
 
 interface Folder {
@@ -25,7 +24,6 @@ interface HomePageProps {
   folders: Folder[];
   unfolderedDecks: Deck[];
   totalCards: number;
-  totalDue: number;
   userName?: string;
 }
 
@@ -36,7 +34,7 @@ function getGreeting(): string {
   return "Good evening";
 }
 
-export function HomePage({ folders, unfolderedDecks, totalCards, totalDue, userName }: HomePageProps) {
+export function HomePage({ folders, unfolderedDecks, totalCards, userName }: HomePageProps) {
   const hasDecks = folders.some((f) => f.decks.length > 0) || unfolderedDecks.length > 0;
 
   return (
@@ -46,12 +44,9 @@ export function HomePage({ folders, unfolderedDecks, totalCards, totalDue, userN
           <h1 className="text-2xl font-bold">
             {getGreeting()}, {userName}
           </h1>
-          <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-            <span>{totalCards} total cards</span>
-            {totalDue > 0 && (
-              <Badge variant="warning">{totalDue} due for review</Badge>
-            )}
-          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {totalCards} total cards
+          </p>
         </div>
         <CreateMenu />
       </div>
@@ -95,7 +90,7 @@ export function HomePage({ folders, unfolderedDecks, totalCards, totalDue, userN
                     name={deck.name}
                     emoji={deck.emoji}
                     cardCount={deck._count.cards}
-                    dueCount={deck.dueCount}
+                    grade={deck.grade}
                   />
                 ))}
               </div>

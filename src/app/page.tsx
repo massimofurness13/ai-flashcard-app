@@ -2,18 +2,29 @@ import { prisma } from "@/lib/db";
 import { getOptionalUser, ensureUser } from "@/lib/auth";
 import { HomePage } from "./home-client";
 import { LandingPage } from "./landing";
+import { masteryLevel, letterGrade } from "@/lib/sm2";
 
 export const dynamic = "force-dynamic";
+
+async function computeDeckGrade(deckId: string): Promise<string> {
+  const cards = await prisma.card.findMany({
+    where: { deckId },
+    select: { easeFactor: true, interval: true, repetitions: true },
+  });
+  if (cards.length === 0) return "New";
+  const avg = Math.round(
+    cards.reduce((sum, c) => sum + masteryLevel(c), 0) / cards.length
+  );
+  return letterGrade(avg);
+}
 
 export default async function Home() {
   const user = await getOptionalUser();
 
-  // Unauthenticated → landing page
   if (!user) {
     return <LandingPage />;
   }
 
-  // Authenticated → dashboard
   const userId = await ensureUser();
 
   const [folders, unfolderedDecks] = await Promise.all([
@@ -21,9 +32,7 @@ export default async function Home() {
       where: { userId },
       include: {
         decks: {
-          include: {
-            _count: { select: { cards: true } },
-          },
+          include: { _count: { select: { cards: true } } },
           orderBy: { updatedAt: "desc" },
         },
       },
@@ -31,47 +40,34 @@ export default async function Home() {
     }),
     prisma.deck.findMany({
       where: { folderId: null, userId },
-      include: {
-        _count: { select: { cards: true } },
-      },
+      include: { _count: { select: { cards: true } } },
       orderBy: { updatedAt: "desc" },
     }),
   ]);
 
-  const now = new Date();
-
-  // Add due counts to all decks
-  const foldersWithDue = await Promise.all(
+  const foldersWithGrades = await Promise.all(
     folders.map(async (folder) => ({
       ...folder,
       decks: await Promise.all(
         folder.decks.map(async (deck) => ({
           ...deck,
-          dueCount: await prisma.card.count({
-            where: { deckId: deck.id, nextReviewAt: { lte: now } },
-          }),
+          grade: await computeDeckGrade(deck.id),
         }))
       ),
     }))
   );
 
-  const unfolderedWithDue = await Promise.all(
+  const unfolderedWithGrades = await Promise.all(
     unfolderedDecks.map(async (deck) => ({
       ...deck,
-      dueCount: await prisma.card.count({
-        where: { deckId: deck.id, nextReviewAt: { lte: now } },
-      }),
+      grade: await computeDeckGrade(deck.id),
     }))
   );
 
   const totalCards = await prisma.card.count({
     where: { deck: { userId } },
   });
-  const totalDue = await prisma.card.count({
-    where: { deck: { userId }, nextReviewAt: { lte: now } },
-  });
 
-  // Get user display name for greeting
   const userData = await prisma.user.findUnique({
     where: { id: userId },
     select: { name: true, email: true },
@@ -80,10 +76,9 @@ export default async function Home() {
 
   return (
     <HomePage
-      folders={foldersWithDue}
-      unfolderedDecks={unfolderedWithDue}
+      folders={foldersWithGrades}
+      unfolderedDecks={unfolderedWithGrades}
       totalCards={totalCards}
-      totalDue={totalDue}
       userName={displayName}
     />
   );

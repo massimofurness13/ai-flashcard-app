@@ -1,10 +1,19 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useKeyboardNav } from "@/hooks/use-keyboard-nav";
+
+function shuffle<T>(arr: T[]): T[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
 interface Card {
   id: string;
@@ -34,14 +43,17 @@ function simpleHash(str: string): number {
 }
 
 export function StudySession({ cards, deckName, frontVoice, backVoice, onComplete }: StudySessionProps) {
+  // Shuffle cards on initial render (and each "Study Again")
+  const shuffledRef = useRef(shuffle(cards));
+  const [shuffledCards, setShuffledCards] = useState(shuffledRef.current);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [orientation, setOrientation] = useState<Orientation>("front");
   const [showSettings, setShowSettings] = useState(false);
 
-  const currentCard = cards[currentIndex];
-  const progress = ((currentIndex + 1) / cards.length) * 100;
+  const currentCard = shuffledCards[currentIndex];
+  const progress = ((currentIndex + 1) / shuffledCards.length) * 100;
 
   const showBackFirst = useMemo(() => {
     if (orientation === "back") return true;
@@ -59,13 +71,13 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
   }, []);
 
   const handleNext = useCallback(() => {
-    if (currentIndex < cards.length - 1) {
+    if (currentIndex < shuffledCards.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setIsFlipped(false);
     } else {
       setCompleted(true);
     }
-  }, [currentIndex, cards.length]);
+  }, [currentIndex, shuffledCards.length]);
 
   const handlePrev = useCallback(() => {
     if (currentIndex > 0) {
@@ -87,11 +99,12 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
         <span className="text-5xl mb-4">{"\ud83c\udf89"}</span>
         <h2 className="text-2xl font-bold">Study Complete!</h2>
         <p className="text-muted-foreground mt-2">
-          You reviewed all {cards.length} cards in {deckName}
+          You reviewed all {shuffledCards.length} cards in {deckName}
         </p>
         <div className="flex gap-3 mt-6">
           <Button
             onClick={() => {
+              setShuffledCards(shuffle(cards));
               setCurrentIndex(0);
               setIsFlipped(false);
               setCompleted(false);
@@ -113,7 +126,7 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
         <h2 className="text-lg font-semibold">{deckName}</h2>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
-            {currentIndex + 1} / {cards.length}
+            {currentIndex + 1} / {shuffledCards.length}
           </span>
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -187,7 +200,7 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
           variant="outline"
           onClick={handleNext}
         >
-          {currentIndex === cards.length - 1 ? "Finish" : "Next"}
+          {currentIndex === shuffledCards.length - 1 ? "Finish" : "Next"}
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>

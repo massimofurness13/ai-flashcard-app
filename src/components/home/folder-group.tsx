@@ -8,7 +8,7 @@ interface Deck {
   name: string;
   emoji: string | null;
   _count: { cards: number };
-  dueCount: number;
+  grade: string;
 }
 
 interface FolderGroupProps {
@@ -21,7 +21,6 @@ interface FolderGroupProps {
 
 export function FolderGroup({ name, emoji, color, decks, defaultOpen = true }: FolderGroupProps) {
   const [open, setOpen] = useState(defaultOpen);
-  const totalDue = decks.reduce((sum, d) => sum + d.dueCount, 0);
 
   return (
     <div className="space-y-3">
@@ -43,11 +42,6 @@ export function FolderGroup({ name, emoji, color, decks, defaultOpen = true }: F
         <span className="text-sm text-muted-foreground">
           ({decks.length} {decks.length === 1 ? "pack" : "packs"})
         </span>
-        {totalDue > 0 && (
-          <span className="ml-auto text-sm font-medium text-yellow-600 dark:text-yellow-400">
-            {totalDue} due
-          </span>
-        )}
       </button>
 
       {open && (
@@ -59,7 +53,7 @@ export function FolderGroup({ name, emoji, color, decks, defaultOpen = true }: F
               name={deck.name}
               emoji={deck.emoji}
               cardCount={deck._count.cards}
-              dueCount={deck.dueCount}
+              grade={deck.grade}
               folderColor={color}
             />
           ))}
