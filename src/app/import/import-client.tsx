@@ -121,7 +121,7 @@ export function ImportClient({ decks, isPro }: { decks: Deck[]; isPro: boolean }
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "csv"
               ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              : "border-transparent text-muted-foreground hover:text-primary hover:border-primary/50"
           }`}
           onClick={() => setTab("csv")}
         >
@@ -131,7 +131,7 @@ export function ImportClient({ decks, isPro }: { decks: Deck[]; isPro: boolean }
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
             tab === "anki"
               ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              : "border-transparent text-muted-foreground hover:text-primary hover:border-primary/50"
           }`}
           onClick={() => setTab("anki")}
         >

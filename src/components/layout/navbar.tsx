@@ -115,9 +115,9 @@ export function Navbar() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent",
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-primary/10",
                     isActive
-                      ? "bg-accent text-accent-foreground"
+                      ? "bg-primary/15 text-primary"
                       : "text-muted-foreground"
                   )}
                 >
@@ -140,7 +140,7 @@ export function Navbar() {
             <div className="flex items-center gap-2">
               <Link
                 href="/auth/login"
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-primary/10 transition-colors"
               >
                 Sign In
               </Link>
@@ -156,7 +156,7 @@ export function Navbar() {
             <div className="relative">
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-primary/10 transition-colors"
               >
                 {avatarUrl ? (
                   <img
@@ -190,13 +190,13 @@ export function Navbar() {
                     <Link
                       href="/account"
                       onClick={() => setShowDropdown(false)}
-                      className="block px-3 py-2 text-sm hover:bg-accent transition-colors"
+                      className="block px-3 py-2 text-sm hover:bg-primary/10 transition-colors"
                     >
                       Settings
                     </Link>
                     <button
                       onClick={handleLogout}
-                      className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-accent transition-colors"
+                      className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-primary/10 transition-colors"
                     >
                       Sign Out
                     </button>

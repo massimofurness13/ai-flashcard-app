@@ -93,13 +93,13 @@ export function LandingPage() {
           <div className="flex gap-4 justify-center pt-4">
             <Link
               href="/auth/signup"
-              className="inline-flex h-12 items-center justify-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground shadow-sm hover:bg-primary/80 hover:shadow-md transition-all"
             >
               Get Started — It's Free
             </Link>
             <Link
               href="/pricing"
-              className="inline-flex h-12 items-center justify-center rounded-lg border border-border bg-background px-8 text-base font-semibold hover:bg-accent transition-colors"
+              className="inline-flex h-12 items-center justify-center rounded-lg border border-border bg-background px-8 text-base font-semibold hover:border-primary hover:bg-primary/10 transition-all"
             >
               View Plans
             </Link>
@@ -163,7 +163,7 @@ export function LandingPage() {
           </p>
           <Link
             href="/auth/signup"
-            className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/80 hover:shadow-md transition-all"
           >
             Import Your Anki Collection
           </Link>

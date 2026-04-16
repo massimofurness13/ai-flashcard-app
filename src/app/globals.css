@@ -66,6 +66,25 @@ body {
   font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
 }
 
+/* Global interactive element styles */
+a, button, select, [role="button"], [role="switch"],
+label[for], input[type="checkbox"], input[type="radio"],
+summary, [tabindex="0"] {
+  cursor: pointer;
+}
+
+a:hover {
+  opacity: 0.85;
+}
+
+select {
+  cursor: pointer;
+}
+
+select:hover {
+  border-color: var(--primary);
+}
+
 /* Font size customization */
 body.font-small { font-size: 14px; }
 body.font-medium { font-size: 16px; }
