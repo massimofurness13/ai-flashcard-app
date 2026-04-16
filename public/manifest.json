@@ -4,8 +4,8 @@
   "description": "AI-powered flashcard app with spaced repetition",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#6366f1",
+  "background_color": "#1c1917",
+  "theme_color": "#d97706",
   "orientation": "portrait-primary",
   "icons": [
     {

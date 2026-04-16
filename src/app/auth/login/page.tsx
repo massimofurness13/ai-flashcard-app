@@ -47,7 +47,7 @@ function LoginForm() {
           <div className="text-4xl mb-2">{"🧠"}</div>
           <CardTitle className="text-2xl">{APP_NAME}</CardTitle>
           <p className="text-muted-foreground text-sm mt-1">
-            Sign in to your account
+            Welcome back. Please sign in to continue.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -79,12 +79,12 @@ function LoginForm() {
           </form>
 
           <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
+            New to FlashMind?{" "}
             <Link
               href="/auth/signup"
               className="text-primary hover:underline font-medium"
             >
-              Sign up
+              Create your account
             </Link>
           </p>
         </CardContent>

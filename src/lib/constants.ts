@@ -1,5 +1,5 @@
 export const APP_NAME = "FlashMind";
-export const APP_DESCRIPTION = "AI-powered flashcard app with spaced repetition";
+export const APP_DESCRIPTION = "Your personal AI study companion — master any subject with intelligent flashcards and spaced repetition";
 
 export const CARDS_PER_SESSION_OPTIONS = [10, 25, 50, 100, 200] as const;
 export const DEFAULT_CARDS_PER_SESSION = 10;

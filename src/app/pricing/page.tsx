@@ -8,20 +8,20 @@ import { APP_NAME } from "@/lib/constants";
 
 const features = {
   free: [
-    "Create unlimited decks & cards",
-    "Study with SM-2 spaced repetition",
-    "Stats & progress tracking",
-    "CSV/TSV import",
-    "Upload your own images",
-    "TTS, themes, font sizes",
+    "Create unlimited decks and cards",
+    "Spaced repetition with proven SM-2 algorithm",
+    "Progress tracking and mastery statistics",
+    "Import from CSV, TSV, XML, and more",
+    "Upload your own images to cards",
+    "Text-to-speech with language options",
+    "Light and dark themes",
   ],
   pro: [
     "Everything in Free, plus:",
-    "AI card generation (Claude)",
-    "AI image generation",
-    "Anki .apkg import",
-    "Anki .apkg export",
-    "Priority support",
+    "AI-powered flashcard generation",
+    "AI illustration generation for cards",
+    "Anki .apkg import and export",
+    "Priority support from our team",
   ],
 };
 
@@ -48,7 +48,7 @@ export default function PricingPage() {
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold">{APP_NAME} Pricing</h1>
         <p className="text-muted-foreground">
-          Start free, upgrade when you need AI superpowers
+          Start for free with no commitment. Upgrade whenever you're ready for more.
         </p>
       </div>
 
@@ -97,7 +97,7 @@ export default function PricingPage() {
               </div>
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              AI-powered learning
+              The complete AI-powered study experience
             </p>
           </CardHeader>
           <CardContent>

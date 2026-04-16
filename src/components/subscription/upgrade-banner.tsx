@@ -24,10 +24,10 @@ export function UpgradeBanner({ feature = "this feature" }: { feature?: string }
 
   return (
     <div className="rounded-lg border border-primary/30 bg-primary/5 p-6 text-center space-y-3">
-      <div className="text-3xl">{"🔒"}</div>
-      <h3 className="text-lg font-semibold">Pro Feature</h3>
+      <div className="text-3xl">{"✨"}</div>
+      <h3 className="text-lg font-semibold">Unlock {feature}</h3>
       <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-        Upgrade to Pro to unlock {feature}. Just $6.99/month.
+        This feature is available with a Pro subscription. Upgrade for just $6.99/month and enjoy the full FlashMind experience.
       </p>
       <div className="flex gap-2 justify-center">
         <Button onClick={handleUpgrade} disabled={loading}>
