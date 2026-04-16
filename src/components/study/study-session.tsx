@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -14,6 +14,8 @@ interface Card {
   hint: string | null;
 }
 
+type Orientation = "front" | "back" | "mixed";
+
 interface StudySessionProps {
   cards: Card[];
   deckName: string;
@@ -22,13 +24,35 @@ interface StudySessionProps {
   onComplete?: () => void;
 }
 
+function simpleHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
 export function StudySession({ cards, deckName, frontVoice, backVoice, onComplete }: StudySessionProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [orientation, setOrientation] = useState<Orientation>("front");
+  const [showSettings, setShowSettings] = useState(false);
 
   const currentCard = cards[currentIndex];
   const progress = ((currentIndex + 1) / cards.length) * 100;
+
+  const showBackFirst = useMemo(() => {
+    if (orientation === "back") return true;
+    if (orientation === "mixed" && currentCard) return simpleHash(currentCard.id) % 2 === 0;
+    return false;
+  }, [orientation, currentCard]);
+
+  const displayFront = showBackFirst ? currentCard.back : currentCard.front;
+  const displayBack = showBackFirst ? currentCard.front : currentCard.back;
+  const displayFrontVoice = showBackFirst ? backVoice : frontVoice;
+  const displayBackVoice = showBackFirst ? frontVoice : backVoice;
 
   const handleFlip = useCallback(() => {
     setIsFlipped((prev) => !prev);
@@ -87,22 +111,62 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{deckName}</h2>
-        <span className="text-sm text-muted-foreground">
-          {currentIndex + 1} / {cards.length}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            {currentIndex + 1} / {cards.length}
+          </span>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="p-1.5 rounded-lg hover:bg-primary/10 transition-colors text-muted-foreground hover:text-foreground"
+            aria-label="Study settings"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {showSettings && (
+        <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+          <p className="text-sm font-medium">Card Orientation</p>
+          <div className="flex gap-2">
+            {([
+              { value: "front" as const, label: "Front first" },
+              { value: "back" as const, label: "Back first" },
+              { value: "mixed" as const, label: "Random" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  setOrientation(opt.value);
+                  setIsFlipped(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  orientation === opt.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-foreground"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Progress value={progress} />
 
       <Flashcard
-        front={currentCard.front}
-        back={currentCard.back}
+        front={displayFront}
+        back={displayBack}
         imageUrl={currentCard.imageUrl}
-        hint={currentCard.hint}
+        hint={showBackFirst ? null : currentCard.hint}
         isFlipped={isFlipped}
         onFlip={handleFlip}
-        frontVoice={frontVoice}
-        backVoice={backVoice}
+        frontVoice={displayFrontVoice}
+        backVoice={displayBackVoice}
       />
 
       <div className="flex items-center justify-center gap-4">
