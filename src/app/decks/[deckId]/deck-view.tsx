@@ -16,6 +16,7 @@ interface CardData {
   back: string;
   hint: string | null;
   tags: string | null;
+  imageUrl: string | null;
   nextReviewAt: Date | string;
 }
 
@@ -298,6 +299,15 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
                     </div>
                   )}
                 </div>
+                {card.imageUrl && (
+                  <div className="mb-3 h-24 rounded-lg overflow-hidden bg-muted">
+                    <img
+                      src={card.imageUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
                 <p className="font-medium text-sm line-clamp-2">{card.front}</p>
                 <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{card.back}</p>
               </div>

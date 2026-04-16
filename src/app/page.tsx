@@ -71,12 +71,20 @@ export default async function Home() {
     where: { deck: { userId }, nextReviewAt: { lte: now } },
   });
 
+  // Get user display name for greeting
+  const userData = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+  const displayName = userData?.name || userData?.email?.split("@")[0] || "there";
+
   return (
     <HomePage
       folders={foldersWithDue}
       unfolderedDecks={unfolderedWithDue}
       totalCards={totalCards}
       totalDue={totalDue}
+      userName={displayName}
     />
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { FlashcardImage } from "./flashcard-image";
 import { VoiceButton } from "./voice-button";
@@ -29,13 +30,24 @@ export function Flashcard({
   backVoice,
   className,
 }: FlashcardProps) {
+  // Prevent the flip animation from playing on initial render
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const timer = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(timer);
+  }, []);
+
   return (
     <div
       className={cn("flashcard-container w-full max-w-md mx-auto", className)}
       style={{ minHeight: "320px" }}
     >
       <div
-        className={cn("flashcard-inner cursor-pointer", isFlipped && "flipped")}
+        className={cn(
+          "flashcard-inner cursor-pointer",
+          mounted && "flashcard-animated",
+          isFlipped && "flipped"
+        )}
         onClick={onFlip}
         style={{ minHeight: "320px" }}
       >

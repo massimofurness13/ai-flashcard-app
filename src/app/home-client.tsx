@@ -26,16 +26,26 @@ interface HomePageProps {
   unfolderedDecks: Deck[];
   totalCards: number;
   totalDue: number;
+  userName?: string;
 }
 
-export function HomePage({ folders, unfolderedDecks, totalCards, totalDue }: HomePageProps) {
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+export function HomePage({ folders, unfolderedDecks, totalCards, totalDue, userName }: HomePageProps) {
   const hasDecks = folders.some((f) => f.decks.length > 0) || unfolderedDecks.length > 0;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">My Packs</h1>
+          <h1 className="text-2xl font-bold">
+            {getGreeting()}, {userName}
+          </h1>
           <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
             <span>{totalCards} total cards</span>
             {totalDue > 0 && (
