@@ -6,6 +6,8 @@ export const createDeckSchema = z.object({
   description: z.string().max(1000).optional().nullable(),
   emoji: z.string().max(10).optional().nullable(),
   folderId: z.string().cuid().optional().nullable(),
+  frontVoice: z.string().max(200).optional().nullable(),
+  backVoice: z.string().max(200).optional().nullable(),
 });
 
 export const updateDeckSchema = createDeckSchema.partial();

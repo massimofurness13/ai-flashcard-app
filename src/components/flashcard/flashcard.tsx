@@ -12,6 +12,8 @@ interface FlashcardProps {
   isFlipped: boolean;
   onFlip: () => void;
   showImage?: boolean;
+  frontVoice?: string | null;
+  backVoice?: string | null;
   className?: string;
 }
 
@@ -23,6 +25,8 @@ export function Flashcard({
   isFlipped,
   onFlip,
   showImage = true,
+  frontVoice,
+  backVoice,
   className,
 }: FlashcardProps) {
   return (
@@ -53,7 +57,7 @@ export function Flashcard({
                 Hint: {hint}
               </p>
             )}
-            <VoiceButton text={front} className="ml-auto" />
+            <VoiceButton text={front} voiceName={frontVoice} className="ml-auto" />
           </div>
           <p className="text-xs text-muted-foreground text-center mt-2">
             Tap to flip
@@ -71,7 +75,7 @@ export function Flashcard({
             <p className="text-lg text-center text-card-foreground">{back}</p>
           </div>
           <div className="flex justify-end mt-4">
-            <VoiceButton text={back} />
+            <VoiceButton text={back} voiceName={backVoice} />
           </div>
           <p className="text-xs text-muted-foreground text-center mt-2">
             Tap to flip back

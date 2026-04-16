@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
   const cards = await prisma.card.findMany({
     where,
-    include: { deck: { select: { id: true, name: true, emoji: true } } },
+    include: { deck: { select: { id: true, name: true, emoji: true, frontVoice: true, backVoice: true } } },
     orderBy: { nextReviewAt: "asc" },
     take: limit,
   });

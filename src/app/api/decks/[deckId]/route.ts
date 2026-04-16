@@ -54,6 +54,8 @@ export async function PATCH(
       ...(body.description !== undefined && { description: body.description?.trim() || null }),
       ...(body.emoji !== undefined && { emoji: body.emoji }),
       ...(body.folderId !== undefined && { folderId: body.folderId || null }),
+      ...(body.frontVoice !== undefined && { frontVoice: body.frontVoice || null }),
+      ...(body.backVoice !== undefined && { backVoice: body.backVoice || null }),
     },
     include: {
       _count: { select: { cards: true } },

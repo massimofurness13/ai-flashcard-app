@@ -21,6 +21,8 @@ interface DeckFormProps {
     description: string | null;
     emoji: string | null;
     folderId: string | null;
+    frontVoice: string | null;
+    backVoice: string | null;
   };
 }
 
@@ -32,6 +34,10 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
   const [description, setDescription] = useState(initialData?.description || "");
   const [emoji, setEmoji] = useState(initialData?.emoji || "\ud83d\udcda");
   const [folderId, setFolderId] = useState(initialData?.folderId || "");
+  const [frontVoice, setFrontVoice] = useState(initialData?.frontVoice || "");
+  const [backVoice, setBackVoice] = useState(initialData?.backVoice || "");
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [globalVoiceName, setGlobalVoiceName] = useState("Browser Default");
   const [folders, setFolders] = useState<Folder[]>([]);
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -41,6 +47,27 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
     fetch("/api/folders")
       .then((res) => res.json())
       .then(setFolders);
+
+    // Load voices
+    function loadVoices() {
+      const v = window.speechSynthesis?.getVoices() || [];
+      if (v.length > 0) setVoices(v);
+    }
+    loadVoices();
+    window.speechSynthesis?.addEventListener("voiceschanged", loadVoices);
+
+    // Load global default voice name
+    try {
+      const saved = localStorage.getItem("flashmind-settings");
+      if (saved) {
+        const settings = JSON.parse(saved);
+        if (settings.voice) setGlobalVoiceName(settings.voice);
+      }
+    } catch { /* ignore */ }
+
+    return () => {
+      window.speechSynthesis?.removeEventListener("voiceschanged", loadVoices);
+    };
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -71,6 +98,8 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
         description: description.trim() || null,
         emoji,
         folderId: targetFolderId || null,
+        frontVoice: frontVoice || null,
+        backVoice: backVoice || null,
       }),
     });
 
@@ -124,6 +153,48 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
         onChange={(e) => setDescription(e.target.value)}
         rows={3}
       />
+
+      {/* Voice / Language settings */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium text-foreground">
+          Text-to-Speech Language
+        </label>
+        <p className="text-xs text-muted-foreground -mt-2">
+          Set the voice for each side of the card. Leave as Default to use your global setting.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Front voice</label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={frontVoice}
+              onChange={(e) => setFrontVoice(e.target.value)}
+            >
+              <option value="">Default ({globalVoiceName})</option>
+              {voices.map((v) => (
+                <option key={v.name} value={v.name}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Back voice</label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={backVoice}
+              onChange={(e) => setBackVoice(e.target.value)}
+            >
+              <option value="">Default ({globalVoiceName})</option>
+              {voices.map((v) => (
+                <option key={v.name} value={v.name}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-foreground">Folder</label>

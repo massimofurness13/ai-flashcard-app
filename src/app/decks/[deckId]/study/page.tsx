@@ -28,6 +28,8 @@ export default async function StudyPage({
     <StudyClient
       deckId={deck.id}
       deckName={deck.name}
+      frontVoice={deck.frontVoice}
+      backVoice={deck.backVoice}
       cards={deck.cards.map((c) => ({
         id: c.id,
         front: c.front,

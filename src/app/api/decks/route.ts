@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const { name, description, emoji, folderId } = parsed.data;
+  const { name, description, emoji, folderId, frontVoice, backVoice } = parsed.data;
 
   // If folderId provided, verify folder ownership
   if (folderId) {
@@ -63,6 +63,8 @@ export async function POST(request: Request) {
       description: description?.trim() || null,
       emoji: emoji || undefined,
       folderId: folderId || null,
+      frontVoice: frontVoice || null,
+      backVoice: backVoice || null,
       userId: auth.userId,
     },
     include: {

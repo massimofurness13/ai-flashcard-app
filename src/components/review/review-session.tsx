@@ -13,7 +13,7 @@ interface Card {
   back: string;
   imageUrl: string | null;
   hint: string | null;
-  deck: { id: string; name: string; emoji: string | null };
+  deck: { id: string; name: string; emoji: string | null; frontVoice?: string | null; backVoice?: string | null };
 }
 
 interface ReviewSessionProps {
@@ -129,6 +129,8 @@ export function ReviewSession({
 
   const frontText = showBackFirst ? currentCard.back : currentCard.front;
   const backText = showBackFirst ? currentCard.front : currentCard.back;
+  const frontVoiceName = showBackFirst ? currentCard.deck.backVoice : currentCard.deck.frontVoice;
+  const backVoiceName = showBackFirst ? currentCard.deck.frontVoice : currentCard.deck.backVoice;
 
   return (
     <div className="space-y-6">
@@ -150,6 +152,8 @@ export function ReviewSession({
         hint={currentCard.hint}
         isFlipped={isFlipped}
         onFlip={handleFlip}
+        frontVoice={frontVoiceName}
+        backVoice={backVoiceName}
       />
 
       {isFlipped && !hasRated && (

@@ -1,30 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { speak, stopSpeaking } from "@/lib/tts";
 
 interface VoiceButtonProps {
   text: string;
+  voiceName?: string | null;
   className?: string;
 }
 
-export function VoiceButton({ text, className }: VoiceButtonProps) {
+function getSettings(): { voice: string; ttsSpeed: number } {
+  try {
+    const saved = localStorage.getItem("flashmind-settings");
+    if (saved) {
+      const s = JSON.parse(saved);
+      return { voice: s.voice || "", ttsSpeed: s.ttsSpeed || 1 };
+    }
+  } catch { /* ignore */ }
+  return { voice: "", ttsSpeed: 1 };
+}
+
+export function VoiceButton({ text, voiceName, className }: VoiceButtonProps) {
   const [speaking, setSpeaking] = useState(false);
 
-  function handleClick() {
+  const handleClick = useCallback(() => {
     if (speaking) {
-      stopSpeaking();
-      setSpeaking(false);
-    } else {
-      setSpeaking(true);
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.onend = () => setSpeaking(false);
-      utterance.onerror = () => setSpeaking(false);
       window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
+      setSpeaking(false);
+      return;
     }
-  }
+
+    setSpeaking(true);
+    const utterance = new SpeechSynthesisUtterance(text);
+    const settings = getSettings();
+
+    // Voice priority: 1) per-deck voiceName prop, 2) global setting, 3) browser default
+    const targetName = voiceName || settings.voice;
+    if (targetName) {
+      const voices = window.speechSynthesis.getVoices();
+      const match = voices.find((v) => v.name === targetName);
+      if (match) utterance.voice = match;
+    }
+
+    utterance.rate = settings.ttsSpeed;
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }, [text, voiceName, speaking]);
 
   if (typeof window === "undefined") return null;
 

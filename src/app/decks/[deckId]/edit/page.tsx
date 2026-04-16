@@ -32,6 +32,8 @@ export default async function EditDeckPage({
           description: deck.description,
           emoji: deck.emoji,
           folderId: deck.folderId,
+          frontVoice: deck.frontVoice,
+          backVoice: deck.backVoice,
         }}
       />
     </div>

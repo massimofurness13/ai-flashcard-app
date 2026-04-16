@@ -17,10 +17,12 @@ interface Card {
 interface StudySessionProps {
   cards: Card[];
   deckName: string;
+  frontVoice?: string | null;
+  backVoice?: string | null;
   onComplete?: () => void;
 }
 
-export function StudySession({ cards, deckName, onComplete }: StudySessionProps) {
+export function StudySession({ cards, deckName, frontVoice, backVoice, onComplete }: StudySessionProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -99,6 +101,8 @@ export function StudySession({ cards, deckName, onComplete }: StudySessionProps)
         hint={currentCard.hint}
         isFlipped={isFlipped}
         onFlip={handleFlip}
+        frontVoice={frontVoice}
+        backVoice={backVoice}
       />
 
       <div className="flex items-center justify-center gap-4">
