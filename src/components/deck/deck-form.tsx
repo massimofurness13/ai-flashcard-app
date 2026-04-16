@@ -1,10 +1,51 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+
+interface SimpleVoice {
+  name: string;
+  label: string;
+  lang: string;
+}
+
+/**
+ * Reduce the system voice list to one representative voice per language.
+ * Converts lang codes into friendly names using Intl.DisplayNames.
+ */
+function simplifyVoices(voices: SpeechSynthesisVoice[]): SimpleVoice[] {
+  const seen = new Map<string, SpeechSynthesisVoice>();
+  for (const v of voices) {
+    // Prefer default voices; first wins otherwise
+    if (!seen.has(v.lang) || v.default) seen.set(v.lang, v);
+  }
+
+  let displayNames: Intl.DisplayNames | null = null;
+  try {
+    displayNames = new Intl.DisplayNames(["en"], { type: "language" });
+  } catch {
+    displayNames = null;
+  }
+
+  const result: SimpleVoice[] = [];
+  for (const [lang, voice] of seen.entries()) {
+    let label = lang;
+    if (displayNames) {
+      try {
+        const friendly = displayNames.of(lang);
+        if (friendly) label = friendly;
+      } catch {
+        // Fall back to raw lang code
+      }
+    }
+    result.push({ name: voice.name, label, lang });
+  }
+
+  return result.sort((a, b) => a.label.localeCompare(b.label));
+}
 
 interface Folder {
   id: string;
@@ -41,7 +82,11 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
+  const [showCustomEmoji, setShowCustomEmoji] = useState(false);
+  const [customEmojiInput, setCustomEmojiInput] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const simpleVoices = useMemo(() => simplifyVoices(voices), [voices]);
 
   useEffect(() => {
     fetch("/api/folders")
@@ -118,12 +163,15 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
         <label className="text-sm font-medium text-foreground mb-2 block">
           Emoji
         </label>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           {EMOJIS.map((e) => (
             <button
               key={e}
               type="button"
-              onClick={() => setEmoji(e)}
+              onClick={() => {
+                setEmoji(e);
+                setShowCustomEmoji(false);
+              }}
               className={`text-2xl p-2 rounded-lg transition-colors ${
                 emoji === e
                   ? "bg-primary/20 ring-2 ring-primary"
@@ -133,7 +181,56 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
               {e}
             </button>
           ))}
+          {/* Show the currently-selected custom emoji (if it's not in the preset list) */}
+          {emoji && !EMOJIS.includes(emoji) && (
+            <button
+              type="button"
+              onClick={() => setShowCustomEmoji(true)}
+              className="text-2xl p-2 rounded-lg bg-primary/20 ring-2 ring-primary"
+              title="Your custom emoji"
+            >
+              {emoji}
+            </button>
+          )}
+          {/* + button to open custom emoji input */}
+          <button
+            type="button"
+            onClick={() => setShowCustomEmoji(!showCustomEmoji)}
+            className="text-xl p-2 rounded-lg border border-dashed border-border hover:border-primary hover:bg-primary/10 transition-colors text-muted-foreground"
+            aria-label="Add custom emoji"
+          >
+            +
+          </button>
         </div>
+        {showCustomEmoji && (
+          <div className="mt-3 space-y-2">
+            <Input
+              id="custom-emoji"
+              value={customEmojiInput}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCustomEmojiInput(val);
+                // Use the last character typed, so only a single emoji lands
+                if (val.length > 0) {
+                  // Use Array.from to handle multi-code-point emojis correctly
+                  const chars = Array.from(val);
+                  const last = chars[chars.length - 1];
+                  setEmoji(last);
+                }
+              }}
+              placeholder="Type or paste any emoji"
+              maxLength={10}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              Mac: <kbd className="px-1 py-0.5 text-[10px] bg-muted rounded border border-border">Ctrl</kbd> <kbd className="px-1 py-0.5 text-[10px] bg-muted rounded border border-border">Cmd</kbd> <kbd className="px-1 py-0.5 text-[10px] bg-muted rounded border border-border">Space</kbd>
+              {" · "}
+              Windows: <kbd className="px-1 py-0.5 text-[10px] bg-muted rounded border border-border">Win</kbd> <kbd className="px-1 py-0.5 text-[10px] bg-muted rounded border border-border">.</kbd>
+              {" · "}
+              iOS: emoji keyboard
+            </p>
+          </div>
+        )}
       </div>
 
       <Input
@@ -164,31 +261,31 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
         </p>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Front voice</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Front language</label>
             <select
               className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={frontVoice}
               onChange={(e) => setFrontVoice(e.target.value)}
             >
               <option value="">Default ({globalVoiceName})</option>
-              {voices.map((v) => (
+              {simpleVoices.map((v) => (
                 <option key={v.name} value={v.name}>
-                  {v.name} ({v.lang})
+                  {v.label}
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Back voice</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Back language</label>
             <select
               className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={backVoice}
               onChange={(e) => setBackVoice(e.target.value)}
             >
               <option value="">Default ({globalVoiceName})</option>
-              {voices.map((v) => (
+              {simpleVoices.map((v) => (
                 <option key={v.name} value={v.name}>
-                  {v.name} ({v.lang})
+                  {v.label}
                 </option>
               ))}
             </select>

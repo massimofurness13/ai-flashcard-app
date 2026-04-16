@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,10 +28,12 @@ interface GenerateClientProps {
 
 export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedDeckId = searchParams.get("deckId") || "";
   const [topic, setTopic] = useState("");
   const [material, setMaterial] = useState("");
   const [generateImages, setGenerateImages] = useState(false);
-  const [targetDeckId, setTargetDeckId] = useState("");
+  const [targetDeckId, setTargetDeckId] = useState(preselectedDeckId);
   const [newDeckName, setNewDeckName] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generatedCount, setGeneratedCount] = useState(0);
@@ -304,9 +306,9 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Generate Flashcards</h1>
+          <h1 className="text-2xl font-bold">Generate a Pack from Text</h1>
           <p className="text-muted-foreground mt-1">
-            Use AI to generate flashcard sets from a topic or study material
+            Paste lecture notes, a textbook chapter, or any text below. Our AI will automatically create a pack of flashcards from it.
           </p>
         </div>
         <UpgradeBanner feature="AI card generation" />
@@ -317,7 +319,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Generate Flashcards</h1>
+        <h1 className="text-2xl font-bold">Generate a Pack from Text</h1>
         <p className="text-muted-foreground mt-1">
           Use AI to generate flashcard sets from a topic or study material
         </p>

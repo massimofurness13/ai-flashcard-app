@@ -267,12 +267,46 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
       )}
 
       {deck.cards.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12 text-center">
-          <span className="text-4xl mb-3">{"\ud83c\udccf"}</span>
-          <h2 className="text-lg font-semibold">No cards yet</h2>
-          <p className="text-muted-foreground mt-1">
-            Add cards manually or generate them with AI
-          </p>
+        <div className="space-y-4">
+          <div className="text-center py-6">
+            <span className="text-4xl">{"\ud83c\udccf"}</span>
+            <h2 className="text-lg font-semibold mt-3">Let's add some cards</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Choose how you'd like to fill your new pack
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Link href={`/decks/${deck.id}/cards/new`}>
+              <div className="group h-full rounded-xl border-2 border-border bg-card p-6 transition-all hover:border-primary hover:shadow-md hover:bg-primary/5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 mb-4 group-hover:bg-primary/20 transition-colors">
+                  <svg className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold mb-1 group-hover:text-primary transition-colors">
+                  Add cards manually
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Create cards one by one with full control over front, back, hints, and images.
+                </p>
+              </div>
+            </Link>
+            <Link href={`/generate?deckId=${deck.id}`}>
+              <div className="group h-full rounded-xl border-2 border-primary/40 bg-primary/5 p-6 transition-all hover:border-primary hover:shadow-md hover:bg-primary/10">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 mb-4 group-hover:bg-primary/25 transition-colors">
+                  <svg className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold mb-1 group-hover:text-primary transition-colors">
+                  Generate cards from text
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Paste lecture notes, a topic, or any text — our AI will automatically create a pack of cards for you.
+                </p>
+              </div>
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

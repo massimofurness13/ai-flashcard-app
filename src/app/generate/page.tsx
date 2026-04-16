@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { prisma } from "@/lib/db";
 import { ensureUser } from "@/lib/auth";
 import { isProUser } from "@/lib/subscription";
@@ -17,5 +18,9 @@ export default async function GeneratePage() {
     isProUser(userId),
   ]);
 
-  return <GenerateClient decks={decks} isPro={isPro} />;
+  return (
+    <Suspense>
+      <GenerateClient decks={decks} isPro={isPro} />
+    </Suspense>
+  );
 }
