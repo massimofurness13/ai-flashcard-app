@@ -46,8 +46,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && isPublicRoute) {
+  // Redirect authenticated users away from auth pages (not all public routes)
+  const isAuthPage = ["/auth/login", "/auth/signup"].some((route) =>
+    request.nextUrl.pathname.startsWith(route)
+  );
+  if (user && isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
