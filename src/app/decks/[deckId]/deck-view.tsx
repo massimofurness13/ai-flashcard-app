@@ -300,11 +300,11 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
                   )}
                 </div>
                 {card.imageUrl && (
-                  <div className="mb-3 h-24 rounded-lg overflow-hidden bg-muted">
+                  <div className="mb-3 flex justify-center">
                     <img
                       src={card.imageUrl}
                       alt=""
-                      className="w-full h-full object-cover"
+                      className="max-h-28 max-w-full object-contain rounded-lg"
                     />
                   </div>
                 )}

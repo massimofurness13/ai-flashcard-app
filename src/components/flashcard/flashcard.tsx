@@ -54,7 +54,7 @@ export function Flashcard({
         {/* Front face */}
         <div className="flashcard-front rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
           {showImage && (
-            <div className="h-32 mb-4 rounded-lg overflow-hidden">
+            <div className="mb-4 flex justify-center">
               <FlashcardImage imageUrl={imageUrl} cardText={front} />
             </div>
           )}
@@ -79,7 +79,7 @@ export function Flashcard({
         {/* Back face */}
         <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
           {showImage && (
-            <div className="h-32 mb-4 rounded-lg overflow-hidden">
+            <div className="mb-4 flex justify-center">
               <FlashcardImage imageUrl={imageUrl} cardText={front} />
             </div>
           )}

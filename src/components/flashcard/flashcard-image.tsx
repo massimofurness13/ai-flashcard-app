@@ -23,7 +23,7 @@ export function FlashcardImage({ imageUrl, cardText, className }: FlashcardImage
       <img
         src={imageUrl}
         alt="Card illustration"
-        className={cn("w-full h-full object-cover rounded-lg", className)}
+        className={cn("w-full max-h-48 object-contain rounded-lg", className)}
       />
     );
   }
@@ -41,7 +41,7 @@ export function FlashcardImage({ imageUrl, cardText, className }: FlashcardImage
   return (
     <div
       className={cn(
-        "w-full h-full rounded-lg flex items-center justify-center",
+        "w-full h-32 rounded-lg flex items-center justify-center",
         className
       )}
       style={{
