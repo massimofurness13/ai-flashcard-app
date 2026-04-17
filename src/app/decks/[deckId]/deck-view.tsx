@@ -9,6 +9,7 @@ import { Card as CardUI, CardContent, CardHeader, CardTitle } from "@/components
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { AnkiExportButton } from "@/components/export/anki-export-button";
 import { type LetterGrade, gradeColor } from "@/lib/sm2";
+import { estimateImageGenTime } from "@/lib/utils";
 
 interface CardData {
   id: string;
@@ -171,6 +172,7 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
               variant="outline"
               onClick={generateMissingImages}
               disabled={imageGenProgress !== null}
+              title={`This will take ${estimateImageGenTime(cardsWithoutImages)}`}
             >
               {imageGenProgress ? (
                 <span className="flex items-center gap-2">
@@ -185,7 +187,7 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                   </svg>
-                  Generate AI Images ({cardsWithoutImages})
+                  Generate AI Images ({cardsWithoutImages}) · {estimateImageGenTime(cardsWithoutImages)}
                 </span>
               )}
             </Button>
@@ -233,7 +235,7 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
 
       {imageGenProgress && (
         <CardUI>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 space-y-3">
             <div className="flex items-center gap-3">
               <svg className="animate-spin h-5 w-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -253,6 +255,9 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
                 </div>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Please be patient — AI image generation is still in its infancy and takes a moment per card. Estimated time remaining: <span className="font-medium text-foreground">{estimateImageGenTime(imageGenProgress.total - imageGenProgress.done)}</span>. Thank you for your patience.
+            </p>
           </CardContent>
         </CardUI>
       )}

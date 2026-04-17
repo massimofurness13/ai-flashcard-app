@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UpgradeBanner } from "@/components/subscription/upgrade-banner";
+import { estimateImageGenTime } from "@/lib/utils";
 
 interface GeneratedCard {
   front: string;
@@ -434,7 +435,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
           {/* Image generation progress banner */}
           {generatingImages && (
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 space-y-3">
                 <div className="flex items-center gap-3">
                   <svg className="animate-spin h-5 w-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -454,8 +455,12 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  You can edit cards and save while images generate
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Please be patient — AI image generation is still in its infancy and takes a moment per card. Estimated time remaining:{" "}
+                  <span className="font-medium text-foreground">
+                    {estimateImageGenTime(Math.max(imageTotalNeeded - imageProgress, 0))}
+                  </span>
+                  . You can edit cards and save while images continue generating. Thank you for your patience.
                 </p>
               </CardContent>
             </Card>
@@ -471,7 +476,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                     <p className="text-sm text-muted-foreground">
                       {cards.some((c) => c.imageUrl)
                         ? `${cards.filter((c) => c.imageUrl).length} of ${cards.length} cards have images`
-                        : "Generate illustrations for all cards"}
+                        : `Generate illustrations for all ${cards.filter((c) => !c.imageUrl).length} cards · ${estimateImageGenTime(cards.filter((c) => !c.imageUrl).length)}`}
                     </p>
                   </div>
                   <Button variant="outline" onClick={() => generateImagesForCards(cards)}>
