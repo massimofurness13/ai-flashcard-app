@@ -49,92 +49,105 @@ interface DeckViewProps {
 export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, isPro = false }: DeckViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [imageGenProgress, setImageGenProgress] = useState<{ done: number; total: number } | null>(null);
-  const imageGenStarted = useRef(false);
+  const [generationActive, setGenerationActive] = useState(false);
+  const [initialPending, setInitialPending] = useState(0);
+  const [kickOffLoading, setKickOffLoading] = useState(false);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   const cardsWithoutImages = deck.cards.filter((c) => !c.imageUrl).length;
+  const generationKey = `gen-active-${deck.id}`;
+  const generationTotalKey = `gen-total-${deck.id}`;
 
+  // Fire-and-forget: tell the server to generate missing images in the
+  // background. User can navigate away, close the tab, or keep working.
   async function generateMissingImages() {
-    const pending = deck.cards.filter((c) => !c.imageUrl);
-    if (pending.length === 0) return;
+    if (cardsWithoutImages === 0) return;
 
-    setImageGenProgress({ done: 0, total: pending.length });
-
-    for (let i = 0; i < pending.length; i++) {
-      const card = pending[i];
-      try {
-        const genRes = await fetch("/api/images/generate-ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ front: card.front, back: card.back }),
-        });
-        const genData = await genRes.json();
-        if (genRes.ok && genData.imageUrl) {
-          await fetch(`/api/cards/${card.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageUrl: genData.imageUrl }),
-          });
-        }
-      } catch {
-        // Skip failed images — user can retry individually
+    setKickOffLoading(true);
+    try {
+      const res = await fetch("/api/images/generate-deck-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deckId: deck.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.queued > 0) {
+        // Track that generation is active for ~10 min
+        const expiresAt = Date.now() + 10 * 60 * 1000;
+        sessionStorage.setItem(generationKey, String(expiresAt));
+        sessionStorage.setItem(generationTotalKey, String(data.queued));
+        setInitialPending(data.queued);
+        setGenerationActive(true);
       }
-      setImageGenProgress({ done: i + 1, total: pending.length });
+    } finally {
+      setKickOffLoading(false);
     }
-
-    setImageGenProgress(null);
-    router.refresh();
   }
 
-  // Background image generation after save from generate page
+  // On mount, check if we arrived with ?generating=true (from the generate
+  // page after save) or if there's an active generation from before.
   useEffect(() => {
-    if (searchParams.get("generating") !== "true") return;
-    if (imageGenStarted.current) return;
-    imageGenStarted.current = true;
-
-    const storageKey = `pending-images-${deck.id}`;
-    const raw = sessionStorage.getItem(storageKey);
-    if (!raw) return;
-
-    let pendingCards: { cardId: string; front: string; back: string }[];
-    try {
-      pendingCards = JSON.parse(raw);
-    } catch {
+    const fromGenerate = searchParams.get("generating") === "true";
+    if (fromGenerate) {
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      sessionStorage.setItem(generationKey, String(expiresAt));
+      sessionStorage.setItem(generationTotalKey, String(cardsWithoutImages));
+      setInitialPending(cardsWithoutImages);
+      setGenerationActive(true);
+      router.replace(`/decks/${deck.id}`);
       return;
     }
-    if (!pendingCards.length) return;
 
-    setImageGenProgress({ done: 0, total: pendingCards.length });
-
-    (async () => {
-      for (let i = 0; i < pendingCards.length; i++) {
-        const card = pendingCards[i];
-        try {
-          const genRes = await fetch("/api/images/generate-ai", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ front: card.front, back: card.back }),
-          });
-          const genData = await genRes.json();
-          if (genRes.ok && genData.imageUrl) {
-            await fetch(`/api/cards/${card.cardId}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ imageUrl: genData.imageUrl }),
-            });
-          }
-        } catch {
-          // Skip failed images
-        }
-        setImageGenProgress({ done: i + 1, total: pendingCards.length });
+    const stored = sessionStorage.getItem(generationKey);
+    if (stored) {
+      const expiresAt = Number(stored);
+      if (expiresAt > Date.now() && cardsWithoutImages > 0) {
+        const total = Number(sessionStorage.getItem(generationTotalKey)) || cardsWithoutImages;
+        setInitialPending(total);
+        setGenerationActive(true);
+      } else {
+        sessionStorage.removeItem(generationKey);
+        sessionStorage.removeItem(generationTotalKey);
       }
-      sessionStorage.removeItem(storageKey);
-      setImageGenProgress(null);
-      // Clean up URL param and refresh card data
-      router.replace(`/decks/${deck.id}`);
-      router.refresh();
-    })();
-  }, [searchParams, deck.id, router]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Poll every 5s while generation is active — refreshes the server data
+  // so new images appear as they complete. Stops once all cards have
+  // images or the 10-minute window expires.
+  useEffect(() => {
+    if (!generationActive) return;
+
+    function scheduleNext() {
+      pollRef.current = setTimeout(() => {
+        const stored = sessionStorage.getItem(generationKey);
+        const expiresAt = stored ? Number(stored) : 0;
+        if (expiresAt <= Date.now()) {
+          sessionStorage.removeItem(generationKey);
+          sessionStorage.removeItem(generationTotalKey);
+          setGenerationActive(false);
+          return;
+        }
+        router.refresh();
+        scheduleNext();
+      }, 5000);
+    }
+
+    scheduleNext();
+    return () => {
+      if (pollRef.current) clearTimeout(pollRef.current);
+    };
+  }, [generationActive, router, generationKey, generationTotalKey]);
+
+  // When all cards get images, clear the active state
+  useEffect(() => {
+    if (generationActive && cardsWithoutImages === 0) {
+      sessionStorage.removeItem(generationKey);
+      sessionStorage.removeItem(generationTotalKey);
+      setGenerationActive(false);
+    }
+  }, [generationActive, cardsWithoutImages, generationKey, generationTotalKey]);
 
   async function handleDelete() {
     if (!confirm("Delete this pack and all its cards? This cannot be undone.")) return;
@@ -167,29 +180,26 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
         </div>
 
         <div className="flex items-center gap-2">
-          {deck.cards.length > 0 && isPro && cardsWithoutImages > 0 && (
+          {deck.cards.length > 0 && isPro && cardsWithoutImages > 0 && !generationActive && (
             <Button
               variant="outline"
               onClick={generateMissingImages}
-              disabled={imageGenProgress !== null}
-              title={`This will take ${estimateImageGenTime(cardsWithoutImages)}`}
+              disabled={kickOffLoading}
+              title={`Generation runs in the background — this will take roughly ${estimateImageGenTime(cardsWithoutImages)}`}
             >
-              {imageGenProgress ? (
-                <span className="flex items-center gap-2">
+              <span className="flex items-center gap-2">
+                {kickOffLoading ? (
                   <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  {imageGenProgress.done} / {imageGenProgress.total}
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
+                ) : (
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                   </svg>
-                  Generate AI Images ({cardsWithoutImages}) · {estimateImageGenTime(cardsWithoutImages)}
-                </span>
-              )}
+                )}
+                Generate AI Images ({cardsWithoutImages})
+              </span>
             </Button>
           )}
           {deck.cards.length > 0 && (
@@ -233,7 +243,7 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
         />
       </div>
 
-      {imageGenProgress && (
+      {generationActive && (
         <CardUI>
           <CardContent className="pt-6 space-y-3">
             <div className="flex items-center gap-3">
@@ -243,20 +253,20 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
               </svg>
               <div className="flex-1">
                 <p className="text-sm font-medium">
-                  Generating AI images... {imageGenProgress.done} / {imageGenProgress.total}
+                  Generating AI images in the background... {Math.max(initialPending - cardsWithoutImages, 0)} / {initialPending}
                 </p>
                 <div className="mt-2 w-full h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary rounded-full transition-all duration-300"
                     style={{
-                      width: `${(imageGenProgress.done / imageGenProgress.total) * 100}%`,
+                      width: `${(Math.max(initialPending - cardsWithoutImages, 0) / Math.max(initialPending, 1)) * 100}%`,
                     }}
                   />
                 </div>
               </div>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Please be patient — AI image generation is still in its infancy and takes a moment per card. Estimated time remaining: <span className="font-medium text-foreground">{estimateImageGenTime(imageGenProgress.total - imageGenProgress.done)}</span>. Thank you for your patience.
+              ✨ Feel free to keep working — edit cards, delete some, or navigate anywhere in the app. Images are generating on our server and will appear as they&apos;re ready (estimated time remaining: <span className="font-medium text-foreground">{estimateImageGenTime(cardsWithoutImages)}</span>). AI image generation is still in its infancy and takes a moment per card. Thank you for your patience.
             </p>
           </CardContent>
         </CardUI>

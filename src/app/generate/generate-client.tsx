@@ -187,27 +187,22 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     });
 
     if (res.ok) {
-      const createdCards = await res.json();
-      const cardsArray = Array.isArray(createdCards) ? createdCards : [createdCards];
-
-      // If images are still generating or some cards lack images with toggle ON,
-      // store pending info for background generation on deck view
-      const pendingCards = cardsArray
-        .map((saved: { id: string }, i: number) => ({
-          cardId: saved.id,
-          front: cards[i].front.slice(0, 200),
-          back: cards[i].back.slice(0, 200),
-        }))
-        .filter((_: unknown, i: number) => !cards[i].imageUrl);
-
-      // Stop current image generation
+      // Stop any in-progress client-side generation
       abortRef.current = true;
 
-      if (generateImages && pendingCards.length > 0) {
-        sessionStorage.setItem(
-          `pending-images-${deckId}`,
-          JSON.stringify(pendingCards)
-        );
+      const hasPendingImages = generateImages && cards.some((c) => !c.imageUrl);
+
+      if (hasPendingImages) {
+        // Kick off server-side background generation for any cards
+        // that didn't get images yet. User navigates immediately —
+        // images will appear on the deck view as they complete.
+        fetch("/api/images/generate-deck-background", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deckId }),
+        }).catch(() => {
+          // Silently ignore — user can retry from deck view
+        });
         router.push(`/decks/${deckId}?generating=true`);
       } else {
         router.push(`/decks/${deckId}`);
