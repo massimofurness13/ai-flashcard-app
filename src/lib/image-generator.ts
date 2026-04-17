@@ -1,4 +1,4 @@
-import { generateAndUploadImage } from "@/lib/stability-ai";
+import { generateAndUploadFromPrompt } from "@/lib/stability-ai";
 
 export interface ImageGenerationResult {
   imageUrl: string;
@@ -49,7 +49,7 @@ class PlaceholderImageGenerator implements ImageGenerator {
 class StabilityAIImageGenerator implements ImageGenerator {
   async generate(prompt: string, userId?: string): Promise<ImageGenerationResult> {
     const uid = userId || "anonymous";
-    const imageUrl = await generateAndUploadImage(uid, prompt);
+    const imageUrl = await generateAndUploadFromPrompt(uid, prompt);
     return { imageUrl, isPlaceholder: false };
   }
 }

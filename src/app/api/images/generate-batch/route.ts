@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { isProUser } from "@/lib/subscription";
-import { generateAndUploadImage } from "@/lib/stability-ai";
+import { generateAndUploadFromCard } from "@/lib/stability-ai";
 
 interface CardInput {
   front: string;
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     for (const card of cards) {
       try {
-        const imageUrl = await generateAndUploadImage(auth.userId, card.front, card.back);
+        const imageUrl = await generateAndUploadFromCard(auth.userId, card.front, card.back);
         results.push({ index: card.index, imageUrl });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed";

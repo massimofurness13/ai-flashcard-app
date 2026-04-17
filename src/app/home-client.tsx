@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { CreateMenu } from "@/components/home/create-menu";
 import { FolderGroup } from "@/components/home/folder-group";
 import { DeckCard } from "@/components/deck/deck-card";
@@ -36,13 +37,17 @@ function getGreeting(): string {
 
 export function HomePage({ folders, unfolderedDecks, totalCards, userName }: HomePageProps) {
   const hasDecks = folders.some((f) => f.decks.length > 0) || unfolderedDecks.length > 0;
+  // Compute greeting only after hydration — server + client timezones may
+  // differ, which would cause a React hydration mismatch (error #418).
+  const [greeting, setGreeting] = useState("Hello");
+  useEffect(() => setGreeting(getGreeting()), []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">
-            {getGreeting()}, {userName}
+            {greeting}, {userName}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {totalCards} total cards

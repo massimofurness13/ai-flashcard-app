@@ -65,11 +65,7 @@ Output ONLY the scene description. No preamble, no quotes.`,
   return cardBack || cardFront;
 }
 
-/**
- * Build the final SDXL prompt from a visual concept description.
- * Adds styling and reinforces the "no text" constraint.
- */
-function buildImagePromptFromConcept(concept: string): string {
+function wrapConceptInStyle(concept: string): string {
   return [
     concept,
     "Flat vector illustration style with soft pastel colours.",
@@ -78,32 +74,13 @@ function buildImagePromptFromConcept(concept: string): string {
   ].join(" ");
 }
 
-/**
- * Legacy prompt builder — kept for backward compatibility with direct
- * prompt-based endpoints. Prefer buildVisualConcept + buildImagePromptFromConcept.
- */
-export function buildImagePrompt(
-  cardFront: string,
-  cardBack: string
-): string {
-  const clean = (s: string) => s.replace(/<[^>]*>/g, "").replace(/[#*_~`]/g, "").trim();
-  return buildImagePromptFromConcept(`An illustration representing: ${clean(cardBack || cardFront)}`);
-}
-
 interface GenerateOptions {
   prompt: string;
-  /** Negative prompt — things to avoid */
   negativePrompt?: string;
-  /** Aspect ratio. Default "1:1" */
   aspectRatio?: string;
-  /** Output format. Default "webp" */
   outputFormat?: "webp" | "png" | "jpeg";
 }
 
-/**
- * Call Stability AI Core to generate an image.
- * Returns the raw image bytes + content type.
- */
 export async function generateImageBytes(
   opts: GenerateOptions
 ): Promise<{ bytes: Buffer; contentType: string }> {
@@ -134,14 +111,11 @@ export async function generateImageBytes(
 
   if (!res.ok) {
     const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(
-      `Stability AI error ${res.status}: ${errorText}`
-    );
+    throw new Error(`Stability AI error ${res.status}: ${errorText}`);
   }
 
   const arrayBuffer = await res.arrayBuffer();
-  const contentType =
-    res.headers.get("content-type") || "image/webp";
+  const contentType = res.headers.get("content-type") || "image/webp";
 
   return {
     bytes: Buffer.from(arrayBuffer),
@@ -149,23 +123,11 @@ export async function generateImageBytes(
   };
 }
 
-/**
- * Full pipeline: Claude translates card → visual concept → SDXL image → Supabase.
- * Returns the public URL.
- */
-export async function generateAndUploadImage(
+async function uploadBytes(
   userId: string,
-  cardFrontOrPrompt: string,
-  cardBack?: string
+  bytes: Buffer,
+  contentType: string
 ): Promise<string> {
-  // If cardBack is provided, use the two-step concept builder.
-  // Otherwise treat cardFrontOrPrompt as a raw prompt (legacy callers).
-  const finalPrompt = cardBack !== undefined
-    ? buildImagePromptFromConcept(await buildVisualConcept(cardFrontOrPrompt, cardBack))
-    : cardFrontOrPrompt;
-
-  const { bytes, contentType } = await generateImageBytes({ prompt: finalPrompt });
-
   const extMap: Record<string, string> = {
     "image/webp": "webp",
     "image/png": "png",
@@ -184,19 +146,39 @@ export async function generateAndUploadImage(
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(fileName, bytes, {
-      contentType,
-      cacheControl: "3600",
-      upsert: false,
-    });
+    .upload(fileName, bytes, { contentType, cacheControl: "3600", upsert: false });
 
   if (error) {
     throw new Error(`Storage upload failed: ${error.message}`);
   }
 
-  const { data: urlData } = supabase.storage
-    .from(BUCKET)
-    .getPublicUrl(fileName);
+  return supabase.storage.from(BUCKET).getPublicUrl(fileName).data.publicUrl;
+}
 
-  return urlData.publicUrl;
+/**
+ * Generate an image from a flashcard's front/back text.
+ * Runs the two-step pipeline: Claude concept → SDXL image → Supabase upload.
+ */
+export async function generateAndUploadFromCard(
+  userId: string,
+  front: string,
+  back: string
+): Promise<string> {
+  const concept = await buildVisualConcept(front, back);
+  const { bytes, contentType } = await generateImageBytes({
+    prompt: wrapConceptInStyle(concept),
+  });
+  return uploadBytes(userId, bytes, contentType);
+}
+
+/**
+ * Generate an image from a raw prompt — for callers that already have
+ * a well-formed prompt (e.g. custom user prompts).
+ */
+export async function generateAndUploadFromPrompt(
+  userId: string,
+  prompt: string
+): Promise<string> {
+  const { bytes, contentType } = await generateImageBytes({ prompt });
+  return uploadBytes(userId, bytes, contentType);
 }
