@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { isProUser } from "@/lib/subscription";
-import {
-  generateAndUploadImage,
-  buildImagePrompt,
-} from "@/lib/stability-ai";
+import { generateAndUploadImage } from "@/lib/stability-ai";
 import { generateImageSchema, rateLimit } from "@/lib/validations";
 
 export async function POST(request: Request) {
@@ -38,8 +35,12 @@ export async function POST(request: Request) {
   const { front, back, customPrompt } = parsed.data;
 
   try {
-    const prompt = customPrompt || buildImagePrompt(front || "", back || "");
-    const imageUrl = await generateAndUploadImage(auth.userId, prompt);
+    // If a custom prompt is supplied, use it directly (legacy path).
+    // Otherwise pass front/back so Claude Haiku can build a semantic
+    // visual concept before calling SDXL.
+    const imageUrl = customPrompt
+      ? await generateAndUploadImage(auth.userId, customPrompt)
+      : await generateAndUploadImage(auth.userId, front || "", back || "");
     return NextResponse.json({ imageUrl });
   } catch (error) {
     const message =
