@@ -66,29 +66,37 @@ export async function POST(request: Request) {
         const subscription = await stripe.subscriptions.retrieve(
           session.subscription as string
         );
-        // In Stripe v22+, current_period_end moved to subscription items
         const periodEnd = subscription.items.data[0]?.current_period_end;
+        const periodEndDate = periodEnd ? new Date(periodEnd * 1000) : null;
+        const userId = session.metadata?.userId || "";
+
         await prisma.subscription.upsert({
-          where: {
-            stripeCustomerId: session.customer as string,
-          },
+          where: { stripeCustomerId: session.customer as string },
           update: {
             stripeSubscriptionId: subscription.id,
             status: subscription.status,
-            currentPeriodEnd: periodEnd
-              ? new Date(periodEnd * 1000)
-              : null,
+            currentPeriodEnd: periodEndDate,
           },
           create: {
-            userId: session.metadata?.userId || "",
+            userId,
             stripeCustomerId: session.customer as string,
             stripeSubscriptionId: subscription.id,
             status: subscription.status,
-            currentPeriodEnd: periodEnd
-              ? new Date(periodEnd * 1000)
-              : null,
+            currentPeriodEnd: periodEndDate,
           },
         });
+
+        // Align image quota reset with Stripe billing cycle and clear
+        // any prior monthly usage so the new Pro period starts fresh.
+        if (userId && periodEndDate) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              monthlyImagesUsed: 0,
+              monthlyImagesResetAt: periodEndDate,
+            },
+          });
+        }
       }
       break;
     }
@@ -97,15 +105,34 @@ export async function POST(request: Request) {
     case "customer.subscription.deleted": {
       const subscription = event.data.object as Stripe.Subscription;
       const itemPeriodEnd = subscription.items.data[0]?.current_period_end;
+      const periodEndDate = itemPeriodEnd ? new Date(itemPeriodEnd * 1000) : null;
+
+      const existing = await prisma.subscription.findFirst({
+        where: { stripeSubscriptionId: subscription.id },
+        select: { userId: true, currentPeriodEnd: true },
+      });
+
       await prisma.subscription.updateMany({
         where: { stripeSubscriptionId: subscription.id },
-        data: {
-          status: subscription.status,
-          currentPeriodEnd: itemPeriodEnd
-            ? new Date(itemPeriodEnd * 1000)
-            : null,
-        },
+        data: { status: subscription.status, currentPeriodEnd: periodEndDate },
       });
+
+      // On successful renewal (new periodEnd is later than the previous one),
+      // reset the monthly image counter and sync to the new cycle end.
+      if (
+        existing &&
+        periodEndDate &&
+        subscription.status === "active" &&
+        (!existing.currentPeriodEnd || periodEndDate > existing.currentPeriodEnd)
+      ) {
+        await prisma.user.update({
+          where: { id: existing.userId },
+          data: {
+            monthlyImagesUsed: 0,
+            monthlyImagesResetAt: periodEndDate,
+          },
+        });
+      }
       break;
     }
 

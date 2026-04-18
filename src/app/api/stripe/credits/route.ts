@@ -4,9 +4,9 @@ import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 
 const BUNDLES = {
-  "100":  { amount: 100,  priceCents: 499,  label: "100 AI image credits" },
-  "300":  { amount: 300,  priceCents: 1199, label: "300 AI image credits" },
-  "1000": { amount: 1000, priceCents: 3499, label: "1000 AI image credits" },
+  "500":  { amount: 500,  priceCents: 499,  label: "500 AI image credits" },
+  "1500": { amount: 1500, priceCents: 1199, label: "1500 AI image credits" },
+  "5000": { amount: 5000, priceCents: 3499, label: "5000 AI image credits" },
 } as const;
 
 type BundleId = keyof typeof BUNDLES;
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   if (!bundle || !(bundle in BUNDLES)) {
     return NextResponse.json(
-      { error: "Invalid bundle. Must be '100', '300', or '1000'." },
+      { error: "Invalid bundle. Must be '500', '1500', or '5000'." },
       { status: 400 }
     );
   }

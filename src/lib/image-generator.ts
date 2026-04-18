@@ -1,4 +1,4 @@
-import { generateAndUploadFromPrompt } from "@/lib/stability-ai";
+import { generateAndUploadFromPrompt } from "@/lib/image-gen";
 
 export interface ImageGenerationResult {
   imageUrl: string;
@@ -46,21 +46,21 @@ class PlaceholderImageGenerator implements ImageGenerator {
   }
 }
 
-class StabilityAIImageGenerator implements ImageGenerator {
+class FalImageGenerator implements ImageGenerator {
   async generate(prompt: string, userId?: string): Promise<ImageGenerationResult> {
     const uid = userId || "anonymous";
-    const imageUrl = await generateAndUploadFromPrompt(uid, prompt);
+    const imageUrl = await generateAndUploadFromPrompt(uid, prompt, "quick");
     return { imageUrl, isPlaceholder: false };
   }
 }
 
 /**
  * Returns the best available image generator.
- * Uses Stability AI if STABILITY_API_KEY is set, otherwise falls back to placeholder SVGs.
+ * Uses fal.ai (FLUX) if FAL_KEY is set, otherwise falls back to placeholder SVGs.
  */
 function createImageGenerator(): ImageGenerator {
-  if (process.env.STABILITY_API_KEY) {
-    return new StabilityAIImageGenerator();
+  if (process.env.FAL_KEY) {
+    return new FalImageGenerator();
   }
   return new PlaceholderImageGenerator();
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { isProUser } from "@/lib/subscription";
-import { generateAndUploadFromCard } from "@/lib/stability-ai";
+import { generateAndUploadImage, type ImageTier } from "@/lib/image-gen";
 
 interface CardInput {
   front: string;
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const { cards } = body as { cards: CardInput[] };
+  const tier: ImageTier = body.tier === "premium" ? "premium" : "quick";
 
   if (!cards || !Array.isArray(cards) || cards.length === 0) {
     return NextResponse.json(
@@ -31,7 +32,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Limit batch size to prevent abuse
   if (cards.length > 30) {
     return NextResponse.json(
       { error: "Maximum 30 images per batch" },
@@ -40,12 +40,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Process images sequentially to avoid rate limits
     const results: { index: number; imageUrl: string | null; error?: string }[] = [];
 
     for (const card of cards) {
       try {
-        const imageUrl = await generateAndUploadFromCard(auth.userId, card.front, card.back);
+        const imageUrl = await generateAndUploadImage(auth.userId, card.front, card.back, tier);
         results.push({ index: card.index, imageUrl });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed";
@@ -53,10 +52,9 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ results });
+    return NextResponse.json({ results, tier });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Batch generation failed";
+    const message = error instanceof Error ? error.message : "Batch generation failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

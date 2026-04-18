@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import {
-  generateAndUploadFromCard,
+  generateAndUploadImage,
   generateAndUploadFromPrompt,
-} from "@/lib/stability-ai";
+  type ImageTier,
+} from "@/lib/image-gen";
 import { generateImageSchema, rateLimit } from "@/lib/validations";
 import { consumeImageCredit, refundImageCredit } from "@/lib/image-quota";
 
@@ -27,14 +28,12 @@ export async function POST(request: Request) {
     );
   }
 
-  // Consume a credit BEFORE generation — refund on failure
-  const consumed = await consumeImageCredit(auth.userId);
+  const tier: ImageTier = body.tier === "premium" ? "premium" : "quick";
+
+  const consumed = await consumeImageCredit(auth.userId, tier);
   if (!consumed.ok) {
     return NextResponse.json(
-      {
-        error: "out_of_quota",
-        quota: consumed.state,
-      },
+      { error: "out_of_quota", quota: consumed.state },
       { status: 402 }
     );
   }
@@ -43,19 +42,17 @@ export async function POST(request: Request) {
 
   try {
     const imageUrl = customPrompt
-      ? await generateAndUploadFromPrompt(auth.userId, customPrompt)
-      : await generateAndUploadFromCard(auth.userId, front || "", back || "");
-    return NextResponse.json({ imageUrl });
+      ? await generateAndUploadFromPrompt(auth.userId, customPrompt, tier)
+      : await generateAndUploadImage(auth.userId, front || "", back || "", tier);
+    return NextResponse.json({ imageUrl, tier });
   } catch (error) {
-    // Refund the credit since generation failed
-    await refundImageCredit(auth.userId, consumed.source);
+    await refundImageCredit(auth.userId, consumed.source, consumed.amountUsed);
 
-    const message =
-      error instanceof Error ? error.message : "Image generation failed";
+    const message = error instanceof Error ? error.message : "Image generation failed";
 
-    if (message.includes("STABILITY_API_KEY")) {
+    if (message.includes("FAL_KEY")) {
       return NextResponse.json(
-        { error: "Stability AI API key not configured" },
+        { error: "Image generation API key not configured" },
         { status: 500 }
       );
     }

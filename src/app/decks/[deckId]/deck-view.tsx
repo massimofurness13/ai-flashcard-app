@@ -60,7 +60,7 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
 
   // Fire-and-forget: tell the server to generate missing images in the
   // background. User can navigate away, close the tab, or keep working.
-  async function generateMissingImages() {
+  async function generateMissingImages(tier: "quick" | "premium" = "quick") {
     if (cardsWithoutImages === 0) return;
 
     setKickOffLoading(true);
@@ -68,16 +68,17 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
       const res = await fetch("/api/images/generate-deck-background", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deckId: deck.id }),
+        body: JSON.stringify({ deckId: deck.id, tier }),
       });
       const data = await res.json();
       if (res.ok && data.queued > 0) {
-        // Track that generation is active for ~10 min
         const expiresAt = Date.now() + 10 * 60 * 1000;
         sessionStorage.setItem(generationKey, String(expiresAt));
         sessionStorage.setItem(generationTotalKey, String(data.queued));
         setInitialPending(data.queued);
         setGenerationActive(true);
+      } else if (!res.ok) {
+        alert(data.error || "Could not start image generation.");
       }
     } finally {
       setKickOffLoading(false);
@@ -181,26 +182,30 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
 
         <div className="flex items-center gap-2">
           {deck.cards.length > 0 && isPro && cardsWithoutImages > 0 && !generationActive && (
-            <Button
-              variant="outline"
-              onClick={generateMissingImages}
-              disabled={kickOffLoading}
-              title={`Generation runs in the background — this will take roughly ${estimateImageGenTime(cardsWithoutImages)}`}
-            >
-              <span className="flex items-center gap-2">
-                {kickOffLoading ? (
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                  </svg>
-                )}
-                Generate AI Images ({cardsWithoutImages})
-              </span>
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                onClick={() => generateMissingImages("quick")}
+                disabled={kickOffLoading}
+                title={`Quick (FLUX schnell): ${cardsWithoutImages} credits, ~${estimateImageGenTime(cardsWithoutImages)}`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>✨</span>
+                  Quick ({cardsWithoutImages})
+                </span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => generateMissingImages("premium")}
+                disabled={kickOffLoading}
+                title={`Premium (FLUX dev): ${cardsWithoutImages * 5} credits, ~${estimateImageGenTime(cardsWithoutImages * 2)}`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>🎨</span>
+                  Premium ({cardsWithoutImages * 5})
+                </span>
+              </Button>
+            </div>
           )}
           {deck.cards.length > 0 && (
             <Link href={`/decks/${deck.id}/study`}>

@@ -58,11 +58,16 @@ export function ImageQuotaCard() {
 
   if (!quota) return null;
 
-  const resetLabel = quota.resetAt ? formatRelativeDate(quota.resetAt) : "next month";
+  const resetLabel = quota.resetAt
+    ? formatRelativeDate(quota.resetAt)
+    : "when your subscription renews";
   const progressPct =
     quota.monthlyLimit > 0
       ? Math.min((quota.monthlyUsed / quota.monthlyLimit) * 100, 100)
       : 0;
+  const totalCredits = quota.monthlyRemaining + quota.credits;
+  const quickCount = totalCredits;
+  const premiumCount = Math.floor(totalCredits / 5);
 
   return (
     <Card>
@@ -74,9 +79,9 @@ export function ImageQuotaCard() {
           <>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium">This month</span>
+                <span className="font-medium">Monthly allowance</span>
                 <span className="text-muted-foreground">
-                  {quota.monthlyUsed} / {quota.monthlyLimit} images used
+                  {quota.monthlyUsed} / {quota.monthlyLimit} credits used
                 </span>
               </div>
               <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
@@ -90,32 +95,35 @@ export function ImageQuotaCard() {
               </p>
             </div>
 
-            {quota.credits > 0 && (
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                <p className="text-sm font-medium">
-                  ✨ {quota.credits} extra credits available
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Credits never expire and are used after your monthly allowance.
-                </p>
-              </div>
-            )}
-
-            <div className="rounded-lg border border-border p-3 space-y-2 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground text-sm">
-                Why the limit?
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm space-y-1">
+              <p className="font-medium mb-1">You currently have enough for:</p>
+              <p className="text-muted-foreground">
+                ✨ up to <span className="text-foreground font-medium">{quickCount.toLocaleString()}</span> Quick images
               </p>
-              <p className="leading-relaxed">
-                We&apos;re really sorry for the cap. AI image generation is expensive
-                today — each image costs us real money, so we have to limit how many
-                you can make per month to keep FlashMind affordable. As AI prices
-                drop over the next year or two, we&apos;ll pass those savings on to
-                you and raise these limits. Thank you for your patience.
+              <p className="text-muted-foreground">
+                🎨 up to <span className="text-foreground font-medium">{premiumCount.toLocaleString()}</span> Premium images
+              </p>
+              {quota.credits > 0 && (
+                <p className="text-xs text-muted-foreground pt-1">
+                  Includes {quota.credits} purchased credits (never expire)
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground leading-relaxed">
+              <p className="font-medium text-foreground text-sm mb-1">
+                Quick ✨ vs Premium 🎨
+              </p>
+              <p>
+                Quick images cost 1 credit each and look clean and simple. Premium
+                images cost 5 credits each and use a richer painterly style —
+                worth it when you want the illustration to shine. Pick whichever
+                suits each card.
               </p>
             </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-medium">Top up your credits</p>
+              <p className="text-sm font-medium">Top up anytime</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {CREDIT_BUNDLES.map((bundle) => (
                   <button
@@ -131,7 +139,7 @@ export function ImageQuotaCard() {
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-semibold text-sm">
-                        {bundle.amount}
+                        {bundle.amount.toLocaleString()}
                       </span>
                       {bundle.popular && (
                         <span className="text-[9px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1 py-0.5 rounded">
@@ -139,12 +147,12 @@ export function ImageQuotaCard() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">images</p>
+                    <p className="text-xs text-muted-foreground">credits</p>
                     <p className="font-bold text-sm mt-1">
                       {purchasing === bundle.id ? "..." : bundle.label}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {bundle.perImage} per image
+                      {bundle.perCredit} per credit
                     </p>
                   </button>
                 ))}
@@ -155,14 +163,12 @@ export function ImageQuotaCard() {
           <div className="space-y-3">
             <p className="text-sm">
               You have{" "}
-              <span className="font-semibold">
-                {quota.lifetimeFreeRemaining}
-              </span>{" "}
-              free AI image{quota.lifetimeFreeRemaining === 1 ? "" : "s"} remaining
-              on the free plan.
+              <span className="font-semibold">{quota.lifetimeFreeRemaining}</span>{" "}
+              free credits to try AI images.
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Upgrade to Pro for 150 AI images every month, plus unlimited AI text
+              Upgrade to Pro for 750 AI image credits every month — up to 750
+              Quick ✨ images or 150 Premium 🎨 images, plus unlimited AI text
               generation and Anki import/export.
             </p>
             <Button

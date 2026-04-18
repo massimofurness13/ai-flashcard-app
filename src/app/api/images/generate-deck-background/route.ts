@@ -2,22 +2,20 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { isProUser } from "@/lib/subscription";
-import { generateAndUploadFromCard } from "@/lib/stability-ai";
+import { generateAndUploadImage, type ImageTier } from "@/lib/image-gen";
 import {
   consumeImageCredit,
   refundImageCredit,
   getQuotaState,
+  TIER_COSTS,
 } from "@/lib/image-quota";
 
 const CONCURRENCY = 3;
 
 /**
  * Fire-and-forget image generation for all cards in a deck that don't
- * have an image yet. Returns immediately — generation continues on the
- * server regardless of whether the user stays on the page.
- *
- * Each card consumes one quota credit. If the user runs out mid-batch,
- * remaining cards are skipped silently — they can top up and run again.
+ * have an image yet. Accepts tier (quick | premium). Returns immediately —
+ * generation continues on the server regardless of whether the user stays.
  */
 export async function POST(request: Request) {
   const auth = await requireAuth();
@@ -31,7 +29,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const { deckId } = await request.json();
+  const body = await request.json();
+  const { deckId } = body;
+  const tier: ImageTier = body.tier === "premium" ? "premium" : "quick";
+
   if (!deckId || typeof deckId !== "string") {
     return NextResponse.json({ error: "deckId is required" }, { status: 400 });
   }
@@ -53,49 +54,47 @@ export async function POST(request: Request) {
     return NextResponse.json({ queued: 0, message: "All cards already have images" });
   }
 
-  // Tell the user upfront how many cards can actually be generated
   const quota = await getQuotaState(auth.userId);
-  const willProcess = Math.min(cards.length, quota.totalRemaining);
+  const costPerCard = TIER_COSTS[tier];
+  const affordableCount = Math.floor(quota.totalRemaining / costPerCard);
+  const willProcess = Math.min(cards.length, affordableCount);
 
-  processBatch(auth.userId, cards).catch((err) => {
+  processBatch(auth.userId, cards.slice(0, willProcess), tier).catch((err) => {
     console.error("[background image] batch failed:", err);
   });
 
   return NextResponse.json({
     queued: willProcess,
     total: cards.length,
-    quotaLimit: quota.totalRemaining,
+    tier,
+    creditsPerCard: costPerCard,
     message: willProcess < cards.length
-      ? `Generating ${willProcess} images with your remaining quota. ${cards.length - willProcess} cards will need more credits.`
+      ? `Generating ${willProcess} images with your remaining credits. ${cards.length - willProcess} cards will need more credits.`
       : "Generation started. Images will appear as they're ready.",
   });
 }
 
 async function processBatch(
   userId: string,
-  cards: { id: string; front: string; back: string }[]
+  cards: { id: string; front: string; back: string }[],
+  tier: ImageTier
 ) {
   let cursor = 0;
   const workers = Array.from({ length: Math.min(CONCURRENCY, cards.length) }, async () => {
     while (cursor < cards.length) {
       const card = cards[cursor++];
 
-      // Consume one credit before generating — stop if user ran out
-      const consumed = await consumeImageCredit(userId);
-      if (!consumed.ok) {
-        // Out of quota — skip remaining cards. User can top up and re-run.
-        return;
-      }
+      const consumed = await consumeImageCredit(userId, tier);
+      if (!consumed.ok) return;
 
       try {
-        const imageUrl = await generateAndUploadFromCard(userId, card.front, card.back);
+        const imageUrl = await generateAndUploadImage(userId, card.front, card.back, tier);
         await prisma.card.updateMany({
           where: { id: card.id, imageUrl: null },
           data: { imageUrl },
         });
       } catch (err) {
-        // Refund credit since generation failed
-        await refundImageCredit(userId, consumed.source);
+        await refundImageCredit(userId, consumed.source, consumed.amountUsed);
         console.error(`[background image] card ${card.id}:`, err);
       }
     }

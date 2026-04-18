@@ -10,14 +10,14 @@ interface CreditBundle {
   amount: number;
   priceCents: number;
   label: string;
-  perImage: string;
+  perCredit: string;
   popular?: boolean;
 }
 
 export const CREDIT_BUNDLES: CreditBundle[] = [
-  { id: "100", amount: 100, priceCents: 499, label: "$4.99", perImage: "5¢" },
-  { id: "300", amount: 300, priceCents: 1199, label: "$11.99", perImage: "4¢", popular: true },
-  { id: "1000", amount: 1000, priceCents: 3499, label: "$34.99", perImage: "3.5¢" },
+  { id: "500", amount: 500, priceCents: 499, label: "$4.99", perCredit: "1¢" },
+  { id: "1500", amount: 1500, priceCents: 1199, label: "$11.99", perCredit: "0.8¢", popular: true },
+  { id: "5000", amount: 5000, priceCents: 3499, label: "$34.99", perCredit: "0.7¢" },
 ];
 
 interface QuotaExceededDialogProps {
@@ -54,7 +54,7 @@ export function QuotaExceededDialog({ open, quota, onClose }: QuotaExceededDialo
 
   const resetLabel = quota.resetAt
     ? formatRelativeDate(quota.resetAt)
-    : "next month";
+    : "when your subscription renews";
 
   return (
     <div
@@ -66,84 +66,70 @@ export function QuotaExceededDialog({ open, quota, onClose }: QuotaExceededDialo
         onClick={(e) => e.stopPropagation()}
       >
         <div className="space-y-2">
-          <div className="text-3xl">{"\ud83d\ude4f"}</div>
-          <h2 className="text-xl font-bold">You&apos;ve used all your AI images this month</h2>
+          <div className="text-3xl">{"\u2728"}</div>
+          <h2 className="text-xl font-bold">You&apos;ve used all your image credits</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            We&apos;re really sorry for the cap. AI image generation is expensive today
-            (each image costs us real money), so we have to limit how many you can
-            make per month to keep FlashMind affordable. As AI prices drop over the
-            next year or two, we&apos;ll pass those savings on to you and raise these
-            limits. Thanks for your patience.
+            You can either wait until {resetLabel} when your credits refresh, or
+            top up now. Credits never expire and stack with your monthly allowance.
           </p>
         </div>
 
-        <div className="rounded-lg bg-muted p-3 text-sm">
+        <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">This month</span>
+            <span className="text-muted-foreground">Monthly credits</span>
             <span className="font-medium">
               {quota.monthlyUsed} / {quota.monthlyLimit} used
             </span>
           </div>
-          <div className="flex items-center justify-between mt-1">
+          <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Extra credits</span>
             <span className="font-medium">{quota.credits}</span>
           </div>
-          <div className="flex items-center justify-between mt-1">
-            <span className="text-muted-foreground">Monthly refresh</span>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Refreshes</span>
             <span className="font-medium">{resetLabel}</span>
           </div>
         </div>
 
         <div className="space-y-3">
-          <p className="text-sm font-medium">You have two options:</p>
-          <div className="rounded-lg border border-border p-3 text-sm">
-            <p className="font-medium">Wait until {resetLabel}</p>
-            <p className="text-muted-foreground mt-0.5">
-              Your allowance refreshes automatically. You can keep using your cards
-              without images in the meantime — they still work great for study.
-            </p>
-          </div>
-          <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 space-y-3">
-            <div>
-              <p className="font-medium">Or top up your credits now</p>
-              <p className="text-muted-foreground text-xs mt-0.5">
-                Credits never expire and stack with your monthly allowance.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              {CREDIT_BUNDLES.map((bundle) => (
-                <button
-                  key={bundle.id}
-                  type="button"
-                  onClick={() => handleBuy(bundle.id)}
-                  disabled={purchasing !== null}
-                  className={`group flex items-center justify-between w-full rounded-lg border p-3 text-left transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                    bundle.popular
-                      ? "border-primary bg-primary/10 hover:bg-primary/15"
-                      : "border-border bg-card hover:border-primary/50 hover:bg-primary/5"
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{bundle.amount} images</span>
-                      {bundle.popular && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
-                          Best value
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {bundle.perImage} each
-                    </p>
+          <p className="text-sm font-medium">Top up your credits</p>
+          <div className="grid gap-2">
+            {CREDIT_BUNDLES.map((bundle) => (
+              <button
+                key={bundle.id}
+                type="button"
+                onClick={() => handleBuy(bundle.id)}
+                disabled={purchasing !== null}
+                className={`group flex items-center justify-between w-full rounded-lg border p-3 text-left transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  bundle.popular
+                    ? "border-primary bg-primary/10 hover:bg-primary/15"
+                    : "border-border bg-card hover:border-primary/50 hover:bg-primary/5"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{bundle.amount.toLocaleString()} credits</span>
+                    {bundle.popular && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
+                        Best value
+                      </span>
+                    )}
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold">
-                      {purchasing === bundle.id ? "..." : bundle.label}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {bundle.amount.toLocaleString()} Quick ✨ images, or{" "}
+                    {Math.floor(bundle.amount / 5).toLocaleString()} Premium 🎨 images
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold">
+                    {purchasing === bundle.id ? "..." : bundle.label}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {bundle.perCredit} per credit
+                  </p>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
 
