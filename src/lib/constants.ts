@@ -42,6 +42,6 @@ export const DEFAULT_FOLDER_COLORS = [
 export const NAV_ITEMS = [
   { label: "Home", href: "/", icon: "home" },
   { label: "Stats", href: "/stats", icon: "stats" },
-  { label: "Review", href: "/review", icon: "review" },
+  { label: "Study", href: "/study", icon: "review" },
   { label: "Account", href: "/account", icon: "account" },
 ] as const;

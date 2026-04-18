@@ -208,7 +208,7 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
             </div>
           )}
           {deck.cards.length > 0 && (
-            <Link href={`/decks/${deck.id}/study`}>
+            <Link href={`/study?deckIds=${deck.id}&filter=due`}>
               <Button variant="outline">Study</Button>
             </Link>
           )}

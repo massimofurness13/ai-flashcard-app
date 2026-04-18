@@ -1,19 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
-import { Button } from "@/components/ui/button";
+import { RatingButtons } from "./rating-buttons";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { useKeyboardNav } from "@/hooks/use-keyboard-nav";
-
-function shuffle<T>(arr: T[]): T[] {
-  const shuffled = [...arr];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
 
 interface Card {
   id: string;
@@ -21,198 +13,223 @@ interface Card {
   back: string;
   imageUrl: string | null;
   hint: string | null;
+  deck: { id: string; name: string; emoji: string | null; frontVoice?: string | null; backVoice?: string | null };
 }
-
-type Orientation = "front" | "back" | "mixed";
 
 interface StudySessionProps {
-  cards: Card[];
-  deckName: string;
-  frontVoice?: string | null;
-  backVoice?: string | null;
-  onComplete?: () => void;
+  initialCards: Card[];
+  autoFlipSeconds: number;
+  autoAdvanceSeconds?: number;
+  orientation: "front" | "back" | "mixed";
+  onComplete: (stats: StudyStats) => void;
 }
 
-function randomBackFirst(count: number, orientation: Orientation): boolean[] {
-  if (orientation === "back") return Array(count).fill(true);
-  if (orientation === "front") return Array(count).fill(false);
-  return Array.from({ length: count }, () => Math.random() < 0.5);
+export interface StudyStats {
+  cardsReviewed: number;
+  ratings: Record<number, number>;
 }
 
-export function StudySession({ cards, deckName, frontVoice, backVoice, onComplete }: StudySessionProps) {
-  // Shuffle cards on initial render (and each "Study Again")
-  const shuffledRef = useRef(shuffle(cards));
-  const [shuffledCards, setShuffledCards] = useState(shuffledRef.current);
+const DEAL_OUT_MS = 350;
+
+export function StudySession({
+  initialCards,
+  autoFlipSeconds,
+  autoAdvanceSeconds = 0,
+  orientation,
+  onComplete,
+}: StudySessionProps) {
+  const [cards] = useState(initialCards);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [orientation, setOrientation] = useState<Orientation>("front");
-  const [showSettings, setShowSettings] = useState(false);
-  // Pre-compute each card's initial side — resampled when shuffle or orientation changes.
-  // Mixed mode thus arranges the pack once and never flashes mid-session.
-  const [showBackFirstPerCard, setShowBackFirstPerCard] = useState<boolean[]>(() =>
-    randomBackFirst(shuffledRef.current.length, "front")
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dealingOut, setDealingOut] = useState(false);
+  const [stats, setStats] = useState<StudyStats>({
+    cardsReviewed: 0,
+    ratings: { 1: 0, 3: 0, 5: 0 },
+  });
+
+  const autoFlipRef = useRef<NodeJS.Timeout | null>(null);
+  const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Pre-compute each card's initial orientation ONCE at session start.
+  // Random coin flip per card in mixed mode — no mid-session recomputation,
+  // no animation flash between cards.
+  const [showBackFirstPerCard] = useState<boolean[]>(() =>
+    initialCards.map(() => {
+      if (orientation === "back") return true;
+      if (orientation === "mixed") return Math.random() < 0.5;
+      return false;
+    })
   );
 
-  const currentCard = shuffledCards[currentIndex];
-  const progress = ((currentIndex + 1) / shuffledCards.length) * 100;
-  const showBackFirst = showBackFirstPerCard[currentIndex] ?? false;
+  const isAutoAdvance = autoAdvanceSeconds > 0;
+  const currentCard = cards[currentIndex];
+  const total = cards.length;
+  const progress = total > 0 ? currentIndex / total : 0;
+  const showBackFirst = showBackFirstPerCard[currentIndex];
 
-  const displayFront = showBackFirst ? currentCard.back : currentCard.front;
-  const displayBack = showBackFirst ? currentCard.front : currentCard.back;
-  const displayFrontVoice = showBackFirst ? backVoice : frontVoice;
-  const displayBackVoice = showBackFirst ? frontVoice : backVoice;
+  // Auto-flip timer
+  useEffect(() => {
+    if (dealingOut) return;
+    if (autoFlipSeconds > 0 && !isFlipped) {
+      autoFlipRef.current = setTimeout(() => {
+        setIsFlipped(true);
+      }, autoFlipSeconds * 1000);
+    }
+    return () => {
+      if (autoFlipRef.current) clearTimeout(autoFlipRef.current);
+    };
+  }, [autoFlipSeconds, isFlipped, currentIndex, dealingOut]);
+
+  /**
+   * Deal the current card out (slide/fade) then swap in the next card
+   * already arranged on its correct side — no flip-reset animation.
+   */
+  const dealAndAdvance = useCallback(
+    (finalStats: StudyStats) => {
+      setDealingOut(true);
+      setTimeout(() => {
+        if (currentIndex < total - 1) {
+          setCurrentIndex((prev) => prev + 1);
+          setIsFlipped(false);
+          setDealingOut(false);
+        } else {
+          onComplete(finalStats);
+        }
+      }, DEAL_OUT_MS);
+    },
+    [currentIndex, total, onComplete]
+  );
+
+  // Auto-advance timer — runs once the card is flipped, skips rating UI
+  useEffect(() => {
+    if (!isAutoAdvance) return;
+    if (!isFlipped) return;
+    if (dealingOut) return;
+
+    autoAdvanceRef.current = setTimeout(() => {
+      const newStats = { ...stats, cardsReviewed: stats.cardsReviewed + 1 };
+      setStats(newStats);
+      dealAndAdvance(newStats);
+    }, autoAdvanceSeconds * 1000);
+
+    return () => {
+      if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
+    };
+  }, [isAutoAdvance, isFlipped, autoAdvanceSeconds, currentIndex, stats, dealAndAdvance, dealingOut]);
 
   const handleFlip = useCallback(() => {
+    if (dealingOut) return;
     setIsFlipped((prev) => !prev);
-  }, []);
+  }, [dealingOut]);
 
-  const handleNext = useCallback(() => {
-    if (currentIndex < shuffledCards.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
-      setIsFlipped(false);
-    } else {
-      setCompleted(true);
-    }
-  }, [currentIndex, shuffledCards.length]);
+  const handleRate = useCallback(
+    async (quality: number) => {
+      if (isSubmitting || dealingOut || isAutoAdvance) return;
+      setIsSubmitting(true);
 
-  const handlePrev = useCallback(() => {
-    if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1);
-      setIsFlipped(false);
-    }
-  }, [currentIndex]);
+      await fetch("/api/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId: currentCard.id, quality }),
+      });
+
+      const newStats = {
+        cardsReviewed: stats.cardsReviewed + 1,
+        ratings: {
+          ...stats.ratings,
+          [quality]: (stats.ratings[quality] || 0) + 1,
+        },
+      };
+      setStats(newStats);
+      setIsSubmitting(false);
+      dealAndAdvance(newStats);
+    },
+    [currentCard, stats, isSubmitting, dealingOut, isAutoAdvance, dealAndAdvance]
+  );
 
   useKeyboardNav({
     onFlip: handleFlip,
-    onNext: handleNext,
-    onPrev: handlePrev,
-    enabled: !completed,
+    onRate: isAutoAdvance ? undefined : handleRate,
+    enabled: isFlipped && !dealingOut,
   });
 
-  if (completed) {
+  useKeyboardNav({
+    onFlip: handleFlip,
+    enabled: !isFlipped && !dealingOut,
+  });
+
+  if (!currentCard) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <span className="text-5xl mb-4">{"\ud83c\udf89"}</span>
-        <h2 className="text-2xl font-bold">Study Complete!</h2>
-        <p className="text-muted-foreground mt-2">
-          You reviewed all {shuffledCards.length} cards in {deckName}
-        </p>
-        <div className="flex gap-3 mt-6">
-          <Button
-            onClick={() => {
-              const reshuffled = shuffle(cards);
-              setShuffledCards(reshuffled);
-              setShowBackFirstPerCard(randomBackFirst(reshuffled.length, orientation));
-              setCurrentIndex(0);
-              setIsFlipped(false);
-              setCompleted(false);
-            }}
-          >
-            Study Again
-          </Button>
-          <Button variant="outline" onClick={onComplete}>
-            Back to Deck
-          </Button>
-        </div>
+      <div className="text-center py-16">
+        <p className="text-muted-foreground">No cards to review</p>
       </div>
     );
   }
 
+  const frontText = showBackFirst ? currentCard.back : currentCard.front;
+  const backText = showBackFirst ? currentCard.front : currentCard.back;
+  const frontVoiceName = showBackFirst ? currentCard.deck.backVoice : currentCard.deck.frontVoice;
+  const backVoiceName = showBackFirst ? currentCard.deck.frontVoice : currentCard.deck.backVoice;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{deckName}</h2>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            {currentIndex + 1} / {shuffledCards.length}
-          </span>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-1.5 rounded-lg hover:bg-primary/10 transition-colors text-muted-foreground hover:text-foreground"
-            aria-label="Study settings"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </div>
+        <span className="text-sm text-muted-foreground">
+          {currentCard.deck.emoji} {currentCard.deck.name}
+          {isAutoAdvance && (
+            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide bg-primary/15 text-primary px-1.5 py-0.5 rounded">
+              Auto-advance
+            </span>
+          )}
+        </span>
+        <span className="text-sm text-muted-foreground">
+          {currentIndex + 1} / {total}
+        </span>
       </div>
 
-      {showSettings && (
-        <div className="rounded-lg border border-border bg-card p-4 space-y-2">
-          <p className="text-sm font-medium">Card Orientation</p>
-          <div className="flex gap-2">
-            {([
-              { value: "front" as const, label: "Front first" },
-              { value: "back" as const, label: "Back first" },
-              { value: "mixed" as const, label: "Random" },
-            ]).map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  setOrientation(opt.value);
-                  setShowBackFirstPerCard(randomBackFirst(shuffledCards.length, opt.value));
-                  setIsFlipped(false);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  orientation === opt.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-foreground"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <Progress value={progress * 100} />
 
-      <Progress value={progress} />
-
-      <div key={currentCard.id} className="flashcard-enter">
+      <div className={dealingOut ? "flashcard-deal-out" : "flashcard-enter"} key={currentCard.id}>
         <Flashcard
-          front={displayFront}
-          back={displayBack}
+          front={frontText}
+          back={backText}
           imageUrl={currentCard.imageUrl}
-          hint={showBackFirst ? null : currentCard.hint}
+          hint={currentCard.hint}
           isFlipped={isFlipped}
           onFlip={handleFlip}
-          frontVoice={displayFrontVoice}
-          backVoice={displayBackVoice}
+          frontVoice={frontVoiceName}
+          backVoice={backVoiceName}
           autoPlayVoice
         />
       </div>
 
-      <div className="flex items-center justify-center gap-4">
-        <Button
-          variant="outline"
-          onClick={handlePrev}
-          disabled={currentIndex === 0}
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          Previous
-        </Button>
-        <Button variant="outline" onClick={handleFlip}>
-          Flip
-        </Button>
-        <Button
-          variant="outline"
-          onClick={handleNext}
-        >
-          {currentIndex === shuffledCards.length - 1 ? "Finish" : "Next"}
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </Button>
-      </div>
+      {/* Single action area — either Show Answer OR rating, never both */}
+      <div className="min-h-[80px] flex items-start justify-center">
+        {!isFlipped && !dealingOut && (
+          <Button variant="outline" onClick={handleFlip}>
+            Show Answer
+          </Button>
+        )}
 
-      <p className="text-xs text-muted-foreground text-center">
-        Keyboard: Space to flip, Arrow keys to navigate
-      </p>
+        {!isAutoAdvance && isFlipped && !dealingOut && (
+          <div className="space-y-2 w-full">
+            <p className="text-sm text-muted-foreground text-center">
+              How well did you know this?
+            </p>
+            <RatingButtons onRate={handleRate} disabled={isSubmitting} />
+            <p className="text-xs text-muted-foreground text-center">
+              Keyboard: 1 = Again, 2 = Good, 3 = Easy
+            </p>
+          </div>
+        )}
+
+        {isAutoAdvance && isFlipped && !dealingOut && (
+          <p className="text-xs text-muted-foreground text-center">
+            Next card in {autoAdvanceSeconds.toFixed(1)}s…
+          </p>
+        )}
+      </div>
     </div>
   );
 }

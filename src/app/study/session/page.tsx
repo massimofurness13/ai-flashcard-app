@@ -2,11 +2,11 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
-import { ReviewSession, type ReviewStats } from "@/components/review/review-session";
+import { StudySession, type StudyStats } from "@/components/study/study-session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-interface ReviewCard {
+interface StudyCard {
   id: string;
   front: string;
   back: string;
@@ -15,26 +15,29 @@ interface ReviewCard {
   deck: { id: string; name: string; emoji: string | null };
 }
 
-function ReviewSessionContent() {
+function StudySessionContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [cards, setCards] = useState<ReviewCard[]>([]);
+  const [cards, setCards] = useState<StudyCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [completed, setCompleted] = useState(false);
-  const [stats, setStats] = useState<ReviewStats | null>(null);
+  const [stats, setStats] = useState<StudyStats | null>(null);
 
   const deckIds = searchParams.get("deckIds") || "";
-  const limit = searchParams.get("limit") || "10";
+  const limit = searchParams.get("limit") || "25";
+  const filter = searchParams.get("filter") || "due";
   const autoFlip = parseFloat(searchParams.get("autoFlip") || "0");
   const autoAdvance = parseFloat(searchParams.get("autoAdvance") || "0");
-  const orientation = (searchParams.get("orientation") || "front") as "front" | "back" | "mixed";
-  const recencyCutoff = searchParams.get("recencyCutoff") || "0";
+  const orientation = (searchParams.get("orientation") || "front") as
+    | "front"
+    | "back"
+    | "mixed";
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (deckIds) params.set("deckIds", deckIds);
     params.set("limit", limit);
-    if (recencyCutoff !== "0") params.set("recencyCutoff", recencyCutoff);
+    params.set("filter", filter);
 
     fetch(`/api/review?${params.toString()}`)
       .then((res) => res.json())
@@ -42,10 +45,10 @@ function ReviewSessionContent() {
         setCards(data.cards);
         setLoading(false);
       });
-  }, [deckIds, limit, recencyCutoff]);
+  }, [deckIds, limit, filter]);
 
-  function handleComplete(reviewStats: ReviewStats) {
-    setStats(reviewStats);
+  function handleComplete(sessionStats: StudyStats) {
+    setStats(sessionStats);
     setCompleted(true);
   }
 
@@ -61,11 +64,18 @@ function ReviewSessionContent() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <span className="text-5xl mb-4">{"\u2705"}</span>
-        <h2 className="text-2xl font-bold">All caught up!</h2>
-        <p className="text-muted-foreground mt-2">No cards due for review right now.</p>
-        <Button className="mt-6" onClick={() => router.push("/")}>
-          Back to Home
-        </Button>
+        <h2 className="text-2xl font-bold">Nothing to study here</h2>
+        <p className="text-muted-foreground mt-2">
+          {filter === "due"
+            ? "No cards are due right now. Try another filter."
+            : "No cards matched the selected packs and filter."}
+        </p>
+        <div className="flex gap-3 mt-6">
+          <Button onClick={() => router.push("/study")}>Change filter</Button>
+          <Button variant="outline" onClick={() => router.push("/")}>
+            Home
+          </Button>
+        </div>
       </div>
     );
   }
@@ -75,15 +85,15 @@ function ReviewSessionContent() {
       <div className="space-y-6 max-w-md mx-auto">
         <div className="text-center py-8">
           <span className="text-5xl mb-4 block">{"\ud83c\udf1f"}</span>
-          <h2 className="text-2xl font-bold">Review Complete!</h2>
+          <h2 className="text-2xl font-bold">Session complete</h2>
           <p className="text-muted-foreground mt-2">
-            You reviewed {stats.cardsReviewed} cards
+            You studied {stats.cardsReviewed} cards
           </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Session Summary</CardTitle>
+            <CardTitle>Session summary</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between">
@@ -102,8 +112,8 @@ function ReviewSessionContent() {
         </Card>
 
         <div className="flex gap-3">
-          <Button className="flex-1" onClick={() => router.push("/review")}>
-            Review More
+          <Button className="flex-1" onClick={() => router.push("/study")}>
+            Study more
           </Button>
           <Button variant="outline" className="flex-1" onClick={() => router.push("/")}>
             Home
@@ -114,7 +124,7 @@ function ReviewSessionContent() {
   }
 
   return (
-    <ReviewSession
+    <StudySession
       initialCards={cards}
       autoFlipSeconds={autoFlip}
       autoAdvanceSeconds={autoAdvance}
@@ -124,7 +134,7 @@ function ReviewSessionContent() {
   );
 }
 
-export default function ReviewSessionPage() {
+export default function StudySessionPage() {
   return (
     <Suspense
       fallback={
@@ -133,7 +143,7 @@ export default function ReviewSessionPage() {
         </div>
       }
     >
-      <ReviewSessionContent />
+      <StudySessionContent />
     </Suspense>
   );
 }

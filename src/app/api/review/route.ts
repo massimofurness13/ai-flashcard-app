@@ -1,22 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { sm2 } from "@/lib/sm2";
+import { sm2, masteryLevel } from "@/lib/sm2";
 import { requireAuth } from "@/lib/auth";
+import type { Prisma } from "@/generated/prisma/client";
 
-// GET /api/review — get cards due for review
+type StudyFilter = "due" | "random" | "created" | "mastery" | "recent" | "alpha";
+
+const VALID_FILTERS: StudyFilter[] = ["due", "random", "created", "mastery", "recent", "alpha"];
+
+// GET /api/review — fetch cards for a study session with a chosen filter.
+// Despite the route name, SM-2 runs on EVERY rating regardless of filter,
+// so "study" and "review" use the same endpoint.
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
   const searchParams = request.nextUrl.searchParams;
   const deckIds = searchParams.get("deckIds");
-  const limit = parseInt(searchParams.get("limit") || "20", 10);
+  const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 500);
   const recencyCutoffDays = parseInt(searchParams.get("recencyCutoff") || "0", 10);
+  const filterParam = searchParams.get("filter") || "due";
+  const filter: StudyFilter = VALID_FILTERS.includes(filterParam as StudyFilter)
+    ? (filterParam as StudyFilter)
+    : "due";
 
   const now = new Date();
 
-  const where: Record<string, unknown> = {
-    nextReviewAt: { lte: now },
+  const where: Prisma.CardWhereInput = {
     deck: { userId: auth.userId },
   };
 
@@ -24,29 +34,70 @@ export async function GET(request: NextRequest) {
     where.deckId = { in: deckIds.split(",") };
   }
 
-  // Filter out individual cards reviewed within the recency cutoff
-  if (recencyCutoffDays > 0) {
-    const cutoffDate = new Date(now.getTime() - recencyCutoffDays * 86400000);
-    where.reviews = {
-      none: {
-        reviewedAt: { gte: cutoffDate },
-      },
-    };
+  // "Due" filter: only cards whose nextReviewAt has passed
+  if (filter === "due") {
+    where.nextReviewAt = { lte: now };
   }
 
-  const cards = await prisma.card.findMany({
+  // Recency cutoff (optional) — skip cards reviewed too recently
+  if (recencyCutoffDays > 0) {
+    const cutoffDate = new Date(now.getTime() - recencyCutoffDays * 86400000);
+    where.reviews = { none: { reviewedAt: { gte: cutoffDate } } };
+  }
+
+  const orderBy: Prisma.CardOrderByWithRelationInput =
+    filter === "due"
+      ? { nextReviewAt: "asc" }
+      : filter === "created"
+        ? { createdAt: "asc" }
+        : filter === "recent"
+          ? { createdAt: "desc" }
+          : filter === "alpha"
+            ? { front: "asc" }
+            : { nextReviewAt: "asc" }; // fallback; random & mastery handled below
+
+  let cards = await prisma.card.findMany({
     where,
-    include: { deck: { select: { id: true, name: true, emoji: true, frontVoice: true, backVoice: true } } },
-    orderBy: { nextReviewAt: "asc" },
-    take: limit,
+    include: {
+      deck: { select: { id: true, name: true, emoji: true, frontVoice: true, backVoice: true } },
+    },
+    orderBy,
+    // Over-fetch for filters that need in-memory sorting (random, mastery),
+    // then trim to the limit after sorting client-side.
+    take: filter === "random" || filter === "mastery" ? limit * 4 : limit,
   });
 
-  const totalDue = await prisma.card.count({ where });
+  if (filter === "random") {
+    // Fisher-Yates shuffle
+    for (let i = cards.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cards[i], cards[j]] = [cards[j], cards[i]];
+    }
+    cards = cards.slice(0, limit);
+  } else if (filter === "mastery") {
+    // Sort by computed mastery ascending (lowest mastery = most needs practice)
+    cards.sort(
+      (a, b) =>
+        masteryLevel({
+          easeFactor: a.easeFactor,
+          interval: a.interval,
+          repetitions: a.repetitions,
+        }) -
+        masteryLevel({
+          easeFactor: b.easeFactor,
+          interval: b.interval,
+          repetitions: b.repetitions,
+        })
+    );
+    cards = cards.slice(0, limit);
+  }
 
-  return NextResponse.json({ cards, totalDue });
+  const totalAvailable = await prisma.card.count({ where });
+
+  return NextResponse.json({ cards, totalDue: totalAvailable, total: totalAvailable });
 }
 
-// POST /api/review — submit a review rating
+// POST /api/review — submit a review rating (SM-2 update)
 export async function POST(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
@@ -61,7 +112,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Verify card ownership through deck
   const card = await prisma.card.findUnique({
     where: { id: cardId },
     include: { deck: { select: { userId: true } } },
