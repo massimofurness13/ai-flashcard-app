@@ -28,12 +28,12 @@ export function formatRelativeDate(date: Date | string): string {
 
 /**
  * Rough estimate of how long image generation will take for N cards.
- * Based on measured ~10 seconds per card (Claude Haiku concept ~1.5s +
- * SDXL generation + upload ~7-8s).
+ * The background endpoint runs 3 images concurrently, so wall-clock time
+ * per card averages ~3-4 seconds (not the ~10s it takes serially).
  */
 export function estimateImageGenTime(cardCount: number): string {
   if (cardCount <= 0) return "a moment";
-  const seconds = cardCount * 10;
+  const seconds = cardCount * 4;
   if (seconds < 45) return "under a minute";
   if (seconds < 90) return "about a minute";
   const minutes = Math.round(seconds / 60);

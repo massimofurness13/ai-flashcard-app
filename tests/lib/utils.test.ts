@@ -7,21 +7,23 @@ describe("estimateImageGenTime", () => {
     expect(estimateImageGenTime(-5)).toBe("a moment");
   });
 
-  it("returns 'under a minute' for 1-4 cards", () => {
+  it("returns 'under a minute' for small batches", () => {
+    // At 4s per card with concurrency=3, 11 cards = 44s which is still under 45
     expect(estimateImageGenTime(1)).toBe("under a minute");
-    expect(estimateImageGenTime(4)).toBe("under a minute");
+    expect(estimateImageGenTime(11)).toBe("under a minute");
   });
 
-  it("returns 'about a minute' for 5-8 cards", () => {
-    expect(estimateImageGenTime(5)).toBe("about a minute");
-    expect(estimateImageGenTime(8)).toBe("about a minute");
+  it("returns 'about a minute' for medium batches", () => {
+    // 12 cards × 4s = 48s, 22 cards × 4s = 88s — both map to "about a minute"
+    expect(estimateImageGenTime(12)).toBe("about a minute");
+    expect(estimateImageGenTime(22)).toBe("about a minute");
   });
 
-  it("returns 'about N minutes' for 9+ cards", () => {
-    expect(estimateImageGenTime(9)).toBe("about 2 minutes");
-    expect(estimateImageGenTime(12)).toBe("about 2 minutes");
-    expect(estimateImageGenTime(30)).toBe("about 5 minutes");
-    expect(estimateImageGenTime(60)).toBe("about 10 minutes");
+  it("returns 'about N minutes' for larger batches", () => {
+    // 101 cards × 4s = 404s ≈ 7 minutes (the real Verbos pack size)
+    expect(estimateImageGenTime(30)).toBe("about 2 minutes");
+    expect(estimateImageGenTime(60)).toBe("about 4 minutes");
+    expect(estimateImageGenTime(101)).toBe("about 7 minutes");
   });
 });
 
