@@ -19,7 +19,6 @@ interface Card {
 interface ReviewSessionProps {
   initialCards: Card[];
   autoFlipSeconds: number;
-  /** When > 0, cards flip and advance automatically — no rating UI. */
   autoAdvanceSeconds?: number;
   orientation: "front" | "back" | "mixed";
   onComplete: (stats: ReviewStats) => void;
@@ -29,6 +28,8 @@ export interface ReviewStats {
   cardsReviewed: number;
   ratings: Record<number, number>;
 }
+
+const DEAL_OUT_MS = 350;
 
 export function ReviewSession({
   initialCards,
@@ -40,8 +41,8 @@ export function ReviewSession({
   const [cards] = useState(initialCards);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [hasRated, setHasRated] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dealingOut, setDealingOut] = useState(false);
   const [stats, setStats] = useState<ReviewStats>({
     cardsReviewed: 0,
     ratings: { 1: 0, 3: 0, 5: 0 },
@@ -67,9 +68,10 @@ export function ReviewSession({
   const progress = total > 0 ? currentIndex / total : 0;
   const showBackFirst = showBackFirstPerCard[currentIndex];
 
-  // Auto-flip timer (flips the card when it hasn't been flipped yet)
+  // Auto-flip timer
   useEffect(() => {
-    if (autoFlipSeconds > 0 && !isFlipped && !hasRated) {
+    if (dealingOut) return;
+    if (autoFlipSeconds > 0 && !isFlipped) {
       autoFlipRef.current = setTimeout(() => {
         setIsFlipped(true);
       }, autoFlipSeconds * 1000);
@@ -77,18 +79,24 @@ export function ReviewSession({
     return () => {
       if (autoFlipRef.current) clearTimeout(autoFlipRef.current);
     };
-  }, [autoFlipSeconds, isFlipped, hasRated, currentIndex]);
+  }, [autoFlipSeconds, isFlipped, currentIndex, dealingOut]);
 
-  // Advance to next card (shared by manual rating + auto-advance)
-  const advanceCard = useCallback(
-    (newStats: ReviewStats) => {
-      if (currentIndex < total - 1) {
-        setCurrentIndex((prev) => prev + 1);
-        setIsFlipped(false);
-        setHasRated(false);
-      } else {
-        onComplete(newStats);
-      }
+  /**
+   * Deal the current card out (slide/fade) then swap in the next card
+   * already arranged on its correct side — no flip-reset animation.
+   */
+  const dealAndAdvance = useCallback(
+    (finalStats: ReviewStats) => {
+      setDealingOut(true);
+      setTimeout(() => {
+        if (currentIndex < total - 1) {
+          setCurrentIndex((prev) => prev + 1);
+          setIsFlipped(false);
+          setDealingOut(false);
+        } else {
+          onComplete(finalStats);
+        }
+      }, DEAL_OUT_MS);
     },
     [currentIndex, total, onComplete]
   );
@@ -97,25 +105,27 @@ export function ReviewSession({
   useEffect(() => {
     if (!isAutoAdvance) return;
     if (!isFlipped) return;
+    if (dealingOut) return;
 
     autoAdvanceRef.current = setTimeout(() => {
       const newStats = { ...stats, cardsReviewed: stats.cardsReviewed + 1 };
       setStats(newStats);
-      advanceCard(newStats);
+      dealAndAdvance(newStats);
     }, autoAdvanceSeconds * 1000);
 
     return () => {
       if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
     };
-  }, [isAutoAdvance, isFlipped, autoAdvanceSeconds, currentIndex, stats, advanceCard]);
+  }, [isAutoAdvance, isFlipped, autoAdvanceSeconds, currentIndex, stats, dealAndAdvance, dealingOut]);
 
   const handleFlip = useCallback(() => {
+    if (dealingOut) return;
     setIsFlipped((prev) => !prev);
-  }, []);
+  }, [dealingOut]);
 
   const handleRate = useCallback(
     async (quality: number) => {
-      if (isSubmitting || hasRated || isAutoAdvance) return;
+      if (isSubmitting || dealingOut || isAutoAdvance) return;
       setIsSubmitting(true);
 
       await fetch("/api/review", {
@@ -132,23 +142,21 @@ export function ReviewSession({
         },
       };
       setStats(newStats);
-      setHasRated(true);
       setIsSubmitting(false);
-
-      setTimeout(() => advanceCard(newStats), 500);
+      dealAndAdvance(newStats);
     },
-    [currentCard, stats, isSubmitting, hasRated, isAutoAdvance, advanceCard]
+    [currentCard, stats, isSubmitting, dealingOut, isAutoAdvance, dealAndAdvance]
   );
 
   useKeyboardNav({
     onFlip: handleFlip,
     onRate: isAutoAdvance ? undefined : handleRate,
-    enabled: isFlipped && !hasRated,
+    enabled: isFlipped && !dealingOut,
   });
 
   useKeyboardNav({
     onFlip: handleFlip,
-    enabled: !isFlipped && !hasRated,
+    enabled: !isFlipped && !dealingOut,
   });
 
   if (!currentCard) {
@@ -182,47 +190,46 @@ export function ReviewSession({
 
       <Progress value={progress * 100} />
 
-      <Flashcard
-        front={frontText}
-        back={backText}
-        imageUrl={currentCard.imageUrl}
-        hint={currentCard.hint}
-        isFlipped={isFlipped}
-        onFlip={handleFlip}
-        frontVoice={frontVoiceName}
-        backVoice={backVoiceName}
-        autoPlayVoice
-      />
+      <div className={dealingOut ? "flashcard-deal-out" : "flashcard-enter"} key={currentCard.id}>
+        <Flashcard
+          front={frontText}
+          back={backText}
+          imageUrl={currentCard.imageUrl}
+          hint={currentCard.hint}
+          isFlipped={isFlipped}
+          onFlip={handleFlip}
+          frontVoice={frontVoiceName}
+          backVoice={backVoiceName}
+          autoPlayVoice
+        />
+      </div>
 
-      {/* Manual rating UI — hidden in auto-advance mode */}
-      {!isAutoAdvance && isFlipped && !hasRated && (
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground text-center">
-            How well did you know this?
-          </p>
-          <RatingButtons onRate={handleRate} disabled={isSubmitting} />
-          <p className="text-xs text-muted-foreground text-center">
-            Keyboard: 1 = Again, 2 = Good, 3 = Easy
-          </p>
-        </div>
-      )}
-
-      {/* Flip hint when card hasn't been flipped yet */}
-      {!isFlipped && (
-        <div className="text-center">
+      {/* Single action area — either Show Answer OR rating, never both */}
+      <div className="min-h-[80px] flex items-start justify-center">
+        {!isFlipped && !dealingOut && (
           <Button variant="outline" onClick={handleFlip}>
             Show Answer
           </Button>
-        </div>
-      )}
+        )}
 
-      {/* Auto-advance status when card is flipped */}
-      {isAutoAdvance && isFlipped && (
-        <p className="text-xs text-muted-foreground text-center">
-          Moving to next card in {autoAdvanceSeconds.toFixed(1)}s…
-        </p>
-      )}
+        {!isAutoAdvance && isFlipped && !dealingOut && (
+          <div className="space-y-2 w-full">
+            <p className="text-sm text-muted-foreground text-center">
+              How well did you know this?
+            </p>
+            <RatingButtons onRate={handleRate} disabled={isSubmitting} />
+            <p className="text-xs text-muted-foreground text-center">
+              Keyboard: 1 = Again, 2 = Good, 3 = Easy
+            </p>
+          </div>
+        )}
+
+        {isAutoAdvance && isFlipped && !dealingOut && (
+          <p className="text-xs text-muted-foreground text-center">
+            Next card in {autoAdvanceSeconds.toFixed(1)}s…
+          </p>
+        )}
+      </div>
     </div>
   );
 }
-

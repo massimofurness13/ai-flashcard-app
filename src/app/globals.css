@@ -124,3 +124,37 @@ body.font-xlarge { font-size: 20px; }
 .flashcard-back {
   transform: rotateY(180deg);
 }
+
+/* Card-stack "deal out" animation — the card that just finished slides
+ * off and fades, revealing the next one already arranged underneath.
+ * Combined with key-based remount of Flashcard, the new card appears
+ * without any visible flip transition. */
+@keyframes card-deal-out {
+  from {
+    transform: translateX(0) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-120%) rotate(-12deg);
+    opacity: 0;
+  }
+}
+
+.flashcard-deal-out {
+  animation: card-deal-out 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.flashcard-enter {
+  animation: card-enter 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}

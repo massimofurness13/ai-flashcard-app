@@ -171,17 +171,19 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
 
       <Progress value={progress} />
 
-      <Flashcard
-        front={displayFront}
-        back={displayBack}
-        imageUrl={currentCard.imageUrl}
-        hint={showBackFirst ? null : currentCard.hint}
-        isFlipped={isFlipped}
-        onFlip={handleFlip}
-        frontVoice={displayFrontVoice}
-        backVoice={displayBackVoice}
-        autoPlayVoice
-      />
+      <div key={currentCard.id} className="flashcard-enter">
+        <Flashcard
+          front={displayFront}
+          back={displayBack}
+          imageUrl={currentCard.imageUrl}
+          hint={showBackFirst ? null : currentCard.hint}
+          isFlipped={isFlipped}
+          onFlip={handleFlip}
+          frontVoice={displayFrontVoice}
+          backVoice={displayBackVoice}
+          autoPlayVoice
+        />
+      </div>
 
       <div className="flex items-center justify-center gap-4">
         <Button

@@ -90,9 +90,6 @@ export function Flashcard({
             )}
             <VoiceButton text={front} voiceName={frontVoice} className="ml-auto" />
           </div>
-          <p className="text-xs text-muted-foreground text-center mt-2">
-            Tap to flip
-          </p>
         </div>
 
         {/* Back face */}
@@ -108,9 +105,6 @@ export function Flashcard({
           <div className="flex justify-end mt-4">
             <VoiceButton text={back} voiceName={backVoice} />
           </div>
-          <p className="text-xs text-muted-foreground text-center mt-2">
-            Tap to flip back
-          </p>
         </div>
       </div>
     </div>
