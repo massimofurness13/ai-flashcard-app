@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -33,13 +33,10 @@ interface StudySessionProps {
   onComplete?: () => void;
 }
 
-function simpleHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
+function randomBackFirst(count: number, orientation: Orientation): boolean[] {
+  if (orientation === "back") return Array(count).fill(true);
+  if (orientation === "front") return Array(count).fill(false);
+  return Array.from({ length: count }, () => Math.random() < 0.5);
 }
 
 export function StudySession({ cards, deckName, frontVoice, backVoice, onComplete }: StudySessionProps) {
@@ -51,15 +48,15 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
   const [completed, setCompleted] = useState(false);
   const [orientation, setOrientation] = useState<Orientation>("front");
   const [showSettings, setShowSettings] = useState(false);
+  // Pre-compute each card's initial side — resampled when shuffle or orientation changes.
+  // Mixed mode thus arranges the pack once and never flashes mid-session.
+  const [showBackFirstPerCard, setShowBackFirstPerCard] = useState<boolean[]>(() =>
+    randomBackFirst(shuffledRef.current.length, "front")
+  );
 
   const currentCard = shuffledCards[currentIndex];
   const progress = ((currentIndex + 1) / shuffledCards.length) * 100;
-
-  const showBackFirst = useMemo(() => {
-    if (orientation === "back") return true;
-    if (orientation === "mixed" && currentCard) return simpleHash(currentCard.id) % 2 === 0;
-    return false;
-  }, [orientation, currentCard]);
+  const showBackFirst = showBackFirstPerCard[currentIndex] ?? false;
 
   const displayFront = showBackFirst ? currentCard.back : currentCard.front;
   const displayBack = showBackFirst ? currentCard.front : currentCard.back;
@@ -104,7 +101,9 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
         <div className="flex gap-3 mt-6">
           <Button
             onClick={() => {
-              setShuffledCards(shuffle(cards));
+              const reshuffled = shuffle(cards);
+              setShuffledCards(reshuffled);
+              setShowBackFirstPerCard(randomBackFirst(reshuffled.length, orientation));
               setCurrentIndex(0);
               setIsFlipped(false);
               setCompleted(false);
@@ -154,6 +153,7 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
                 key={opt.value}
                 onClick={() => {
                   setOrientation(opt.value);
+                  setShowBackFirstPerCard(randomBackFirst(shuffledCards.length, opt.value));
                   setIsFlipped(false);
                 }}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${

@@ -50,14 +50,22 @@ export function ReviewSession({
   const autoFlipRef = useRef<NodeJS.Timeout | null>(null);
   const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Pre-compute each card's initial orientation ONCE at session start.
+  // Random coin flip per card in mixed mode — no mid-session recomputation,
+  // no animation flash between cards.
+  const [showBackFirstPerCard] = useState<boolean[]>(() =>
+    initialCards.map(() => {
+      if (orientation === "back") return true;
+      if (orientation === "mixed") return Math.random() < 0.5;
+      return false;
+    })
+  );
+
   const isAutoAdvance = autoAdvanceSeconds > 0;
   const currentCard = cards[currentIndex];
   const total = cards.length;
   const progress = total > 0 ? currentIndex / total : 0;
-
-  const showBackFirst =
-    orientation === "back" ||
-    (orientation === "mixed" && currentCard && simpleHash(currentCard.id) % 2 === 0);
+  const showBackFirst = showBackFirstPerCard[currentIndex];
 
   // Auto-flip timer (flips the card when it hasn't been flipped yet)
   useEffect(() => {
@@ -218,11 +226,3 @@ export function ReviewSession({
   );
 }
 
-function simpleHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
