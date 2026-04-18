@@ -38,16 +38,17 @@ async function buildVisualConcept(
 Card front: "${cardFront}"
 Card back: "${cardBack}"
 
-Write a SHORT visual scene description (1-2 sentences, max 40 words) that captures the MEANING of this card. Rules:
+Write a SHORT visual scene description (1-2 sentences, max 40 words) that captures the card. Rules:
 
-- If the card is an idiom or phrase, depict the FIGURATIVE meaning, not the literal words.
-  Example: "Se me fue el santo al cielo" means "I lost my train of thought" — depict a confused person with thoughts drifting away, NOT a saint going to the sky.
-- If the card is a vocabulary word, depict what it represents.
-- If the card is a factual question, depict the answer's subject.
+- For idioms and figurative phrases, use this test:
+  → If the SAME visual metaphor exists in English (e.g. "take the bull by the horns", "kill two birds with one stone", "the straw that broke the camel's back"), depict the LITERAL imagery — it's the iconic universal shorthand. Use the bull, the stone, the camel.
+  → If the literal imagery would be misleading and has NO English equivalent (e.g. "Se me fue el santo al cielo" literally = "the saint went to the sky", figuratively = "I lost my train of thought"), depict the FIGURATIVE meaning instead.
+  → When unsure, include the iconic visual element (bull, horns, etc.) AND hint at the figurative meaning through the scene (a determined person gripping bull's horns, for example).
+- For vocabulary words, depict what they represent.
+- For factual questions, depict the answer's subject.
 - Describe ONLY visual elements (people, objects, settings, colours, mood).
 - NEVER include any text, letters, words, signs, labels, or writing in your description.
 - Be specific and concrete — name actual objects and compositions.
-- Avoid anything that could be rendered as text by the image model.
 
 Output ONLY the scene description. No preamble, no quotes.`,
         },
