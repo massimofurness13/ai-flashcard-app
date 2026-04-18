@@ -27,6 +27,41 @@ export async function POST(request: Request) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+
+      // Credit-pack purchases (one-time payments)
+      if (session.mode === "payment" && session.metadata?.type === "credit_purchase") {
+        const userId = session.metadata.userId;
+        const bundle = session.metadata.bundle;
+        const creditsAmount = parseInt(session.metadata.creditsAmount || "0", 10);
+        const paymentIntentId =
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent?.id;
+
+        if (userId && creditsAmount > 0 && paymentIntentId) {
+          // Idempotent via unique stripePaymentIntentId
+          const alreadyLogged = await prisma.creditPurchase.findUnique({
+            where: { stripePaymentIntentId: paymentIntentId },
+          });
+          if (!alreadyLogged) {
+            await prisma.creditPurchase.create({
+              data: {
+                userId,
+                stripePaymentIntentId: paymentIntentId,
+                bundle,
+                creditsAdded: creditsAmount,
+                amountCents: session.amount_total || 0,
+              },
+            });
+            await prisma.user.update({
+              where: { id: userId },
+              data: { imageCredits: { increment: creditsAmount } },
+            });
+          }
+        }
+        break;
+      }
+
       if (session.mode === "subscription" && session.subscription) {
         const subscription = await stripe.subscriptions.retrieve(
           session.subscription as string

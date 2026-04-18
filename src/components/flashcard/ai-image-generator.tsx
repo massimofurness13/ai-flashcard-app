@@ -2,17 +2,15 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { QuotaExceededDialog } from "@/components/subscription/quota-exceeded-dialog";
+import type { QuotaState } from "@/lib/image-quota";
 
 interface AiImageGeneratorProps {
-  /** Card front text — used to generate relevant image */
   front: string;
-  /** Card back text — used for context but hidden from image */
   back: string;
-  /** Current image URL (if any) */
   currentImageUrl?: string;
-  /** Called when a new image is generated — auto-applied, no confirmation */
   onImageGenerated: (url: string) => void;
-  /** Whether user has Pro subscription */
+  /** Kept for backward compat — no longer gates generation */
   isPro?: boolean;
 }
 
@@ -21,10 +19,11 @@ export function AiImageGenerator({
   back,
   currentImageUrl,
   onImageGenerated,
-  isPro = true,
 }: AiImageGeneratorProps) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
+  const [quotaState, setQuotaState] = useState<QuotaState | null>(null);
 
   async function handleGenerate() {
     if (!front.trim()) {
@@ -44,12 +43,17 @@ export function AiImageGenerator({
 
       const data = await res.json();
 
+      if (res.status === 402 && data.error === "out_of_quota") {
+        setQuotaState(data.quota);
+        setQuotaDialogOpen(true);
+        return;
+      }
+
       if (!res.ok) {
         setError(data.error || "Generation failed");
         return;
       }
 
-      // Auto-apply — no confirmation step, no risk of losing the image
       if (data.imageUrl) {
         onImageGenerated(data.imageUrl);
       }
@@ -58,16 +62,6 @@ export function AiImageGenerator({
     } finally {
       setGenerating(false);
     }
-  }
-
-  if (!isPro) {
-    return (
-      <div className="rounded-lg border border-dashed border-border p-4 text-center">
-        <p className="text-sm text-muted-foreground">
-          AI image generation requires a Pro subscription
-        </p>
-      </div>
-    );
   }
 
   return (
@@ -97,9 +91,13 @@ export function AiImageGenerator({
         )}
       </Button>
 
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <QuotaExceededDialog
+        open={quotaDialogOpen}
+        quota={quotaState}
+        onClose={() => setQuotaDialogOpen(false)}
+      />
     </div>
   );
 }

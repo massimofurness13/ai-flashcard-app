@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { isProUser } from "@/lib/subscription";
 import {
   generateAndUploadFromCard,
   generateAndUploadFromPrompt,
 } from "@/lib/stability-ai";
 import { generateImageSchema, rateLimit } from "@/lib/validations";
+import { consumeImageCredit, refundImageCredit } from "@/lib/image-quota";
 
 export async function POST(request: Request) {
   const auth = await requireAuth();
@@ -18,20 +18,24 @@ export async function POST(request: Request) {
     );
   }
 
-  const isPro = await isProUser(auth.userId);
-  if (!isPro) {
-    return NextResponse.json(
-      { error: "Pro subscription required for AI image generation" },
-      { status: 403 }
-    );
-  }
-
   const body = await request.json();
   const parsed = generateImageSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message || "Invalid input" },
       { status: 400 }
+    );
+  }
+
+  // Consume a credit BEFORE generation — refund on failure
+  const consumed = await consumeImageCredit(auth.userId);
+  if (!consumed.ok) {
+    return NextResponse.json(
+      {
+        error: "out_of_quota",
+        quota: consumed.state,
+      },
+      { status: 402 }
     );
   }
 
@@ -43,6 +47,9 @@ export async function POST(request: Request) {
       : await generateAndUploadFromCard(auth.userId, front || "", back || "");
     return NextResponse.json({ imageUrl });
   } catch (error) {
+    // Refund the credit since generation failed
+    await refundImageCredit(auth.userId, consumed.source);
+
     const message =
       error instanceof Error ? error.message : "Image generation failed";
 

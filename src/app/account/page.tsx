@@ -14,6 +14,7 @@ import {
   CARD_ORIENTATION_OPTIONS,
   FONT_SIZE_OPTIONS,
 } from "@/lib/constants";
+import { ImageQuotaCard } from "@/components/subscription/image-quota-card";
 
 export default function AccountPage() {
   const { theme, setTheme } = useTheme();
@@ -194,6 +195,9 @@ export default function AccountPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* AI image quota + credit top-ups */}
+      <ImageQuotaCard />
 
       {/* Theme */}
       <Card>

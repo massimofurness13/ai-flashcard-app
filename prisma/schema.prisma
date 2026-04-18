@@ -16,9 +16,33 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // AI image quota — resets monthly to subscription tier's allowance.
+  // monthlyImagesUsed tracks count within the current billing window.
+  // monthlyImagesResetAt is the next reset time (set on first use each period).
+  monthlyImagesUsed    Int       @default(0)
+  monthlyImagesResetAt DateTime?
+  // Purchased credits beyond the monthly allowance. Never expire.
+  imageCredits         Int       @default(0)
+  // Free tier lifetime counter (3 images to try AI generation)
+  lifetimeFreeImagesUsed Int     @default(0)
+
   folders      Folder[]
   decks        Deck[]
   subscription Subscription?
+  purchases    CreditPurchase[]
+}
+
+model CreditPurchase {
+  id                     String   @id @default(cuid())
+  userId                 String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripePaymentIntentId  String   @unique
+  bundle                 String   // "100", "300", or "1000"
+  creditsAdded           Int
+  amountCents            Int
+  createdAt              DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Subscription {
