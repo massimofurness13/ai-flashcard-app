@@ -25,7 +25,8 @@ function ReviewSessionContent() {
 
   const deckIds = searchParams.get("deckIds") || "";
   const limit = searchParams.get("limit") || "10";
-  const autoFlip = parseInt(searchParams.get("autoFlip") || "0", 10);
+  const autoFlip = parseFloat(searchParams.get("autoFlip") || "0");
+  const autoAdvance = parseFloat(searchParams.get("autoAdvance") || "0");
   const orientation = (searchParams.get("orientation") || "front") as "front" | "back" | "mixed";
   const recencyCutoff = searchParams.get("recencyCutoff") || "0";
 
@@ -116,6 +117,7 @@ function ReviewSessionContent() {
     <ReviewSession
       initialCards={cards}
       autoFlipSeconds={autoFlip}
+      autoAdvanceSeconds={autoAdvance}
       orientation={orientation}
       onComplete={handleComplete}
     />

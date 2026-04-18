@@ -35,6 +35,7 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
   const [customCards, setCustomCards] = useState("");
   const [isCustomCards, setIsCustomCards] = useState(false);
   const [autoFlip, setAutoFlip] = useState(0);
+  const [autoAdvance, setAutoAdvance] = useState(0);
   const [orientation, setOrientation] = useState<"front" | "back" | "mixed">("front");
   const [recencyCutoff, setRecencyCutoff] = useState<number>(0); // 0 = off, otherwise days
 
@@ -64,6 +65,7 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
       deckIds: selectedDeckIds.join(","),
       limit: String(cardsPerSession),
       autoFlip: String(autoFlip),
+      autoAdvance: String(autoAdvance),
       orientation,
     });
     if (recencyCutoff > 0) {
@@ -202,6 +204,31 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
               />
               <span className="text-xs text-muted-foreground">{AUTO_FLIP_MAX}s</span>
             </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Auto-advance timer: {autoAdvance === 0 ? "Off" : `${autoAdvance.toFixed(1)}s`}
+            </label>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground">Off</span>
+              <input
+                type="range"
+                min={0}
+                max={AUTO_FLIP_MAX}
+                step={0.1}
+                value={autoAdvance}
+                onChange={(e) => setAutoAdvance(parseFloat(e.target.value))}
+                className="w-full"
+              />
+              <span className="text-xs text-muted-foreground">{AUTO_FLIP_MAX}s</span>
+            </div>
+            {autoAdvance > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Hands-free mode: cards move on automatically. Rating buttons are hidden —
+                no mastery tracking happens while auto-advance is on.
+              </p>
+            )}
           </div>
 
           <div>
