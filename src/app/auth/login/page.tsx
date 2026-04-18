@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { APP_NAME } from "@/lib/constants";
 import { Suspense } from "react";
+import {
+  GoogleSignInButton,
+  AuthDivider,
+} from "@/components/auth/google-sign-in-button";
 
 function LoginForm() {
   const router = useRouter();
@@ -51,6 +55,8 @@ function LoginForm() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          <GoogleSignInButton redirectTo={redirectTo} label="Continue with Google" />
+          <AuthDivider />
           {/* Email/Password Form */}
           <form onSubmit={handleEmailLogin} className="space-y-3">
             <Input

@@ -20,6 +20,34 @@ function getSettings(): { voice: string; ttsSpeed: number } {
   return { voice: "", ttsSpeed: 1 };
 }
 
+/**
+ * Speak text using the Web Speech API.
+ * Voice priority: prop → localStorage setting → browser default.
+ * Returns the utterance so callers can listen for onend / cancel.
+ */
+export function speakText(
+  text: string,
+  voiceName?: string | null
+): SpeechSynthesisUtterance | null {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  if (!text || !text.trim()) return null;
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  const settings = getSettings();
+
+  const targetName = voiceName || settings.voice;
+  if (targetName) {
+    const voices = window.speechSynthesis.getVoices();
+    const match = voices.find((v) => v.name === targetName);
+    if (match) utterance.voice = match;
+  }
+
+  utterance.rate = settings.ttsSpeed;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+  return utterance;
+}
+
 export function VoiceButton({ text, voiceName, className }: VoiceButtonProps) {
   const [speaking, setSpeaking] = useState(false);
 
@@ -31,22 +59,13 @@ export function VoiceButton({ text, voiceName, className }: VoiceButtonProps) {
     }
 
     setSpeaking(true);
-    const utterance = new SpeechSynthesisUtterance(text);
-    const settings = getSettings();
-
-    // Voice priority: 1) per-deck voiceName prop, 2) global setting, 3) browser default
-    const targetName = voiceName || settings.voice;
-    if (targetName) {
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find((v) => v.name === targetName);
-      if (match) utterance.voice = match;
+    const utterance = speakText(text, voiceName);
+    if (!utterance) {
+      setSpeaking(false);
+      return;
     }
-
-    utterance.rate = settings.ttsSpeed;
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
   }, [text, voiceName, speaking]);
 
   if (typeof window === "undefined") return null;

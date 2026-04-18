@@ -66,9 +66,22 @@ export function Navbar() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
+
+    // Read the session immediately (fast, from local cookies)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
     });
+
+    // Subscribe to sign-in / sign-out / token-refresh so the navbar
+    // stays in sync even on mobile Safari where the initial load can
+    // beat the cookie rehydration.
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   async function handleLogout() {

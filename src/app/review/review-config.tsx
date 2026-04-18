@@ -29,7 +29,7 @@ interface ReviewConfigProps {
 export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
   const router = useRouter();
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>(
-    decks.filter((d) => d.dueCount > 0).map((d) => d.id)
+    decks.map((d) => d.id)
   );
   const [cardsPerSession, setCardsPerSession] = useState(10);
   const [customCards, setCustomCards] = useState("");
@@ -79,9 +79,7 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
       <div>
         <h1 className="text-2xl font-bold">Review</h1>
         <p className="text-muted-foreground mt-1">
-          {totalDue > 0
-            ? `${totalDue} cards due for review`
-            : "No cards due right now"}
+          Pick the packs you want to review
         </p>
       </div>
 
@@ -109,9 +107,6 @@ export function ReviewConfig({ decks, totalDue }: ReviewConfigProps) {
                 <span className="text-sm text-muted-foreground">
                   {deck._count.cards} cards
                 </span>
-                {deck.dueCount > 0 && (
-                  <Badge variant="warning">{deck.dueCount} due</Badge>
-                )}
               </label>
             ))}
             {decks.length === 0 && (

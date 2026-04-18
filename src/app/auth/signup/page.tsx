@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { APP_NAME } from "@/lib/constants";
+import {
+  GoogleSignInButton,
+  AuthDivider,
+} from "@/components/auth/google-sign-in-button";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -87,6 +91,8 @@ export default function SignUpPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          <GoogleSignInButton redirectTo="/" label="Sign up with Google" />
+          <AuthDivider />
           {/* Email/Password Form */}
           <form onSubmit={handleSignUp} className="space-y-3">
             <Input

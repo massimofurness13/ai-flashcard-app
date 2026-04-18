@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { FlashcardImage } from "./flashcard-image";
-import { VoiceButton } from "./voice-button";
+import { VoiceButton, speakText } from "./voice-button";
 
 interface FlashcardProps {
   front: string;
@@ -15,6 +15,9 @@ interface FlashcardProps {
   showImage?: boolean;
   frontVoice?: string | null;
   backVoice?: string | null;
+  /** When true, the visible side's text auto-plays via TTS each time
+   * the card appears or flips. Study/Review use this; the edit form does not. */
+  autoPlayVoice?: boolean;
   className?: string;
 }
 
@@ -28,6 +31,7 @@ export function Flashcard({
   showImage = true,
   frontVoice,
   backVoice,
+  autoPlayVoice = false,
   className,
 }: FlashcardProps) {
   // Prevent the flip animation from playing on initial render
@@ -36,6 +40,21 @@ export function Flashcard({
     const timer = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(timer);
   }, []);
+
+  // Auto-play TTS when the visible side changes. Mobile browsers require
+  // a user gesture before the first utterance, so a silent fail here is
+  // fine — the first click of Show Answer or the card itself unlocks it.
+  useEffect(() => {
+    if (!autoPlayVoice) return;
+    const text = isFlipped ? back : front;
+    const voice = isFlipped ? backVoice : frontVoice;
+    speakText(text, voice);
+    return () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [autoPlayVoice, isFlipped, front, back, frontVoice, backVoice]);
 
   return (
     <div

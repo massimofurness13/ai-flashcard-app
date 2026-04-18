@@ -180,6 +180,7 @@ export function StudySession({ cards, deckName, frontVoice, backVoice, onComplet
         onFlip={handleFlip}
         frontVoice={displayFrontVoice}
         backVoice={displayBackVoice}
+        autoPlayVoice
       />
 
       <div className="flex items-center justify-center gap-4">

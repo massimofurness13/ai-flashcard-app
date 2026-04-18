@@ -183,6 +183,7 @@ export function ReviewSession({
         onFlip={handleFlip}
         frontVoice={frontVoiceName}
         backVoice={backVoiceName}
+        autoPlayVoice
       />
 
       {/* Manual rating UI — hidden in auto-advance mode */}
