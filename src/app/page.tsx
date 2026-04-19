@@ -70,9 +70,61 @@ export default async function Home() {
 
   const userData = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, email: true },
+    select: {
+      name: true,
+      email: true,
+      dailyGoal: true,
+      goalHitCelebrationShown: true,
+    },
   });
   const displayName = userData?.name || userData?.email?.split("@")[0] || "there";
+  const dailyGoal = userData?.dailyGoal ?? 25;
+  const goalHitCelebrationShown = userData?.goalHitCelebrationShown ?? false;
+
+  // Engagement: today's review count + streak (consecutive days)
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const yearAgo = new Date();
+  yearAgo.setDate(yearAgo.getDate() - 60); // 60 days is plenty to compute a streak
+  yearAgo.setHours(0, 0, 0, 0);
+
+  const recentReviews = await prisma.reviewLog.findMany({
+    where: {
+      reviewedAt: { gte: yearAgo },
+      card: { deck: { userId } },
+    },
+    select: { reviewedAt: true },
+  });
+
+  const cardsReviewedToday = recentReviews.filter(
+    (r) => r.reviewedAt >= startOfToday
+  ).length;
+
+  const reviewDays = new Set(
+    recentReviews.map((r) => r.reviewedAt.toISOString().split("T")[0])
+  );
+  let streak = 0;
+  const checkDate = new Date();
+  while (true) {
+    const dayStr = checkDate.toISOString().split("T")[0];
+    if (reviewDays.has(dayStr)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else if (streak === 0) {
+      // Allow today to have zero so yesterday-and-back still counts
+      checkDate.setDate(checkDate.getDate() - 1);
+      const yesterdayStr = checkDate.toISOString().split("T")[0];
+      if (reviewDays.has(yesterdayStr)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+        continue;
+      }
+      break;
+    } else {
+      break;
+    }
+  }
 
   return (
     <HomePage
@@ -80,6 +132,10 @@ export default async function Home() {
       unfolderedDecks={unfolderedWithGrades}
       totalCards={totalCards}
       userName={displayName}
+      cardsReviewedToday={cardsReviewedToday}
+      dailyGoal={dailyGoal}
+      streak={streak}
+      goalHitCelebrationShown={goalHitCelebrationShown}
     />
   );
 }

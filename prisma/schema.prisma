@@ -26,6 +26,10 @@ model User {
   // Free tier lifetime counter (3 images to try AI generation)
   lifetimeFreeImagesUsed Int     @default(0)
 
+  // Engagement / daily goal
+  dailyGoal                Int     @default(25)
+  goalHitCelebrationShown  Boolean @default(false)
+
   folders      Folder[]
   decks        Deck[]
   subscription Subscription?

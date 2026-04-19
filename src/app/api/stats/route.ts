@@ -16,7 +16,14 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
 
-  const [totalCards, cardsDueToday, reviewsInPeriod, allDecks, dailyReviews] =
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const yearAgo = new Date();
+  yearAgo.setDate(yearAgo.getDate() - 365);
+  yearAgo.setHours(0, 0, 0, 0);
+
+  const [totalCards, cardsDueToday, reviewsInPeriod, allDecks, dailyReviews, yearlyReviews, user] =
     await Promise.all([
       prisma.card.count({
         where: { deck: { userId: auth.userId } },
@@ -40,7 +47,6 @@ export async function GET(request: NextRequest) {
           },
         },
       }),
-      // Get review counts grouped by day
       prisma.reviewLog.findMany({
         where: {
           reviewedAt: { gte: since },
@@ -48,6 +54,18 @@ export async function GET(request: NextRequest) {
         },
         select: { reviewedAt: true },
         orderBy: { reviewedAt: "asc" },
+      }),
+      // 365-day window for the heatmap
+      prisma.reviewLog.findMany({
+        where: {
+          reviewedAt: { gte: yearAgo },
+          card: { deck: { userId: auth.userId } },
+        },
+        select: { reviewedAt: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: auth.userId },
+        select: { dailyGoal: true, goalHitCelebrationShown: true },
       }),
     ]);
 
@@ -113,15 +131,62 @@ export async function GET(request: NextRequest) {
     };
   });
 
+  // Today's review count
+  const cardsReviewedToday = yearlyReviews.filter(
+    (r) => new Date(r.reviewedAt) >= startOfToday
+  ).length;
+
+  const dailyGoal = user?.dailyGoal ?? 25;
+  const goalHitToday = cardsReviewedToday >= dailyGoal;
+  const goalHitCelebrationShown = user?.goalHitCelebrationShown ?? false;
+
+  // 365-day heatmap data
+  const heatmapCounts: Record<string, number> = {};
+  for (let i = 0; i < 365; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    heatmapCounts[d.toISOString().split("T")[0]] = 0;
+  }
+  for (const r of yearlyReviews) {
+    const day = new Date(r.reviewedAt).toISOString().split("T")[0];
+    if (heatmapCounts[day] !== undefined) {
+      heatmapCounts[day]++;
+    }
+  }
+  const heatmapData = Object.entries(heatmapCounts)
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Longest streak over the year
+  const yearDaysWithReviews = new Set(
+    yearlyReviews.map((r) => new Date(r.reviewedAt).toISOString().split("T")[0])
+  );
+  let longestStreak = 0;
+  let running = 0;
+  for (const { date } of heatmapData) {
+    if (yearDaysWithReviews.has(date)) {
+      running++;
+      if (running > longestStreak) longestStreak = running;
+    } else {
+      running = 0;
+    }
+  }
+
   return NextResponse.json({
     totalCards,
     cardsDueToday,
     cardsReviewedInPeriod: reviewsInPeriod.length,
+    cardsReviewedToday,
+    dailyGoal,
+    goalHitToday,
+    goalHitCelebrationShown,
     averageQuality: Math.round(avgQuality * 10) / 10,
     streak,
+    longestStreak,
     dailyCounts: Object.entries(dailyCounts)
       .map(([date, count]) => ({ date, count }))
       .reverse(),
+    heatmapData,
     deckStats,
   });
 }

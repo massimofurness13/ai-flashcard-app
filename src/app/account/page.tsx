@@ -15,6 +15,7 @@ import {
   FONT_SIZE_OPTIONS,
 } from "@/lib/constants";
 import { ImageQuotaCard } from "@/components/subscription/image-quota-card";
+import { DailyGoalCard } from "@/components/account/daily-goal-card";
 
 export default function AccountPage() {
   const { theme, setTheme } = useTheme();
@@ -242,6 +243,9 @@ export default function AccountPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Daily study goal */}
+      <DailyGoalCard />
 
       {/* Default Review Settings */}
       <Card>
