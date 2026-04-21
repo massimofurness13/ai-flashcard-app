@@ -27,10 +27,34 @@ interface Deck {
   name: string;
   emoji: string | null;
   _count: { cards: number };
+  lastReviewedAt?: string | null;
 }
 
 interface StudyConfigProps {
   decks: Deck[];
+}
+
+// Rough average seconds spent per card, including flipping + rating.
+// Used only for the pre-session time estimate on the CTA — not exact.
+const SECONDS_PER_CARD = 12;
+
+type RecencyPreset = "7" | "30" | "all" | "none";
+
+const RECENCY_PRESETS: { key: RecencyPreset; label: string }[] = [
+  { key: "7", label: "Active 7d" },
+  { key: "30", label: "Active 30d" },
+  { key: "all", label: "All" },
+  { key: "none", label: "None" },
+];
+
+function formatDuration(totalSeconds: number): string {
+  if (totalSeconds < 60) return `~${totalSeconds}s`;
+  const mins = Math.round(totalSeconds / 60);
+  if (mins < 60) return `~${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (remMins === 0) return `~${hours}h`;
+  return `~${hours}h ${remMins}m`;
 }
 
 export function StudyConfig({ decks }: StudyConfigProps) {
@@ -88,6 +112,28 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
     );
   }
 
+  function applyRecencyPreset(preset: RecencyPreset) {
+    if (preset === "all") {
+      setSelectedDeckIds(decks.map((d) => d.id));
+      return;
+    }
+    if (preset === "none") {
+      setSelectedDeckIds([]);
+      return;
+    }
+    const days = parseInt(preset, 10);
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const active = decks
+      .filter(
+        (d) =>
+          d.lastReviewedAt !== null &&
+          d.lastReviewedAt !== undefined &&
+          new Date(d.lastReviewedAt).getTime() >= cutoff
+      )
+      .map((d) => d.id);
+    setSelectedDeckIds(active);
+  }
+
   function startStudy() {
     const params = new URLSearchParams({
       deckIds: selectedDeckIds.join(","),
@@ -113,9 +159,34 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Which packs?</CardTitle>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle>Which packs?</CardTitle>
+            {decks.length > 0 && (
+              <span className="text-sm text-muted-foreground">
+                {selectedDeckIds.length} / {decks.length} selected
+              </span>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {decks.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-xs text-muted-foreground mr-1">
+                Quick select:
+              </span>
+              {RECENCY_PRESETS.map((preset) => (
+                <Button
+                  key={preset.key}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => applyRecencyPreset(preset.key)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+          )}
           <div className="space-y-2">
             {decks.length === 0 ? (
               <p className="text-muted-foreground text-sm">
@@ -273,11 +344,21 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
 
       <Button
         size="lg"
-        className="w-full"
+        className="w-full h-auto py-4"
         disabled={selectedDeckIds.length === 0 || totalCards === 0}
         onClick={startStudy}
       >
-        Start Studying
+        <div className="flex flex-col items-center gap-0.5">
+          <span>Start Studying</span>
+          {totalCards > 0 && selectedDeckIds.length > 0 && (
+            <span className="text-xs opacity-80 font-normal">
+              Estimated time:{" "}
+              {formatDuration(
+                Math.min(cardsPerSession, totalCards) * SECONDS_PER_CARD
+              )}
+            </span>
+          )}
+        </div>
       </Button>
     </div>
   );
