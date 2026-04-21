@@ -16,6 +16,9 @@ import {
 } from "@/lib/constants";
 import { ImageQuotaCard } from "@/components/subscription/image-quota-card";
 import { DailyGoalCard } from "@/components/account/daily-goal-card";
+import { AccountInfoCard } from "@/components/account/account-info-card";
+import { DangerZoneCard } from "@/components/account/danger-zone-card";
+import Link from "next/link";
 
 export default function AccountPage() {
   const { theme, setTheme } = useTheme();
@@ -171,31 +174,8 @@ export default function AccountPage() {
         </Card>
       )}
 
-      {/* Subscription */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Subscription</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Free Plan</p>
-              <p className="text-sm text-muted-foreground">
-                Upgrade to Pro to unlock AI generation, AI images, and Anki import/export
-              </p>
-            </div>
-            <Button
-              onClick={async () => {
-                const res = await fetch("/api/stripe/checkout", { method: "POST" });
-                const data = await res.json();
-                if (data.url) window.location.href = data.url;
-              }}
-            >
-              Upgrade to Pro
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Subscription + sync + member-since */}
+      <AccountInfoCard />
 
       {/* AI image quota + credit top-ups */}
       <ImageQuotaCard />
@@ -373,6 +353,31 @@ export default function AccountPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Help / Contact / About / Updates navigation */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { href: "/help", label: "Help" },
+              { href: "/contact", label: "Contact" },
+              { href: "/about", label: "About" },
+              { href: "/updates", label: "Updates" },
+            ].map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded-lg border border-border px-3 py-3 text-center text-sm font-medium hover:border-primary/30 hover:bg-muted/30 transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Danger zone (delete account) */}
+      <DangerZoneCard />
     </div>
   );
 }
