@@ -5,6 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ActivityHeatmap } from "@/components/stats/activity-heatmap";
+import { GradeHistogram } from "@/components/stats/grade-histogram";
+import { CalendarMonth } from "@/components/stats/calendar-month";
+import type { LetterGrade } from "@/lib/sm2";
 
 interface DeckStat {
   id: string;
@@ -32,6 +35,24 @@ interface Stats {
   dailyCounts: DailyCount[];
   heatmapData: DailyCount[];
   deckStats: DeckStat[];
+  totalReviews: number;
+  successRate: number;
+  activeDays: number;
+  bestDay: string | null;
+  bestDayCount: number;
+  goalDaysLast30: number;
+  gradeHistogram: Record<LetterGrade, number>;
+  calendarMonth: DailyCount[];
+}
+
+function formatBestDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function StatsClient() {
@@ -54,6 +75,10 @@ export function StatsClient() {
   }
 
   const maxCount = Math.max(...stats.dailyCounts.map((d) => d.count), 1);
+  const bestDayPct =
+    stats.bestDayCount > 0
+      ? Math.min((stats.cardsReviewedToday / stats.bestDayCount) * 100, 100)
+      : 0;
 
   return (
     <div className="space-y-6">
@@ -77,7 +102,7 @@ export function StatsClient() {
         </div>
       </div>
 
-      {/* Hero: current streak + today's progress */}
+      {/* Hero: current streak + today vs goal */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardContent className="pt-6">
@@ -99,12 +124,7 @@ export function StatsClient() {
 
         <Card>
           <CardContent className="pt-6 space-y-2">
-            <div className="flex items-baseline justify-between">
-              <p className="text-sm text-muted-foreground">Today</p>
-              <p className="text-sm text-muted-foreground">
-                Goal: {stats.dailyGoal}
-              </p>
-            </div>
+            <p className="text-sm text-muted-foreground">Today</p>
             <p className="text-4xl font-bold">
               {stats.cardsReviewedToday}
               <span className="text-base text-muted-foreground ml-1">
@@ -123,9 +143,74 @@ export function StatsClient() {
               />
             </div>
             {stats.goalHitToday && (
-              <p className="text-xs text-primary font-medium">
-                Goal hit! 🎉
+              <p className="text-xs text-primary font-medium">Goal hit! 🎉</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Study momentum — Goal Days / Active Days / Best Day / Success Rate */}
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Goal days (30d)
+            </p>
+            <p className="text-3xl font-bold mt-1">
+              {stats.goalDaysLast30}
+              <span className="text-base text-muted-foreground ml-1">/ 30</span>
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Active days
+            </p>
+            <p className="text-3xl font-bold mt-1">{stats.activeDays}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Success rate
+            </p>
+            <p
+              className={`text-3xl font-bold mt-1 ${
+                stats.successRate >= 70
+                  ? "text-green-500"
+                  : stats.successRate >= 50
+                    ? "text-foreground"
+                    : "text-destructive"
+              }`}
+            >
+              {stats.totalReviews > 0 ? `${stats.successRate}%` : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.totalReviews.toLocaleString()} total reviews
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 space-y-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Best day
               </p>
+              {stats.bestDay && (
+                <p className="text-[10px] text-muted-foreground">
+                  {formatBestDate(stats.bestDay)}
+                </p>
+              )}
+            </div>
+            <p className="text-3xl font-bold">{stats.bestDayCount}</p>
+            {stats.bestDayCount > 0 && (
+              <div className="w-full h-1 bg-muted rounded-full overflow-hidden mt-1">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${bestDayPct}%` }}
+                />
+              </div>
             )}
           </CardContent>
         </Card>
@@ -153,6 +238,16 @@ export function StatsClient() {
         </Card>
       </div>
 
+      {/* Calendar month view */}
+      <Card>
+        <CardHeader>
+          <CardTitle>This month</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CalendarMonth data={stats.calendarMonth} />
+        </CardContent>
+      </Card>
+
       {/* 365-day heatmap */}
       <Card>
         <CardHeader>
@@ -175,10 +270,11 @@ export function StatsClient() {
                 const height =
                   day.count > 0 ? Math.max((day.count / maxCount) * 100, 8) : 4;
                 const date = new Date(day.date);
-                const label = date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                });
+                const isShortPeriod = stats.dailyCounts.length <= 14;
+                // Day names for short periods, day-of-month numbers for long
+                const label = isShortPeriod
+                  ? date.toLocaleDateString("en", { weekday: "short" })
+                  : `${date.getDate()}`;
                 return (
                   <div
                     key={day.date}
@@ -189,11 +285,14 @@ export function StatsClient() {
                         day.count > 0 ? "bg-primary" : "bg-muted"
                       }`}
                       style={{ height: `${height}%` }}
-                      title={`${label}: ${day.count} reviews`}
+                      title={`${date.toLocaleDateString("en", {
+                        month: "short",
+                        day: "numeric",
+                      })}: ${day.count} reviews`}
                     />
-                    {stats.dailyCounts.length <= 14 && (
+                    {isShortPeriod && (
                       <span className="text-[10px] text-muted-foreground truncate w-full text-center">
-                        {date.getDate()}
+                        {label}
                       </span>
                     )}
                   </div>
@@ -205,6 +304,16 @@ export function StatsClient() {
               No review activity yet
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Grade distribution */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Grade distribution</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <GradeHistogram histogram={stats.gradeHistogram} />
         </CardContent>
       </Card>
 

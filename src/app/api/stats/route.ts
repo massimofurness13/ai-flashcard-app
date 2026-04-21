@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { masteryLevel, letterGrade, type LetterGrade } from "@/lib/sm2";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
@@ -23,51 +24,65 @@ export async function GET(request: NextRequest) {
   yearAgo.setDate(yearAgo.getDate() - 365);
   yearAgo.setHours(0, 0, 0, 0);
 
-  const [totalCards, cardsDueToday, reviewsInPeriod, allDecks, dailyReviews, yearlyReviews, user] =
-    await Promise.all([
-      prisma.card.count({
-        where: { deck: { userId: auth.userId } },
-      }),
-      prisma.card.count({
-        where: { deck: { userId: auth.userId }, nextReviewAt: { lte: now } },
-      }),
-      prisma.reviewLog.findMany({
-        where: {
-          reviewedAt: { gte: since },
-          card: { deck: { userId: auth.userId } },
+  const [
+    totalCards,
+    cardsDueToday,
+    reviewsInPeriod,
+    allDecks,
+    dailyReviews,
+    yearlyReviews,
+    // Lifetime review logs — two tiny fields per row, used for Active Days,
+    // Best Day, Success Rate, Total Reviews. 20k rows at ~20 bytes = tolerable.
+    lifetimeReviews,
+    user,
+  ] = await Promise.all([
+    prisma.card.count({
+      where: { deck: { userId: auth.userId } },
+    }),
+    prisma.card.count({
+      where: { deck: { userId: auth.userId }, nextReviewAt: { lte: now } },
+    }),
+    prisma.reviewLog.findMany({
+      where: {
+        reviewedAt: { gte: since },
+        card: { deck: { userId: auth.userId } },
+      },
+      select: { quality: true, reviewedAt: true },
+    }),
+    prisma.deck.findMany({
+      where: { userId: auth.userId },
+      include: {
+        _count: { select: { cards: true } },
+        cards: {
+          select: { easeFactor: true, repetitions: true },
         },
-        select: { quality: true, reviewedAt: true },
-      }),
-      prisma.deck.findMany({
-        where: { userId: auth.userId },
-        include: {
-          _count: { select: { cards: true } },
-          cards: {
-            select: { easeFactor: true, repetitions: true },
-          },
-        },
-      }),
-      prisma.reviewLog.findMany({
-        where: {
-          reviewedAt: { gte: since },
-          card: { deck: { userId: auth.userId } },
-        },
-        select: { reviewedAt: true },
-        orderBy: { reviewedAt: "asc" },
-      }),
-      // 365-day window for the heatmap
-      prisma.reviewLog.findMany({
-        where: {
-          reviewedAt: { gte: yearAgo },
-          card: { deck: { userId: auth.userId } },
-        },
-        select: { reviewedAt: true },
-      }),
-      prisma.user.findUnique({
-        where: { id: auth.userId },
-        select: { dailyGoal: true, goalHitCelebrationShown: true },
-      }),
-    ]);
+      },
+    }),
+    prisma.reviewLog.findMany({
+      where: {
+        reviewedAt: { gte: since },
+        card: { deck: { userId: auth.userId } },
+      },
+      select: { reviewedAt: true },
+      orderBy: { reviewedAt: "asc" },
+    }),
+    // 365-day window for the heatmap
+    prisma.reviewLog.findMany({
+      where: {
+        reviewedAt: { gte: yearAgo },
+        card: { deck: { userId: auth.userId } },
+      },
+      select: { reviewedAt: true },
+    }),
+    prisma.reviewLog.findMany({
+      where: { card: { deck: { userId: auth.userId } } },
+      select: { reviewedAt: true, quality: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { dailyGoal: true, goalHitCelebrationShown: true },
+    }),
+  ]);
 
   // Calculate average quality
   const avgQuality =
@@ -172,6 +187,70 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // --- Lifetime aggregates (Active Days, Best Day, Success Rate, Goal Days 30d) ---
+  const lifetimeByDay = new Map<string, number>();
+  let lifetimeSuccessful = 0;
+  for (const r of lifetimeReviews) {
+    const day = new Date(r.reviewedAt).toISOString().split("T")[0];
+    lifetimeByDay.set(day, (lifetimeByDay.get(day) || 0) + 1);
+    // Quality 3+ counts as "knew it" (Good or Easy in SM-2 terms)
+    if (r.quality >= 3) lifetimeSuccessful++;
+  }
+  const activeDays = lifetimeByDay.size;
+  let bestDay: string | null = null;
+  let bestDayCount = 0;
+  for (const [day, count] of lifetimeByDay) {
+    if (count > bestDayCount) {
+      bestDayCount = count;
+      bestDay = day;
+    }
+  }
+  const totalReviews = lifetimeReviews.length;
+  const successRate =
+    totalReviews > 0 ? Math.round((lifetimeSuccessful / totalReviews) * 100) : 0;
+
+  // Goal days in last 30: how many of the last 30 days hit dailyGoal
+  let goalDaysLast30 = 0;
+  for (let i = 0; i < 30; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const day = d.toISOString().split("T")[0];
+    if ((lifetimeByDay.get(day) || 0) >= dailyGoal) goalDaysLast30++;
+  }
+
+  // --- Grade histogram across all cards ---
+  const gradeHistogram: Record<LetterGrade, number> = {
+    New: 0,
+    F: 0,
+    D: 0,
+    C: 0,
+    B: 0,
+    A: 0,
+  };
+  for (const deck of allDecks) {
+    for (const card of deck.cards) {
+      const m = masteryLevel({
+        easeFactor: card.easeFactor,
+        interval: 0,
+        repetitions: card.repetitions,
+      });
+      gradeHistogram[letterGrade(m)]++;
+    }
+  }
+
+  // --- Calendar month view (current month) ---
+  // Array of { date: "YYYY-MM-DD", count } for every day of the current month.
+  const calendarMonth: { date: string; count: number }[] = [];
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthCursor = new Date(monthStart);
+  while (monthCursor.getMonth() === monthStart.getMonth()) {
+    const day = monthCursor.toISOString().split("T")[0];
+    calendarMonth.push({ date: day, count: lifetimeByDay.get(day) || 0 });
+    monthCursor.setDate(monthCursor.getDate() + 1);
+  }
+
   return NextResponse.json({
     totalCards,
     cardsDueToday,
@@ -188,5 +267,14 @@ export async function GET(request: NextRequest) {
       .reverse(),
     heatmapData,
     deckStats,
+    // New engagement + response-quality aggregates
+    totalReviews,
+    successRate,
+    activeDays,
+    bestDay,
+    bestDayCount,
+    goalDaysLast30,
+    gradeHistogram,
+    calendarMonth,
   });
 }
