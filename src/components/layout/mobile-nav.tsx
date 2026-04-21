@@ -29,9 +29,19 @@ const navItems = [
   {
     label: "Study",
     href: "/study",
+    highlight: true,
+    icon: (
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    ),
+  },
+  {
+    label: "Search",
+    href: "/search",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
       </svg>
     ),
   },
@@ -63,13 +73,14 @@ export function MobileNav() {
     };
   }, []);
 
-  // Hide on auth pages and when not logged in
+  // Hide on auth pages, when not logged in, and mid-study (distraction)
   const isAuthPage = pathname.startsWith("/auth");
-  if (!user || isAuthPage) return null;
+  const isStudySession = pathname.startsWith("/study/session");
+  if (!user || isAuthPage || isStudySession) return null;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/80 backdrop-blur-sm md:hidden">
-      <div className="flex items-center justify-around py-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm md:hidden pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-stretch justify-around">
         {navItems.map((item) => {
           const isActive =
             item.href === "/"
@@ -80,12 +91,29 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center gap-1 px-3 py-1 text-xs transition-colors",
-                isActive ? "text-primary" : "text-muted-foreground"
+                "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors",
+                isActive
+                  ? item.highlight
+                    ? "text-primary"
+                    : "text-primary"
+                  : "text-muted-foreground"
               )}
             >
-              {item.icon}
-              <span>{item.label}</span>
+              <div
+                className={cn(
+                  "relative",
+                  item.highlight &&
+                    "flex items-center justify-center rounded-full h-10 w-10 -mt-2",
+                  item.highlight && isActive
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : item.highlight
+                      ? "bg-primary/15 text-primary"
+                      : ""
+                )}
+              >
+                {item.icon}
+              </div>
+              <span className={item.highlight ? "mt-0" : ""}>{item.label}</span>
             </Link>
           );
         })}
