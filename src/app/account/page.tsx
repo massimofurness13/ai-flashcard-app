@@ -18,6 +18,7 @@ import { ImageQuotaCard } from "@/components/subscription/image-quota-card";
 import { DailyGoalCard } from "@/components/account/daily-goal-card";
 import { AccountInfoCard } from "@/components/account/account-info-card";
 import { DangerZoneCard } from "@/components/account/danger-zone-card";
+import { ReminderCard } from "@/components/account/reminder-card";
 import Link from "next/link";
 
 export default function AccountPage() {
@@ -226,6 +227,9 @@ export default function AccountPage() {
 
       {/* Daily study goal */}
       <DailyGoalCard />
+
+      {/* Daily push reminder */}
+      <ReminderCard />
 
       {/* Default Review Settings */}
       <Card>

@@ -30,10 +30,33 @@ model User {
   dailyGoal                Int     @default(25)
   goalHitCelebrationShown  Boolean @default(false)
 
-  folders      Folder[]
-  decks        Deck[]
-  subscription Subscription?
-  purchases    CreditPurchase[]
+  // Daily-study push reminder. `reminderHour` is 0-23 in the user's local
+  // timezone; null means reminders are off. `reminderTimezone` is an IANA
+  // identifier (e.g. "Europe/London") captured from the browser when the
+  // user enables reminders so the cron job knows when "20:00 local" is.
+  // `lastReminderSentAt` prevents double-sending within the same day.
+  reminderHour        Int?
+  reminderTimezone    String?
+  lastReminderSentAt  DateTime?
+
+  folders           Folder[]
+  decks             Deck[]
+  subscription      Subscription?
+  purchases         CreditPurchase[]
+  pushSubscriptions PushSubscription[]
+}
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String   @unique
+  p256dhKey  String
+  authKey    String
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
 }
 
 model CreditPurchase {

@@ -103,3 +103,27 @@ END $$;
 
 -- Group 2: Deck archive (soft-delete flag)
 ALTER TABLE "Deck" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);
+
+-- Group 8: Push notifications (daily reminders)
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "reminderHour" INTEGER;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "reminderTimezone" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastReminderSentAt" TIMESTAMP(3);
+
+CREATE TABLE IF NOT EXISTS "PushSubscription" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "endpoint" TEXT NOT NULL,
+    "p256dhKey" TEXT NOT NULL,
+    "authKey" TEXT NOT NULL,
+    "userAgent" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "PushSubscription_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
+CREATE INDEX IF NOT EXISTS "PushSubscription_userId_idx" ON "PushSubscription"("userId");
+
+DO $$ BEGIN
+    ALTER TABLE "PushSubscription" ADD CONSTRAINT "PushSubscription_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
