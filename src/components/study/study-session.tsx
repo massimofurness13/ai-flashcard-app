@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { RatingButtons } from "./rating-buttons";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useKeyboardNav } from "@/hooks/use-keyboard-nav";
+import { ImagePreloader } from "./image-preloader";
+
+const PRELOAD_AHEAD = 5;
 
 interface Card {
   id: string;
@@ -67,6 +70,17 @@ export function StudySession({
   const total = cards.length;
   const progress = total > 0 ? currentIndex / total : 0;
   const showBackFirst = showBackFirstPerCard[currentIndex];
+
+  // Preload the next N card images so the user never sees a blank image
+  // when they advance. Memoized by index so the ref-based dedupe inside
+  // ImagePreloader only sees new URLs as the session progresses.
+  const upcomingImageUrls = useMemo(
+    () =>
+      cards
+        .slice(currentIndex + 1, currentIndex + 1 + PRELOAD_AHEAD)
+        .map((c) => c.imageUrl),
+    [cards, currentIndex]
+  );
 
   // Auto-flip timer
   useEffect(() => {
@@ -174,6 +188,7 @@ export function StudySession({
 
   return (
     <div className="space-y-6">
+      <ImagePreloader urls={upcomingImageUrls} />
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
           {currentCard.deck.emoji} {currentCard.deck.name}

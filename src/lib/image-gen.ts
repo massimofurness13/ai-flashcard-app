@@ -128,7 +128,7 @@ async function uploadBytes(
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(fileName, bytes, { contentType, cacheControl: "3600", upsert: false });
+    .upload(fileName, bytes, { contentType, cacheControl: "31536000", upsert: false });
 
   if (error) {
     throw new Error(`Storage upload failed: ${error.message}`);
