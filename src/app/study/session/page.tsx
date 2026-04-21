@@ -26,6 +26,7 @@ function StudySessionContent() {
   const deckIds = searchParams.get("deckIds") || "";
   const limit = searchParams.get("limit") || "25";
   const filter = searchParams.get("filter") || "due";
+  const tags = searchParams.get("tags") || "";
   const autoFlip = parseFloat(searchParams.get("autoFlip") || "0");
   const autoAdvance = parseFloat(searchParams.get("autoAdvance") || "0");
   const orientation = (searchParams.get("orientation") || "front") as
@@ -38,6 +39,7 @@ function StudySessionContent() {
     if (deckIds) params.set("deckIds", deckIds);
     params.set("limit", limit);
     params.set("filter", filter);
+    if (tags) params.set("tags", tags);
 
     fetch(`/api/review?${params.toString()}`)
       .then((res) => res.json())
@@ -45,7 +47,7 @@ function StudySessionContent() {
         setCards(data.cards);
         setLoading(false);
       });
-  }, [deckIds, limit, filter]);
+  }, [deckIds, limit, filter, tags]);
 
   function handleComplete(sessionStats: StudyStats) {
     setStats(sessionStats);

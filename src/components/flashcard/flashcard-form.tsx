@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AiImageGenerator } from "@/components/flashcard/ai-image-generator";
+import { TagChipInput } from "@/components/flashcard/tag-chip-input";
 
 interface FlashcardFormProps {
   deckId: string;
@@ -125,13 +126,7 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
         onChange={(e) => setHint(e.target.value)}
       />
 
-      <Input
-        id="tags"
-        label="Tags (optional, comma-separated)"
-        placeholder="e.g. vocabulary, chapter-1"
-        value={tags}
-        onChange={(e) => setTags(e.target.value)}
-      />
+      <TagChipInput value={tags} onChange={setTags} />
 
       {/* Image Upload + AI Generation */}
       <div>

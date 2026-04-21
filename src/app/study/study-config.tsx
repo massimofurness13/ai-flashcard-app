@@ -85,6 +85,23 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
   const [autoFlip, setAutoFlip] = useState(0);
   const [autoAdvance, setAutoAdvance] = useState(0);
   const [orientation, setOrientation] = useState<"front" | "back" | "mixed">("front");
+  const [availableTags, setAvailableTags] = useState<{ name: string; count: number }[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/user/tags")
+      .then((r) => r.json())
+      .then((data: { tags: { name: string; count: number }[] }) =>
+        setAvailableTags(data.tags || [])
+      )
+      .catch(() => setAvailableTags([]));
+  }, []);
+
+  function toggleTag(tag: string) {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  }
 
   const totalCards = decks
     .filter((d) => selectedDeckIds.includes(d.id))
@@ -143,6 +160,9 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
       autoAdvance: String(autoAdvance),
       orientation,
     });
+    if (selectedTags.length > 0) {
+      params.set("tags", selectedTags.join(","));
+    }
     router.push(`/study/session?${params.toString()}`);
   }
 
@@ -239,6 +259,50 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
           )}
         </CardContent>
       </Card>
+
+      {availableTags.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>Filter by tag</CardTitle>
+              {selectedTags.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTags([])}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-1.5">
+              {availableTags.map((tag) => (
+                <button
+                  key={tag.name}
+                  type="button"
+                  onClick={() => toggleTag(tag.name)}
+                  className={`inline-flex items-center gap-1 rounded-md text-xs font-medium px-2 py-1 border transition-colors ${
+                    selectedTags.includes(tag.name)
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-border hover:border-primary/50"
+                  }`}
+                >
+                  {tag.name}
+                  <span className="opacity-70 font-normal">{tag.count}</span>
+                </button>
+              ))}
+            </div>
+            {selectedTags.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Only cards tagged with{" "}
+                <strong>all</strong> of these will appear in this session.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -23,6 +23,12 @@ export async function GET(request: NextRequest) {
   const filter: StudyFilter = VALID_FILTERS.includes(filterParam as StudyFilter)
     ? (filterParam as StudyFilter)
     : "due";
+  // Tag filter — AND-semantics: a card must have ALL listed tags to match.
+  // Tag comparison is case-insensitive so "Spanish" and "spanish" merge.
+  const tagFilter = (searchParams.get("tags") || "")
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
 
   const now = new Date();
 
@@ -56,16 +62,30 @@ export async function GET(request: NextRequest) {
             ? { front: "asc" }
             : { nextReviewAt: "asc" }; // fallback; random & mastery handled below
 
+  // When a tag filter is active we over-fetch so we can JS-filter without
+  // starving the session of cards. Capped to avoid pulling the whole deck.
+  const fetchMultiplier =
+    tagFilter.length > 0 ? 10 : filter === "random" || filter === "mastery" ? 4 : 1;
+  const fetchLimit = Math.min(limit * fetchMultiplier, 2000);
+
   let cards = await prisma.card.findMany({
     where,
     include: {
       deck: { select: { id: true, name: true, emoji: true, frontVoice: true, backVoice: true } },
     },
     orderBy,
-    // Over-fetch for filters that need in-memory sorting (random, mastery),
-    // then trim to the limit after sorting client-side.
-    take: filter === "random" || filter === "mastery" ? limit * 4 : limit,
+    take: fetchLimit,
   });
+
+  if (tagFilter.length > 0) {
+    cards = cards.filter((c) => {
+      const cardTags = (c.tags || "")
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      return tagFilter.every((t) => cardTags.includes(t));
+    });
+  }
 
   if (filter === "random") {
     // Fisher-Yates shuffle
@@ -89,6 +109,10 @@ export async function GET(request: NextRequest) {
           repetitions: b.repetitions,
         })
     );
+    cards = cards.slice(0, limit);
+  } else if (cards.length > limit) {
+    // Catch-all trim for filters that weren't already sliced (hits when
+    // we over-fetched for tag filtering).
     cards = cards.slice(0, limit);
   }
 
