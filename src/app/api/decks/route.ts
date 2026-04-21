@@ -8,7 +8,7 @@ export async function GET() {
   if (auth.error) return auth.error;
 
   const decks = await prisma.deck.findMany({
-    where: { userId: auth.userId },
+    where: { userId: auth.userId, archivedAt: null },
     include: {
       _count: { select: { cards: true } },
       folder: true,

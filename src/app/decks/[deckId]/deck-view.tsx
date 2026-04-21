@@ -157,6 +157,16 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
     router.refresh();
   }
 
+  async function handleArchive() {
+    await fetch(`/api/decks/${deck.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archive: true }),
+    });
+    router.push("/");
+    router.refresh();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -223,6 +233,9 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
           >
             <DropdownItem onClick={() => router.push(`/decks/${deck.id}/edit`)}>
               Edit Pack
+            </DropdownItem>
+            <DropdownItem onClick={handleArchive}>
+              Archive Pack
             </DropdownItem>
             <DropdownItem destructive onClick={handleDelete}>
               Delete Pack

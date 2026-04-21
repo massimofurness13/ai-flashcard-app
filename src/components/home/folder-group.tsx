@@ -9,6 +9,7 @@ interface Deck {
   emoji: string | null;
   _count: { cards: number };
   grade: string;
+  lastStudiedAt?: string | null;
 }
 
 interface FolderGroupProps {
@@ -55,6 +56,7 @@ export function FolderGroup({ name, emoji, color, decks, defaultOpen = true }: F
               cardCount={deck._count.cards}
               grade={deck.grade}
               folderColor={color}
+              lastStudiedAt={deck.lastStudiedAt}
             />
           ))}
         </div>

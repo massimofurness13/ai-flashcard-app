@@ -10,7 +10,7 @@ export default async function ImportPage() {
 
   const [decks, isPro] = await Promise.all([
     prisma.deck.findMany({
-      where: { userId },
+      where: { userId, archivedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, emoji: true },
     }),

@@ -56,6 +56,9 @@ export async function PATCH(
       ...(body.folderId !== undefined && { folderId: body.folderId || null }),
       ...(body.frontVoice !== undefined && { frontVoice: body.frontVoice || null }),
       ...(body.backVoice !== undefined && { backVoice: body.backVoice || null }),
+      ...(body.archive !== undefined && {
+        archivedAt: body.archive ? new Date() : null,
+      }),
     },
     include: {
       _count: { select: { cards: true } },

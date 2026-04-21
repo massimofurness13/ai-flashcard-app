@@ -100,3 +100,6 @@ DO $$ BEGIN
     ALTER TABLE "ReviewLog" ADD CONSTRAINT "ReviewLog_cardId_fkey" FOREIGN KEY ("cardId") REFERENCES "Card"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+-- Group 2: Deck archive (soft-delete flag)
+ALTER TABLE "Deck" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);

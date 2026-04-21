@@ -8,7 +8,7 @@ export default async function StudyPage() {
   const userId = await ensureUser();
 
   const decks = await prisma.deck.findMany({
-    where: { userId },
+    where: { userId, archivedAt: null },
     include: { _count: { select: { cards: true } } },
     orderBy: { name: "asc" },
   });

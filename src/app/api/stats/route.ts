@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       select: { quality: true, reviewedAt: true },
     }),
     prisma.deck.findMany({
-      where: { userId: auth.userId },
+      where: { userId: auth.userId, archivedAt: null },
       include: {
         _count: { select: { cards: true } },
         cards: {

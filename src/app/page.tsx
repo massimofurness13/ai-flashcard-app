@@ -27,11 +27,12 @@ export default async function Home() {
 
   const userId = await ensureUser();
 
-  const [folders, unfolderedDecks] = await Promise.all([
+  const [folders, unfolderedDecks, lastReviewedRows] = await Promise.all([
     prisma.folder.findMany({
       where: { userId },
       include: {
         decks: {
+          where: { archivedAt: null },
           include: { _count: { select: { cards: true } } },
           orderBy: { updatedAt: "desc" },
         },
@@ -39,11 +40,25 @@ export default async function Home() {
       orderBy: { name: "asc" },
     }),
     prisma.deck.findMany({
-      where: { folderId: null, userId },
+      where: { folderId: null, userId, archivedAt: null },
       include: { _count: { select: { cards: true } } },
       orderBy: { updatedAt: "desc" },
     }),
+    // Last-studied timestamp per deck. Raw SQL is the least-rows option —
+    // alternatives would pull every card + its latest review.
+    prisma.$queryRaw<Array<{ deckId: string; lastAt: Date }>>`
+      SELECT c."deckId" AS "deckId", MAX(rl."reviewedAt") AS "lastAt"
+      FROM "ReviewLog" rl
+      INNER JOIN "Card" c ON rl."cardId" = c.id
+      INNER JOIN "Deck" d ON c."deckId" = d.id
+      WHERE d."userId" = ${userId}
+      GROUP BY c."deckId"
+    `,
   ]);
+
+  const lastReviewedMap = new Map<string, Date>(
+    lastReviewedRows.map((r) => [r.deckId, r.lastAt])
+  );
 
   const foldersWithGrades = await Promise.all(
     folders.map(async (folder) => ({
@@ -52,6 +67,7 @@ export default async function Home() {
         folder.decks.map(async (deck) => ({
           ...deck,
           grade: await computeDeckGrade(deck.id),
+          lastStudiedAt: lastReviewedMap.get(deck.id)?.toISOString() ?? null,
         }))
       ),
     }))
@@ -61,6 +77,7 @@ export default async function Home() {
     unfolderedDecks.map(async (deck) => ({
       ...deck,
       grade: await computeDeckGrade(deck.id),
+      lastStudiedAt: lastReviewedMap.get(deck.id)?.toISOString() ?? null,
     }))
   );
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CreateMenu } from "@/components/home/create-menu";
 import { FolderGroup } from "@/components/home/folder-group";
@@ -15,6 +15,7 @@ interface Deck {
   emoji: string | null;
   _count: { cards: number };
   grade: string;
+  lastStudiedAt?: string | null;
 }
 
 interface Folder {
@@ -36,6 +37,48 @@ interface HomePageProps {
   goalHitCelebrationShown: boolean;
 }
 
+type SortKey = "recent" | "alpha" | "grade" | "size";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "recent", label: "Last studied" },
+  { key: "alpha", label: "A → Z" },
+  { key: "grade", label: "Grade" },
+  { key: "size", label: "Size" },
+];
+
+// Higher = stronger. Used for the Grade sort order.
+const GRADE_RANK: Record<string, number> = {
+  A: 6,
+  B: 5,
+  C: 4,
+  D: 3,
+  F: 2,
+  New: 1,
+};
+
+function sortDecks(decks: Deck[], key: SortKey): Deck[] {
+  const copy = [...decks];
+  switch (key) {
+    case "recent":
+      // Null lastStudied goes to the end, otherwise most-recent first.
+      return copy.sort((a, b) => {
+        const ta = a.lastStudiedAt ? new Date(a.lastStudiedAt).getTime() : 0;
+        const tb = b.lastStudiedAt ? new Date(b.lastStudiedAt).getTime() : 0;
+        return tb - ta;
+      });
+    case "alpha":
+      return copy.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+      );
+    case "grade":
+      return copy.sort(
+        (a, b) => (GRADE_RANK[b.grade] ?? 0) - (GRADE_RANK[a.grade] ?? 0)
+      );
+    case "size":
+      return copy.sort((a, b) => b._count.cards - a._count.cards);
+  }
+}
+
 function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -53,11 +96,34 @@ export function HomePage({
   streak,
   goalHitCelebrationShown,
 }: HomePageProps) {
-  const hasDecks = folders.some((f) => f.decks.length > 0) || unfolderedDecks.length > 0;
+  const hasDecks =
+    folders.some((f) => f.decks.length > 0) || unfolderedDecks.length > 0;
   // Compute greeting only after hydration — server + client timezones may
   // differ, which would cause a React hydration mismatch (error #418).
   const [greeting, setGreeting] = useState("Hello");
   useEffect(() => setGreeting(getGreeting()), []);
+
+  // Sort preference persists in localStorage so it survives reloads.
+  const [sortKey, setSortKey] = useState<SortKey>("recent");
+  useEffect(() => {
+    const saved = localStorage.getItem("flashmind-deck-sort") as SortKey | null;
+    if (saved && SORT_OPTIONS.some((o) => o.key === saved)) {
+      setSortKey(saved);
+    }
+  }, []);
+  function changeSort(next: SortKey) {
+    setSortKey(next);
+    localStorage.setItem("flashmind-deck-sort", next);
+  }
+
+  const sortedFolders = useMemo(
+    () => folders.map((f) => ({ ...f, decks: sortDecks(f.decks, sortKey) })),
+    [folders, sortKey]
+  );
+  const sortedUnfoldered = useMemo(
+    () => sortDecks(unfolderedDecks, sortKey),
+    [unfolderedDecks, sortKey]
+  );
 
   const goalHit = cardsReviewedToday >= dailyGoal;
   const progressPct = Math.min((cardsReviewedToday / dailyGoal) * 100, 100);
@@ -144,8 +210,31 @@ export function HomePage({
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {folders.map(
+        <div className="space-y-4">
+          {/* Sort control */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 flex-wrap">
+              {SORT_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.key}
+                  variant={sortKey === opt.key ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => changeSort(opt.key)}
+                  className="h-7 text-xs"
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+            <Link
+              href="/archive"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Archive →
+            </Link>
+          </div>
+
+          {sortedFolders.map(
             (folder) =>
               folder.decks.length > 0 && (
                 <FolderGroup
@@ -158,7 +247,7 @@ export function HomePage({
               )
           )}
 
-          {unfolderedDecks.length > 0 && (
+          {sortedUnfoldered.length > 0 && (
             <div className="space-y-3">
               {folders.some((f) => f.decks.length > 0) && (
                 <h2 className="text-lg font-semibold text-foreground">
@@ -166,7 +255,7 @@ export function HomePage({
                 </h2>
               )}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {unfolderedDecks.map((deck) => (
+                {sortedUnfoldered.map((deck) => (
                   <DeckCard
                     key={deck.id}
                     id={deck.id}
@@ -174,6 +263,7 @@ export function HomePage({
                     emoji={deck.emoji}
                     cardCount={deck._count.cards}
                     grade={deck.grade}
+                    lastStudiedAt={deck.lastStudiedAt}
                   />
                 ))}
               </div>
