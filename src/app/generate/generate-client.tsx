@@ -49,7 +49,53 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
 
   const abortRef = useRef(false);
   const imageUploadRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   const [uploadTargetIndex, setUploadTargetIndex] = useState<number | null>(null);
+  const [pdfExtracting, setPdfExtracting] = useState(false);
+
+  /**
+   * Read a PDF, extract its text on-device (no server upload), and
+   * append into the study-material textarea so the user can review
+   * before hitting Generate.
+   */
+  async function handlePdfPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Please choose a PDF file.");
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+      return;
+    }
+    setPdfExtracting(true);
+    setError("");
+    try {
+      const { extractPdfText } = await import("@/lib/pdf-extract");
+      const result = await extractPdfText(file);
+      if (!result.text) {
+        setError("No extractable text found in that PDF (it may be scanned images).");
+        return;
+      }
+      // Merge with whatever's already there
+      setMaterial((prev) =>
+        prev.trim() ? `${prev}\n\n${result.text}` : result.text
+      );
+      if (!topic.trim()) {
+        // Seed topic with the filename so the user has something to start with
+        setTopic(file.name.replace(/\.pdf$/i, ""));
+      }
+      if (result.truncated) {
+        setError(
+          `Only the first 50 pages were extracted (PDF had ${result.pages}+ pages).`
+        );
+      }
+    } catch (err) {
+      console.error("PDF extract failed:", err);
+      setError("Couldn't read that PDF. Try pasting the text directly instead.");
+    } finally {
+      setPdfExtracting(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  }
 
   // Shared image generation helper
   const generateImagesForCards = useCallback(
@@ -341,14 +387,38 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
             required
           />
 
-          <Textarea
-            id="material"
-            label="Study Material (optional)"
-            placeholder="Paste text from your textbook, notes, or any study material. The AI will generate cards based on this content."
-            value={material}
-            onChange={(e) => setMaterial(e.target.value)}
-            rows={6}
-          />
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor="material" className="text-sm font-medium">
+                Study Material (optional)
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => pdfInputRef.current?.click()}
+                disabled={pdfExtracting}
+              >
+                {pdfExtracting ? "Reading PDF…" : "Upload PDF"}
+              </Button>
+            </div>
+            <Textarea
+              id="material"
+              label=""
+              placeholder="Paste text from your textbook, notes, or upload a PDF. The AI will generate cards based on this content."
+              value={material}
+              onChange={(e) => setMaterial(e.target.value)}
+              rows={6}
+            />
+            <input
+              ref={pdfInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={handlePdfPicked}
+              className="hidden"
+            />
+          </div>
 
           {/* AI Image Generation Toggle */}
           <label className="flex items-center justify-between p-4 rounded-lg border border-border cursor-pointer hover:bg-accent/50 transition-colors">
