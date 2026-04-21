@@ -86,7 +86,10 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
   const [autoAdvance, setAutoAdvance] = useState(0);
   const [orientation, setOrientation] = useState<"front" | "back" | "mixed">("front");
   const [availableTags, setAvailableTags] = useState<{ name: string; count: number }[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>(() => {
+    const param = searchParams.get("tags");
+    return param ? param.split(",").filter(Boolean) : [];
+  });
 
   useEffect(() => {
     fetch("/api/user/tags")
