@@ -1,0 +1,27 @@
+name: Push reminders cron
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub cron schedule is best-effort — occasional
+    # 5-10 min delays are normal, which is fine for a nudge notification.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    name: POST /api/cron/push-reminders
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fire cron endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret not set in repo settings"
+            exit 1
+          fi
+          curl -fsS -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -w "\nstatus=%{http_code} time=%{time_total}s\n" \
+            https://flashmind-35q4.onrender.com/api/cron/push-reminders
