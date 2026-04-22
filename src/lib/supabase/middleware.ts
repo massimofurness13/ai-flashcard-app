@@ -32,9 +32,19 @@ export async function updateSession(request: NextRequest) {
 
   // Public routes that don't require auth
   const publicRoutes = ["/auth/login", "/auth/signup", "/auth/callback", "/auth/confirm", "/pricing"];
+  // API routes that carry their own authentication (cron secret, webhook
+  // signature, etc.) — they must not be routed through the user-auth
+  // redirect below or they'd 307 to /auth/login instead of running.
+  const selfAuthenticatedApiRoutes = [
+    "/api/cron/",
+    "/api/stripe/webhook",
+  ];
   const isPublicRoute =
     request.nextUrl.pathname === "/" ||
     publicRoutes.some((route) =>
+      request.nextUrl.pathname.startsWith(route)
+    ) ||
+    selfAuthenticatedApiRoutes.some((route) =>
       request.nextUrl.pathname.startsWith(route)
     );
 
