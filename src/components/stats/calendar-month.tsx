@@ -17,7 +17,16 @@ interface CalendarMonthProps {
 export function CalendarMonth({ data }: CalendarMonthProps) {
   if (data.length === 0) return null;
 
-  const firstDate = new Date(data[0].date);
+  // Parse the YYYY-MM-DD string as a local-time date, not a UTC date.
+  // `new Date("2026-04-01")` would parse as UTC midnight, which is still
+  // March 31 in timezones west of UTC — that was labelling "April" as
+  // "March" for anyone not in UTC.
+  function parseLocalDate(iso: string): Date {
+    const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
+    return new Date(y, (m ?? 1) - 1, d ?? 1);
+  }
+
+  const firstDate = parseLocalDate(data[0].date);
   const monthName = firstDate.toLocaleString("en", {
     month: "long",
     year: "numeric",
@@ -57,7 +66,7 @@ export function CalendarMonth({ data }: CalendarMonthProps) {
         {paddedCells.map((cell, i) => {
           if (!cell) return <div key={i} className="aspect-square" />;
           const isToday = cell.date === today;
-          const day = new Date(cell.date).getDate();
+          const day = parseLocalDate(cell.date).getDate();
           return (
             <div
               key={cell.date}
