@@ -348,7 +348,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Generate a Pack from Text</h1>
+          <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Generate a Pack from Text</h1>
           <p className="text-muted-foreground mt-1">
             Paste lecture notes, a textbook chapter, or any text below. Our AI will automatically create a pack of flashcards from it.
           </p>
@@ -361,7 +361,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Generate a Pack from Text</h1>
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Generate a Pack from Text</h1>
         <p className="text-muted-foreground mt-1">
           Use AI to generate flashcard sets from a topic or study material
         </p>
@@ -485,7 +485,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       {step === "edit" && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
+            <h2 className="font-editorial text-xl font-medium">
               {cards.length} cards generated
             </h2>
             <Button variant="outline" onClick={handleStartOver}>

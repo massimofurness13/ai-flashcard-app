@@ -121,7 +121,7 @@ export default function AccountPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-2xl font-bold">Account & Settings</h1>
+      <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Account & Settings</h1>
 
       {/* User Profile */}
       {user && (

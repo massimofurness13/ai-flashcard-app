@@ -13,7 +13,7 @@ export default async function NewCardPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Add Card</h1>
+      <h1 className="font-editorial text-3xl font-medium sm:text-4xl mb-6">Add Card</h1>
       <FlashcardForm deckId={deckId} mode="create" isPro={isPro} />
     </div>
   );

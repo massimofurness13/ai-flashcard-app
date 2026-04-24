@@ -14,7 +14,7 @@ export default function AboutPage() {
         >
           ← Account
         </Link>
-        <h1 className="text-2xl font-bold mt-1">About FlashMind</h1>
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl mt-1">About FlashMind</h1>
       </div>
 
       <div className="prose prose-sm max-w-none text-muted-foreground space-y-4">

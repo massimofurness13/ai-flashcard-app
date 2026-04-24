@@ -109,7 +109,7 @@ export function ImportClient({ decks, isPro }: { decks: Deck[]; isPro: boolean }
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Import Deck</h1>
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Import Deck</h1>
         <p className="text-muted-foreground mt-1">
           Import flashcards from a file
         </p>

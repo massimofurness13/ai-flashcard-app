@@ -28,7 +28,7 @@ export default async function ArchivePage() {
         >
           ← Home
         </Link>
-        <h1 className="text-2xl font-bold mt-1">Archive</h1>
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl mt-1">Archive</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Archived packs are hidden from your home screen and study sessions.
           Stats history is preserved. Unarchive any time.

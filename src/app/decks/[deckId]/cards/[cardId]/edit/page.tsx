@@ -28,7 +28,7 @@ export default async function EditCardPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Edit Card</h1>
+      <h1 className="font-editorial text-3xl font-medium sm:text-4xl mb-6">Edit Card</h1>
       <FlashcardForm
         deckId={deckId}
         mode="edit"

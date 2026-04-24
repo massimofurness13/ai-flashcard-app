@@ -174,7 +174,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Study</h1>
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Study</h1>
         <p className="text-muted-foreground mt-1">
           Pick what you want to study. Every rating updates your progress.
         </p>

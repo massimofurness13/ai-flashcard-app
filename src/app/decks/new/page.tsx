@@ -6,7 +6,7 @@ export default async function NewDeckPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Create New Pack</h1>
+      <h1 className="font-editorial text-3xl font-medium sm:text-4xl mb-6">Create New Pack</h1>
       <DeckForm mode="create" />
     </div>
   );

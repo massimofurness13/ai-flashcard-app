@@ -5,7 +5,11 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card text-card-foreground shadow-sm",
+        // Softer corner radius, no hard shadow — feels like paper rather
+        // than a Material card. Border carries the separation; shadow
+        // only shows up on hover via the editorial-card utility when
+        // a caller opts in.
+        "rounded-2xl border border-border bg-card text-card-foreground",
         className
       )}
       {...props}
@@ -22,7 +26,13 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn("text-lg font-semibold leading-none tracking-tight", className)}
+      className={cn(
+        // Fraunces display serif at medium weight — carries the editorial
+        // tone across every card title in the app without callers having
+        // to opt in per usage.
+        "font-editorial text-xl font-medium leading-snug tracking-tight",
+        className
+      )}
       {...props}
     />
   );

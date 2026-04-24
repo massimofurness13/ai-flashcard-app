@@ -45,7 +45,10 @@ export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLD
 export function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h2
-      className={cn("text-lg font-semibold leading-none tracking-tight", className)}
+      className={cn(
+        "font-editorial text-xl font-medium leading-snug tracking-tight",
+        className
+      )}
       {...props}
     />
   );

@@ -70,7 +70,7 @@ export default function UpdatesPage() {
         >
           ← Account
         </Link>
-        <h1 className="text-2xl font-bold mt-1">What&apos;s new</h1>
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl mt-1">What&apos;s new</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Recent changes, newest first.
         </p>

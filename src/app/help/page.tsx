@@ -46,7 +46,7 @@ export default function HelpPage() {
         >
           ← Account
         </Link>
-        <h1 className="text-2xl font-bold mt-1">Help</h1>
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl mt-1">Help</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Common questions. Still stuck? Head to{" "}
           <Link href="/contact" className="underline hover:text-foreground">

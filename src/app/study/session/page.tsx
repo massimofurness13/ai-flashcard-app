@@ -66,7 +66,7 @@ function StudySessionContent() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <span className="text-5xl mb-4">{"\u2705"}</span>
-        <h2 className="text-2xl font-bold">Nothing to study here</h2>
+        <h2 className="font-editorial text-3xl font-medium sm:text-4xl">Nothing to study here</h2>
         <p className="text-muted-foreground mt-2">
           {filter === "due"
             ? "No cards are due right now. Try another filter."
@@ -87,7 +87,7 @@ function StudySessionContent() {
       <div className="space-y-6 max-w-md mx-auto">
         <div className="text-center py-8">
           <span className="text-5xl mb-4 block">{"\ud83c\udf1f"}</span>
-          <h2 className="text-2xl font-bold">Session complete</h2>
+          <h2 className="font-editorial text-3xl font-medium sm:text-4xl">Session complete</h2>
           <p className="text-muted-foreground mt-2">
             You studied {stats.cardsReviewed} cards
           </p>

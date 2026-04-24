@@ -32,7 +32,7 @@ export default async function EditDeckPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Edit Pack</h1>
+      <h1 className="font-editorial text-3xl font-medium sm:text-4xl mb-6">Edit Pack</h1>
       <DeckForm
         mode="edit"
         initialData={{
