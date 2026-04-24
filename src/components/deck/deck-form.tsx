@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { VOICE_CATALOG } from "@/lib/voice-catalog";
+import { VOICE_CATALOG, getVoiceGroups } from "@/lib/voice-catalog";
 
 interface Folder {
   id: string;
@@ -35,10 +35,7 @@ interface DeckFormProps {
 
 const EMOJIS = ["\ud83d\udcda", "\ud83c\udf1f", "\ud83e\udde0", "\ud83d\udd2c", "\ud83c\udf0d", "\ud83c\udfa8", "\ud83d\udcbb", "\ud83c\udfb5", "\u2696\ufe0f", "\ud83d\udcac", "\ud83e\uddec", "\ud83d\udcc8"];
 
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + "\u2026";
-}
+const VOICE_GROUPS = getVoiceGroups();
 
 export function DeckForm({ mode, initialData, previewCard }: DeckFormProps) {
   const router = useRouter();
@@ -244,12 +241,6 @@ export function DeckForm({ mode, initialData, previewCard }: DeckFormProps) {
           <div>
             <label className="mb-1 block text-xs text-muted-foreground">
               Front language
-              {previewCard && (
-                <span className="text-muted-foreground/60">
-                  {" "}
-                  — voice for &ldquo;{truncate(previewCard.front, 18)}&rdquo;
-                </span>
-              )}
             </label>
             <select
               className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -257,22 +248,20 @@ export function DeckForm({ mode, initialData, previewCard }: DeckFormProps) {
               onChange={(e) => setFrontLanguageCode(e.target.value)}
             >
               <option value="">Not set (use device voice)</option>
-              {VOICE_CATALOG.map((v) => (
-                <option key={v.code} value={v.code}>
-                  {v.label}
-                </option>
+              {VOICE_GROUPS.map((group) => (
+                <optgroup key={group} label={group}>
+                  {VOICE_CATALOG.filter((v) => v.group === group).map((v) => (
+                    <option key={v.code} value={v.code}>
+                      {v.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
           <div>
             <label className="mb-1 block text-xs text-muted-foreground">
               Back language
-              {previewCard && (
-                <span className="text-muted-foreground/60">
-                  {" "}
-                  — voice for &ldquo;{truncate(previewCard.back, 18)}&rdquo;
-                </span>
-              )}
             </label>
             <select
               className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -280,10 +269,14 @@ export function DeckForm({ mode, initialData, previewCard }: DeckFormProps) {
               onChange={(e) => setBackLanguageCode(e.target.value)}
             >
               <option value="">Not set (use device voice)</option>
-              {VOICE_CATALOG.map((v) => (
-                <option key={v.code} value={v.code}>
-                  {v.label}
-                </option>
+              {VOICE_GROUPS.map((group) => (
+                <optgroup key={group} label={group}>
+                  {VOICE_CATALOG.filter((v) => v.group === group).map((v) => (
+                    <option key={v.code} value={v.code}>
+                      {v.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>

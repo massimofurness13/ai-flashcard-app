@@ -39,12 +39,25 @@ export async function updateSession(request: NextRequest) {
     "/api/cron/",
     "/api/stripe/webhook",
   ];
+  // Static-file paths the browser fetches on every page load (PWA manifest,
+  // service worker, icons). Redirecting these to /auth/login would make the
+  // browser try to parse the login HTML as JSON/JS and throw console errors.
+  const publicStaticPaths = [
+    "/manifest.json",
+    "/sw.js",
+    "/icons/",
+    "/favicon.ico",
+    "/robots.txt",
+  ];
   const isPublicRoute =
     request.nextUrl.pathname === "/" ||
     publicRoutes.some((route) =>
       request.nextUrl.pathname.startsWith(route)
     ) ||
     selfAuthenticatedApiRoutes.some((route) =>
+      request.nextUrl.pathname.startsWith(route)
+    ) ||
+    publicStaticPaths.some((route) =>
       request.nextUrl.pathname.startsWith(route)
     );
 
