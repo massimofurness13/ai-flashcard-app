@@ -71,7 +71,17 @@ export async function GET(request: NextRequest) {
   let cards = await prisma.card.findMany({
     where,
     include: {
-      deck: { select: { id: true, name: true, emoji: true, frontVoice: true, backVoice: true } },
+      deck: {
+        select: {
+          id: true,
+          name: true,
+          emoji: true,
+          frontVoice: true,
+          backVoice: true,
+          frontLanguageCode: true,
+          backLanguageCode: true,
+        },
+      },
     },
     orderBy,
     take: fetchLimit,

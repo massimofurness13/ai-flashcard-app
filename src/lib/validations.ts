@@ -8,6 +8,8 @@ export const createDeckSchema = z.object({
   folderId: z.string().cuid().optional().nullable(),
   frontVoice: z.string().max(200).optional().nullable(),
   backVoice: z.string().max(200).optional().nullable(),
+  frontLanguageCode: z.string().max(16).optional().nullable(),
+  backLanguageCode: z.string().max(16).optional().nullable(),
 });
 
 export const updateDeckSchema = createDeckSchema.partial();

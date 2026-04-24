@@ -1,72 +1,59 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { speak, type SpeakHandle } from "@/lib/tts";
 
 interface VoiceButtonProps {
   text: string;
+  /** BCP-47 locale from the deck (e.g. "es-MX"). When set, plays the
+   *  curated Google/ElevenLabs voice via the server TTS API. */
+  languageCode?: string | null;
+  /** Legacy per-deck Web Speech voice name — used only as a fallback
+   *  when no languageCode is set. */
   voiceName?: string | null;
   className?: string;
 }
 
-function getSettings(): { voice: string; ttsSpeed: number } {
-  try {
-    const saved = localStorage.getItem("flashmind-settings");
-    if (saved) {
-      const s = JSON.parse(saved);
-      return { voice: s.voice || "", ttsSpeed: s.ttsSpeed || 1 };
-    }
-  } catch { /* ignore */ }
-  return { voice: "", ttsSpeed: 1 };
-}
-
 /**
- * Speak text using the Web Speech API.
- * Voice priority: prop → localStorage setting → browser default.
- * Returns the utterance so callers can listen for onend / cancel.
+ * Speak text using the server TTS API (via language code) with Web Speech
+ * as a fallback. Returns a handle so callers can listen for onEnded /
+ * cancel when the component unmounts or the user advances.
  */
 export function speakText(
   text: string,
-  voiceName?: string | null
-): SpeechSynthesisUtterance | null {
-  if (typeof window === "undefined" || !window.speechSynthesis) return null;
-  if (!text || !text.trim()) return null;
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  const settings = getSettings();
-
-  const targetName = voiceName || settings.voice;
-  if (targetName) {
-    const voices = window.speechSynthesis.getVoices();
-    const match = voices.find((v) => v.name === targetName);
-    if (match) utterance.voice = match;
-  }
-
-  utterance.rate = settings.ttsSpeed;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
-  return utterance;
+  options: { languageCode?: string | null; voiceName?: string | null } = {}
+): SpeakHandle {
+  return speak(text, options);
 }
 
-export function VoiceButton({ text, voiceName, className }: VoiceButtonProps) {
+export function VoiceButton({
+  text,
+  languageCode,
+  voiceName,
+  className,
+}: VoiceButtonProps) {
   const [speaking, setSpeaking] = useState(false);
+  const handleRef = useRef<SpeakHandle | null>(null);
 
   const handleClick = useCallback(() => {
     if (speaking) {
-      window.speechSynthesis.cancel();
+      handleRef.current?.cancel();
+      handleRef.current = null;
       setSpeaking(false);
       return;
     }
 
     setSpeaking(true);
-    const utterance = speakText(text, voiceName);
-    if (!utterance) {
-      setSpeaking(false);
-      return;
-    }
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-  }, [text, voiceName, speaking]);
+    const handle = speak(text, { languageCode, voiceName });
+    handleRef.current = handle;
+    handle.onEnded?.(() => setSpeaking(false));
+    handle.onError?.(() => setSpeaking(false));
+  }, [text, languageCode, voiceName, speaking]);
+
+  useEffect(() => {
+    return () => handleRef.current?.cancel();
+  }, []);
 
   if (typeof window === "undefined") return null;
 

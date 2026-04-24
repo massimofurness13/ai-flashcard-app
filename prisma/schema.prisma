@@ -109,6 +109,11 @@ model Deck {
   emoji       String? @default("\ud83d\udcda")
   frontVoice  String?
   backVoice   String?
+  // BCP-47 locale per side (e.g. "es-MX", "en-US"). Typical language deck:
+  // front = target language, back = learner's native language. Drives which
+  // cloud TTS voice we pick — native-speaker voices per region.
+  frontLanguageCode String?
+  backLanguageCode  String?
 
   // Soft-archive. When non-null the deck is hidden from the home list and
   // study config; it still exists for stats history and can be restored.

@@ -1,51 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
-interface SimpleVoice {
-  name: string;
-  label: string;
-  lang: string;
-}
-
-/**
- * Reduce the system voice list to one representative voice per language.
- * Converts lang codes into friendly names using Intl.DisplayNames.
- */
-function simplifyVoices(voices: SpeechSynthesisVoice[]): SimpleVoice[] {
-  const seen = new Map<string, SpeechSynthesisVoice>();
-  for (const v of voices) {
-    // Prefer default voices; first wins otherwise
-    if (!seen.has(v.lang) || v.default) seen.set(v.lang, v);
-  }
-
-  let displayNames: Intl.DisplayNames | null = null;
-  try {
-    displayNames = new Intl.DisplayNames(["en"], { type: "language" });
-  } catch {
-    displayNames = null;
-  }
-
-  const result: SimpleVoice[] = [];
-  for (const [lang, voice] of seen.entries()) {
-    let label = lang;
-    if (displayNames) {
-      try {
-        const friendly = displayNames.of(lang);
-        if (friendly) label = friendly;
-      } catch {
-        // Fall back to raw lang code
-      }
-    }
-    result.push({ name: voice.name, label, lang });
-  }
-
-  return result.sort((a, b) => a.label.localeCompare(b.label));
-}
+import { VOICE_CATALOG } from "@/lib/voice-catalog";
 
 interface Folder {
   id: string;
@@ -64,6 +24,8 @@ interface DeckFormProps {
     folderId: string | null;
     frontVoice: string | null;
     backVoice: string | null;
+    frontLanguageCode: string | null;
+    backLanguageCode: string | null;
   };
 }
 
@@ -75,10 +37,12 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
   const [description, setDescription] = useState(initialData?.description || "");
   const [emoji, setEmoji] = useState(initialData?.emoji || "\ud83d\udcda");
   const [folderId, setFolderId] = useState(initialData?.folderId || "");
-  const [frontVoice, setFrontVoice] = useState(initialData?.frontVoice || "");
-  const [backVoice, setBackVoice] = useState(initialData?.backVoice || "");
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [globalVoiceName, setGlobalVoiceName] = useState("Browser Default");
+  const [frontLanguageCode, setFrontLanguageCode] = useState(
+    initialData?.frontLanguageCode || ""
+  );
+  const [backLanguageCode, setBackLanguageCode] = useState(
+    initialData?.backLanguageCode || ""
+  );
   const [folders, setFolders] = useState<Folder[]>([]);
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -86,33 +50,10 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
   const [customEmojiInput, setCustomEmojiInput] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const simpleVoices = useMemo(() => simplifyVoices(voices), [voices]);
-
   useEffect(() => {
     fetch("/api/folders")
       .then((res) => res.json())
       .then(setFolders);
-
-    // Load voices
-    function loadVoices() {
-      const v = window.speechSynthesis?.getVoices() || [];
-      if (v.length > 0) setVoices(v);
-    }
-    loadVoices();
-    window.speechSynthesis?.addEventListener("voiceschanged", loadVoices);
-
-    // Load global default voice name
-    try {
-      const saved = localStorage.getItem("flashmind-settings");
-      if (saved) {
-        const settings = JSON.parse(saved);
-        if (settings.voice) setGlobalVoiceName(settings.voice);
-      }
-    } catch { /* ignore */ }
-
-    return () => {
-      window.speechSynthesis?.removeEventListener("voiceschanged", loadVoices);
-    };
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -143,8 +84,8 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
         description: description.trim() || null,
         emoji,
         folderId: targetFolderId || null,
-        frontVoice: frontVoice || null,
-        backVoice: backVoice || null,
+        frontLanguageCode: frontLanguageCode || null,
+        backLanguageCode: backLanguageCode || null,
       }),
     });
 
@@ -251,40 +192,45 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
         rows={3}
       />
 
-      {/* Voice / Language settings */}
+      {/* Language settings — drives which native-speaker voice plays for each side */}
       <div className="space-y-3">
         <label className="text-sm font-medium text-foreground">
-          Text-to-Speech Language
+          Text-to-Speech language
         </label>
         <p className="text-xs text-muted-foreground -mt-2">
-          Set the voice for each side of the card. Leave as Default to use your global setting.
+          Pick a language for each side. We&apos;ll use a curated native-speaker
+          voice — Pro plans get our premium AI voice when available.
         </p>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Front language</label>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Front language
+            </label>
             <select
               className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              value={frontVoice}
-              onChange={(e) => setFrontVoice(e.target.value)}
+              value={frontLanguageCode}
+              onChange={(e) => setFrontLanguageCode(e.target.value)}
             >
-              <option value="">Default ({globalVoiceName})</option>
-              {simpleVoices.map((v) => (
-                <option key={v.name} value={v.name}>
+              <option value="">Not set (use device voice)</option>
+              {VOICE_CATALOG.map((v) => (
+                <option key={v.code} value={v.code}>
                   {v.label}
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Back language</label>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Back language
+            </label>
             <select
               className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              value={backVoice}
-              onChange={(e) => setBackVoice(e.target.value)}
+              value={backLanguageCode}
+              onChange={(e) => setBackLanguageCode(e.target.value)}
             >
-              <option value="">Default ({globalVoiceName})</option>
-              {simpleVoices.map((v) => (
-                <option key={v.name} value={v.name}>
+              <option value="">Not set (use device voice)</option>
+              {VOICE_CATALOG.map((v) => (
+                <option key={v.code} value={v.code}>
                   {v.label}
                 </option>
               ))}

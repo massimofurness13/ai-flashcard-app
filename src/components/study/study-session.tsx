@@ -16,7 +16,15 @@ interface Card {
   back: string;
   imageUrl: string | null;
   hint: string | null;
-  deck: { id: string; name: string; emoji: string | null; frontVoice?: string | null; backVoice?: string | null };
+  deck: {
+    id: string;
+    name: string;
+    emoji: string | null;
+    frontVoice?: string | null;
+    backVoice?: string | null;
+    frontLanguageCode?: string | null;
+    backLanguageCode?: string | null;
+  };
 }
 
 interface StudySessionProps {
@@ -215,6 +223,12 @@ export function StudySession({
           onFlip={handleFlip}
           frontVoice={frontVoiceName}
           backVoice={backVoiceName}
+          frontLanguageCode={
+            showBackFirst ? currentCard.deck.backLanguageCode : currentCard.deck.frontLanguageCode
+          }
+          backLanguageCode={
+            showBackFirst ? currentCard.deck.frontLanguageCode : currentCard.deck.backLanguageCode
+          }
           autoPlayVoice
         />
       </div>

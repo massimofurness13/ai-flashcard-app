@@ -34,6 +34,8 @@ export default async function EditDeckPage({
           folderId: deck.folderId,
           frontVoice: deck.frontVoice,
           backVoice: deck.backVoice,
+          frontLanguageCode: deck.frontLanguageCode,
+          backLanguageCode: deck.backLanguageCode,
         }}
       />
     </div>

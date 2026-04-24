@@ -15,6 +15,10 @@ interface FlashcardProps {
   showImage?: boolean;
   frontVoice?: string | null;
   backVoice?: string | null;
+  /** BCP-47 locale per side (e.g. "es-MX", "en-US"). Routes TTS through
+   *  the curated Google/ElevenLabs voice for that language. */
+  frontLanguageCode?: string | null;
+  backLanguageCode?: string | null;
   /** When true, the visible side's text auto-plays via TTS each time
    * the card appears or flips. Study/Review use this; the edit form does not. */
   autoPlayVoice?: boolean;
@@ -31,6 +35,8 @@ export function Flashcard({
   showImage = true,
   frontVoice,
   backVoice,
+  frontLanguageCode,
+  backLanguageCode,
   autoPlayVoice = false,
   className,
 }: FlashcardProps) {
@@ -48,13 +54,10 @@ export function Flashcard({
     if (!autoPlayVoice) return;
     const text = isFlipped ? back : front;
     const voice = isFlipped ? backVoice : frontVoice;
-    speakText(text, voice);
-    return () => {
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, [autoPlayVoice, isFlipped, front, back, frontVoice, backVoice]);
+    const lang = isFlipped ? backLanguageCode : frontLanguageCode;
+    const handle = speakText(text, { languageCode: lang, voiceName: voice });
+    return () => handle.cancel();
+  }, [autoPlayVoice, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode]);
 
   return (
     <div
@@ -88,7 +91,12 @@ export function Flashcard({
                 Hint: {hint}
               </p>
             )}
-            <VoiceButton text={front} voiceName={frontVoice} className="ml-auto" />
+            <VoiceButton
+              text={front}
+              languageCode={frontLanguageCode}
+              voiceName={frontVoice}
+              className="ml-auto"
+            />
           </div>
         </div>
 
@@ -103,7 +111,11 @@ export function Flashcard({
             <p className="text-lg text-center text-card-foreground">{back}</p>
           </div>
           <div className="flex justify-end mt-4">
-            <VoiceButton text={back} voiceName={backVoice} />
+            <VoiceButton
+              text={back}
+              languageCode={backLanguageCode}
+              voiceName={backVoice}
+            />
           </div>
         </div>
       </div>
