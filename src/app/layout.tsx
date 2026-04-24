@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { APP_NAME, APP_DESCRIPTION } from "@/lib/constants";
@@ -17,8 +17,19 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Editorial display serif. Variable font — gives us weight + optical
+// sizing + the "SOFT" axis we lean on in globals.css for a slightly
+// warmer, less rigid feel than plain Fraunces. Used on headlines and
+// numeric display (streak counts, progress numbers).
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  axes: ["opsz", "SOFT"],
+  display: "swap",
+});
+
 export const viewport: Viewport = {
-  themeColor: "#d97706",
+  themeColor: "#0f0d0a",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -49,7 +60,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>

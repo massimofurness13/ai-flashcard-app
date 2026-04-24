@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CreateMenu } from "@/components/home/create-menu";
 import { FolderGroup } from "@/components/home/folder-group";
 import { DeckCard } from "@/components/deck/deck-card";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { GoalCelebrationDialog } from "@/components/home/goal-celebration-dialog";
 
@@ -15,7 +14,6 @@ interface Deck {
   emoji: string | null;
   _count: { cards: number };
   grade: string;
-  lastStudiedAt?: string | null;
 }
 
 interface Folder {
@@ -37,53 +35,19 @@ interface HomePageProps {
   goalHitCelebrationShown: boolean;
 }
 
-type SortKey = "recent" | "alpha" | "grade" | "size";
-
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: "recent", label: "Last studied" },
-  { key: "alpha", label: "A → Z" },
-  { key: "grade", label: "Grade" },
-  { key: "size", label: "Size" },
-];
-
-// Higher = stronger. Used for the Grade sort order.
-const GRADE_RANK: Record<string, number> = {
-  A: 6,
-  B: 5,
-  C: 4,
-  D: 3,
-  F: 2,
-  New: 1,
-};
-
-function sortDecks(decks: Deck[], key: SortKey): Deck[] {
-  const copy = [...decks];
-  switch (key) {
-    case "recent":
-      // Null lastStudied goes to the end, otherwise most-recent first.
-      return copy.sort((a, b) => {
-        const ta = a.lastStudiedAt ? new Date(a.lastStudiedAt).getTime() : 0;
-        const tb = b.lastStudiedAt ? new Date(b.lastStudiedAt).getTime() : 0;
-        return tb - ta;
-      });
-    case "alpha":
-      return copy.sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-      );
-    case "grade":
-      return copy.sort(
-        (a, b) => (GRADE_RANK[b.grade] ?? 0) - (GRADE_RANK[a.grade] ?? 0)
-      );
-    case "size":
-      return copy.sort((a, b) => b._count.cards - a._count.cards);
-  }
-}
-
 function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   return "Good evening";
+}
+
+function getTodayLabel(): string {
+  return new Date().toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 }
 
 export function HomePage({
@@ -98,179 +62,300 @@ export function HomePage({
 }: HomePageProps) {
   const hasDecks =
     folders.some((f) => f.decks.length > 0) || unfolderedDecks.length > 0;
-  // Compute greeting only after hydration — server + client timezones may
-  // differ, which would cause a React hydration mismatch (error #418).
+
+  // Compute greeting + date client-side to avoid SSR timezone mismatch
+  // (React hydration error #418 if we render time-dependent text on server).
   const [greeting, setGreeting] = useState("Hello");
-  useEffect(() => setGreeting(getGreeting()), []);
-
-  // Sort preference persists in localStorage so it survives reloads.
-  const [sortKey, setSortKey] = useState<SortKey>("recent");
+  const [today, setToday] = useState("");
   useEffect(() => {
-    const saved = localStorage.getItem("flashmind-deck-sort") as SortKey | null;
-    if (saved && SORT_OPTIONS.some((o) => o.key === saved)) {
-      setSortKey(saved);
-    }
+    setGreeting(getGreeting());
+    setToday(getTodayLabel());
   }, []);
-  function changeSort(next: SortKey) {
-    setSortKey(next);
-    localStorage.setItem("flashmind-deck-sort", next);
-  }
-
-  const sortedFolders = useMemo(
-    () => folders.map((f) => ({ ...f, decks: sortDecks(f.decks, sortKey) })),
-    [folders, sortKey]
-  );
-  const sortedUnfoldered = useMemo(
-    () => sortDecks(unfolderedDecks, sortKey),
-    [unfolderedDecks, sortKey]
-  );
 
   const goalHit = cardsReviewedToday >= dailyGoal;
   const progressPct = Math.min((cardsReviewedToday / dailyGoal) * 100, 100);
   const remaining = Math.max(dailyGoal - cardsReviewedToday, 0);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {greeting}, {userName}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {totalCards} total cards
-          </p>
-        </div>
-        <CreateMenu />
-      </div>
+  // Progress-ring geometry. r=46 on a 100×100 viewBox leaves 4px padding
+  // for the stroke. Circumference drives the dash animation.
+  const radius = 46;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - progressPct / 100);
 
-      {/* Today's study — daily goal + streak */}
-      {hasDecks && (
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <p className="text-sm font-medium">Today&apos;s study</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {goalHit
-                    ? "You've hit your daily goal — nicely done."
-                    : `${cardsReviewedToday} of ${dailyGoal} cards so far`}
-                </p>
-              </div>
+  return (
+    <div className="relative">
+      {/* Notebook margin — a faint vertical rule down the left of the
+       * content column on wide screens. Small detail, big contribution
+       * to the "considered editorial" feel. Hidden on mobile where
+       * screen width makes it compete with chrome. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-0 hidden h-full w-px bg-border opacity-50 md:block"
+        style={{ left: "-1.5rem" }}
+      />
+
+      <div className="space-y-10">
+        {/* ── Masthead ────────────────────────────────────────────── */}
+        <header
+          className="reveal flex items-start justify-between gap-4"
+          style={{ "--delay": "0ms" } as React.CSSProperties}
+        >
+          <div>
+            <p className="label-caps">{today}</p>
+            <h1 className="font-editorial mt-2 text-4xl font-medium leading-[1.05] text-foreground sm:text-5xl">
+              {greeting},{" "}
+              <span className="italic text-[color:var(--primary)]">
+                {userName}
+              </span>
+              .
+            </h1>
+            <p className="mt-3 text-sm text-muted-foreground">
+              {totalCards.toLocaleString()} cards in your library
               {streak > 0 && (
-                <div className="flex items-center gap-1.5 text-sm">
-                  <span>🔥</span>
-                  <span className="font-semibold">{streak}</span>
-                  <span className="text-muted-foreground">
-                    day{streak === 1 ? "" : "s"}
-                  </span>
+                <>
+                  <span className="mx-2 text-border">·</span>
+                  <span className="text-foreground">{streak}-day streak</span>
+                </>
+              )}
+            </p>
+          </div>
+          <CreateMenu />
+        </header>
+
+        {/* ── Today's study — editorial hero with progress ring ───── */}
+        {hasDecks && (
+          <section
+            className="reveal"
+            style={{ "--delay": "80ms" } as React.CSSProperties}
+          >
+            <div className="relative overflow-hidden rounded-3xl border border-border bg-card px-6 py-8 sm:px-10 sm:py-10">
+              {/* Ambient warmth — soft primary-tinted gradient in the
+               * top-right corner. Gives the page's hero block depth
+               * without using imagery. */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full opacity-40 blur-3xl"
+                style={{
+                  background:
+                    "radial-gradient(circle, color-mix(in oklch, var(--primary) 40%, transparent), transparent 70%)",
+                }}
+              />
+
+              <div className="relative flex flex-col items-start gap-8 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-4">
+                  <p className="label-caps">
+                    Today&apos;s study
+                    {streak > 0 && (
+                      <span className="ml-3 inline-flex items-center gap-1 text-[color:var(--primary)]">
+                        <span className="text-sm">🔥</span>
+                        <span>
+                          {streak} day{streak === 1 ? "" : "s"} running
+                        </span>
+                      </span>
+                    )}
+                  </p>
+
+                  <h2 className="font-editorial text-3xl font-medium leading-tight text-foreground sm:text-4xl">
+                    {goalHit ? (
+                      <>
+                        You&apos;re done for today.
+                        <br />
+                        <span className="italic text-[color:var(--glow)]">
+                          Beautifully.
+                        </span>
+                      </>
+                    ) : remaining === dailyGoal ? (
+                      <>
+                        Ready for{" "}
+                        <span className="italic text-[color:var(--primary)]">
+                          {dailyGoal}
+                        </span>{" "}
+                        cards?
+                      </>
+                    ) : (
+                      <>
+                        <span className="italic text-[color:var(--primary)]">
+                          {remaining}
+                        </span>{" "}
+                        {remaining === 1 ? "card" : "cards"} left today.
+                      </>
+                    )}
+                  </h2>
+
+                  <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+                    {goalHit
+                      ? "You've hit your daily goal. Come back tomorrow to keep the rhythm — or study more now if you're on a roll."
+                      : `${cardsReviewedToday} of ${dailyGoal} reviewed so far. Short, steady sessions are what move the needle.`}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <Link
+                      href={
+                        goalHit
+                          ? "/study"
+                          : `/study?filter=due&limit=${remaining}`
+                      }
+                    >
+                      <Button size="md">
+                        {goalHit
+                          ? "Study a little more"
+                          : "Begin today's session"}
+                      </Button>
+                    </Link>
+                    {!goalHit && (
+                      <Link
+                        href="/study"
+                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        or choose a pack →
+                      </Link>
+                    )}
+                  </div>
+                </div>
+
+                {/* Progress ring — distinctive alternative to the
+                 * typical horizontal bar. Percent lives inside the ring. */}
+                <div className="relative h-32 w-32 shrink-0 sm:h-36 sm:w-36">
+                  <svg
+                    className="h-full w-full -rotate-90"
+                    viewBox="0 0 100 100"
+                    aria-hidden
+                  >
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r={radius}
+                      fill="none"
+                      stroke="var(--border)"
+                      strokeWidth="4"
+                    />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r={radius}
+                      fill="none"
+                      stroke={goalHit ? "var(--glow)" : "var(--primary)"}
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={strokeDashoffset}
+                      style={{
+                        transition:
+                          "stroke-dashoffset 0.9s cubic-bezier(0.2, 0, 0, 1)",
+                      }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="font-editorial text-3xl font-medium leading-none text-foreground sm:text-4xl">
+                      {Math.round(progressPct)}
+                      <span className="text-lg text-muted-foreground">%</span>
+                    </span>
+                    <span className="label-caps mt-1">
+                      {cardsReviewedToday}/{dailyGoal}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Empty state (no decks yet) ──────────────────────────── */}
+        {!hasDecks && (
+          <section
+            className="reveal"
+            style={{ "--delay": "80ms" } as React.CSSProperties}
+          >
+            <div className="relative overflow-hidden rounded-3xl border border-dashed border-border bg-card px-6 py-16 text-center sm:px-10">
+              <p className="label-caps">Your library</p>
+              <h2 className="font-editorial mt-3 text-3xl font-medium text-foreground sm:text-4xl">
+                An empty bookshelf,{" "}
+                <span className="italic text-[color:var(--primary)]">
+                  waiting.
+                </span>
+              </h2>
+              <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+                Paste any text, upload a PDF, or import an existing Anki deck.
+                FlashMind turns it into flashcards with an AI illustration on
+                every card.
+              </p>
+              <div className="mt-6 inline-flex items-center gap-3">
+                <CreateMenu />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Library ─────────────────────────────────────────────── */}
+        {hasDecks && (
+          <section
+            className="reveal space-y-8"
+            style={{ "--delay": "160ms" } as React.CSSProperties}
+          >
+            <div className="flex items-baseline justify-between border-b border-border pb-3">
+              <h2 className="font-editorial text-2xl font-medium text-foreground">
+                Library
+              </h2>
+              <p className="label-caps">
+                {folders.filter((f) => f.decks.length > 0).length +
+                  (unfolderedDecks.length > 0 ? 1 : 0)}{" "}
+                {folders.filter((f) => f.decks.length > 0).length +
+                  (unfolderedDecks.length > 0 ? 1 : 0) ===
+                1
+                  ? "section"
+                  : "sections"}
+              </p>
+            </div>
+
+            <div className="space-y-10">
+              {folders.map(
+                (folder) =>
+                  folder.decks.length > 0 && (
+                    <FolderGroup
+                      key={folder.id}
+                      name={folder.name}
+                      emoji={folder.emoji}
+                      color={folder.color}
+                      decks={folder.decks}
+                    />
+                  )
+              )}
+
+              {unfolderedDecks.length > 0 && (
+                <div className="space-y-4">
+                  {folders.some((f) => f.decks.length > 0) && (
+                    <div className="flex items-baseline gap-3">
+                      <p className="label-caps">Uncategorised</p>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {unfolderedDecks.map((deck, i) => (
+                      <div
+                        key={deck.id}
+                        className="reveal"
+                        style={
+                          {
+                            "--delay": `${200 + i * 35}ms`,
+                          } as React.CSSProperties
+                        }
+                      >
+                        <DeckCard
+                          id={deck.id}
+                          name={deck.name}
+                          emoji={deck.emoji}
+                          cardCount={deck._count.cards}
+                          grade={deck.grade}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-
-            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-500"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">
-                {goalHit ? (
-                  "Great work. Come back tomorrow to keep the streak alive."
-                ) : (
-                  <>
-                    {remaining} card{remaining === 1 ? "" : "s"} to go
-                  </>
-                )}
-              </span>
-              <Link
-                href={
-                  goalHit
-                    ? "/study"
-                    : `/study?filter=due&limit=${remaining}`
-                }
-              >
-                <Button size="sm" variant={goalHit ? "outline" : "default"}>
-                  {goalHit ? "Study more" : "Start today's session"}
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {!hasDecks ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center">
-          <span className="text-5xl mb-4">{"\ud83d\udcda"}</span>
-          <h2 className="text-lg font-semibold">No packs yet</h2>
-          <p className="text-muted-foreground mt-1 max-w-sm">
-            Create your first flashcard pack to get started learning.
-            You can create them manually or generate them with AI.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Sort control */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 flex-wrap">
-              {SORT_OPTIONS.map((opt) => (
-                <Button
-                  key={opt.key}
-                  variant={sortKey === opt.key ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => changeSort(opt.key)}
-                  className="h-7 text-xs"
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-            <Link
-              href="/archive"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Archive →
-            </Link>
-          </div>
-
-          {sortedFolders.map(
-            (folder) =>
-              folder.decks.length > 0 && (
-                <FolderGroup
-                  key={folder.id}
-                  name={folder.name}
-                  emoji={folder.emoji}
-                  color={folder.color}
-                  decks={folder.decks}
-                />
-              )
-          )}
-
-          {sortedUnfoldered.length > 0 && (
-            <div className="space-y-3">
-              {folders.some((f) => f.decks.length > 0) && (
-                <h2 className="text-lg font-semibold text-foreground">
-                  Uncategorized
-                </h2>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {sortedUnfoldered.map((deck) => (
-                  <DeckCard
-                    key={deck.id}
-                    id={deck.id}
-                    name={deck.name}
-                    emoji={deck.emoji}
-                    cardCount={deck._count.cards}
-                    grade={deck.grade}
-                    lastStudiedAt={deck.lastStudiedAt}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+          </section>
+        )}
+      </div>
 
       {/* First-time celebration when user hits their daily goal */}
       <GoalCelebrationDialog

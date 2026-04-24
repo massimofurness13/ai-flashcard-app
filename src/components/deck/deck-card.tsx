@@ -38,41 +38,60 @@ export function DeckCard({
   folderColor,
   lastStudiedAt,
 }: DeckCardProps) {
+  const gradeText = grade === "New" ? "Not studied" : `Grade ${grade}`;
+
   return (
-    <Link href={`/decks/${id}`}>
-      <div className="group relative rounded-xl border border-border bg-card p-4 transition-all hover:shadow-md hover:border-primary/30">
+    <Link href={`/decks/${id}`} className="block">
+      <article className="editorial-card group relative flex h-full flex-col justify-between gap-6 overflow-hidden rounded-2xl border border-border bg-card p-5">
+        {/* Folder-color spine */}
         {folderColor && (
           <div
-            className="absolute left-0 top-0 h-full w-1 rounded-l-xl"
+            aria-hidden
+            className="absolute left-0 top-0 h-full w-[3px]"
             style={{ backgroundColor: folderColor }}
           />
         )}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-2xl">{emoji || "\ud83d\udcda"}</span>
-            <div className="min-w-0">
-              <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
-                {name}
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {cardCount} {cardCount === 1 ? "card" : "cards"}
-                {lastStudiedAt && (
-                  <>
-                    <span className="mx-1.5">·</span>
-                    {formatRelative(lastStudiedAt)}
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-          <div
-            className="flex items-center justify-center w-9 h-9 rounded-lg text-sm font-bold text-white shrink-0"
-            style={{ backgroundColor: gradeColor(grade as LetterGrade) }}
+
+        {/* Header — emoji as subtle accent, name as the focal element */}
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden
+            className="mt-0.5 text-xl leading-none opacity-80 transition-opacity group-hover:opacity-100"
           >
-            {grade === "New" ? "?" : grade}
+            {emoji || "\ud83d\udcda"}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-editorial text-lg font-medium leading-snug text-card-foreground transition-colors group-hover:text-[color:var(--primary)]">
+              {name}
+            </h3>
+            {lastStudiedAt && (
+              <p className="label-caps mt-1">
+                Last studied {formatRelative(lastStudiedAt)}
+              </p>
+            )}
           </div>
         </div>
-      </div>
+
+        {/* Footer — metadata row, editorial byline style */}
+        <div className="flex items-end justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-editorial text-lg font-medium text-foreground">
+              {cardCount}
+            </span>{" "}
+            {cardCount === 1 ? "card" : "cards"}
+          </p>
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: gradeColor(grade as LetterGrade) }}
+            />
+            <span className="label-caps" style={{ color: "var(--muted-foreground)" }}>
+              {gradeText}
+            </span>
+          </div>
+        </div>
+      </article>
     </Link>
   );
 }

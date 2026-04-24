@@ -20,33 +20,48 @@ interface FolderGroupProps {
   defaultOpen?: boolean;
 }
 
-export function FolderGroup({ name, emoji, color, decks, defaultOpen = true }: FolderGroupProps) {
+export function FolderGroup({
+  name,
+  emoji,
+  color,
+  decks,
+  defaultOpen = true,
+}: FolderGroupProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Chapter header — typographic, magazine-layout feel. Left rule,
+       * small-caps label with a color dot, deck count on the right. */}
       <button
-        className="flex w-full items-center gap-2 text-left"
+        className="group flex w-full items-baseline gap-3 text-left"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
       >
-        <svg
-          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="text-lg">{emoji || "\ud83d\udcc1"}</span>
-        <h2 className="text-lg font-semibold text-foreground">{name}</h2>
-        <span className="text-sm text-muted-foreground">
-          ({decks.length} {decks.length === 1 ? "pack" : "packs"})
+        {color && (
+          <span
+            aria-hidden
+            className="h-2 w-2 shrink-0 translate-y-[-0.2em] rounded-full"
+            style={{ backgroundColor: color }}
+          />
+        )}
+        <span aria-hidden className="text-base opacity-70">
+          {emoji || "\ud83d\udcc1"}
         </span>
+        <h3 className="font-editorial text-xl font-medium text-foreground transition-colors group-hover:text-[color:var(--primary)]">
+          {name}
+        </h3>
+        <div className="h-px flex-1 translate-y-[-0.3em] bg-border" />
+        <p className="label-caps shrink-0">
+          {decks.length} {decks.length === 1 ? "pack" : "packs"}
+          <span className="ml-2 inline-block transition-transform" aria-hidden>
+            {open ? "–" : "+"}
+          </span>
+        </p>
       </button>
 
       {open && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pl-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {decks.map((deck) => (
             <DeckCard
               key={deck.id}
