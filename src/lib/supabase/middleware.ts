@@ -42,10 +42,14 @@ export async function updateSession(request: NextRequest) {
   // Static-file paths the browser fetches on every page load (PWA manifest,
   // service worker, icons). Redirecting these to /auth/login would make the
   // browser try to parse the login HTML as JSON/JS and throw console errors.
+  //
+  // `/manifest.webmanifest` and `/icon`, `/apple-icon` are served by Next
+  // 16's app/manifest.ts + app/icon.tsx + app/apple-icon.tsx respectively.
   const publicStaticPaths = [
-    "/manifest.json",
+    "/manifest.webmanifest",
     "/sw.js",
-    "/icons/",
+    "/icon",
+    "/apple-icon",
     "/favicon.ico",
     "/robots.txt",
   ];

@@ -39,16 +39,15 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: APP_NAME,
   description: APP_DESCRIPTION,
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: APP_NAME,
   },
-  icons: {
-    icon: "/icons/icon-192.png",
-    apple: "/icons/apple-touch-icon.png",
-  },
+  // Intentionally no `manifest` or `icons` overrides: Next.js 16
+  // auto-discovers src/app/manifest.ts + src/app/icon.tsx +
+  // src/app/apple-icon.tsx and wires them up. Palette stays in sync
+  // with globals.css because all three are generated at build time.
 };
 
 export default function RootLayout({
