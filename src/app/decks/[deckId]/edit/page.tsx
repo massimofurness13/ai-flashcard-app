@@ -21,6 +21,15 @@ export default async function EditDeckPage({
     notFound();
   }
 
+  // First card doubles as a concrete front/back example next to the
+  // language pickers — much clearer than asking the user to remember
+  // which column they put which language in.
+  const firstCard = await prisma.card.findFirst({
+    where: { deckId },
+    orderBy: { position: "asc" },
+    select: { front: true, back: true },
+  });
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Edit Pack</h1>
@@ -37,6 +46,7 @@ export default async function EditDeckPage({
           frontLanguageCode: deck.frontLanguageCode,
           backLanguageCode: deck.backLanguageCode,
         }}
+        previewCard={firstCard}
       />
     </div>
   );

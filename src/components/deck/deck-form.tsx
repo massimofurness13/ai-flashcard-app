@@ -27,11 +27,20 @@ interface DeckFormProps {
     frontLanguageCode: string | null;
     backLanguageCode: string | null;
   };
+  /** An example card from this pack, shown next to the language pickers
+   *  so the user can see exactly which text is the front and which is the
+   *  back before setting the voice for each side. */
+  previewCard?: { front: string; back: string } | null;
 }
 
 const EMOJIS = ["\ud83d\udcda", "\ud83c\udf1f", "\ud83e\udde0", "\ud83d\udd2c", "\ud83c\udf0d", "\ud83c\udfa8", "\ud83d\udcbb", "\ud83c\udfb5", "\u2696\ufe0f", "\ud83d\udcac", "\ud83e\uddec", "\ud83d\udcc8"];
 
-export function DeckForm({ mode, initialData }: DeckFormProps) {
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "\u2026";
+}
+
+export function DeckForm({ mode, initialData, previewCard }: DeckFormProps) {
   const router = useRouter();
   const [name, setName] = useState(initialData?.name || "");
   const [description, setDescription] = useState(initialData?.description || "");
@@ -193,18 +202,54 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
       />
 
       {/* Language settings — drives which native-speaker voice plays for each side */}
-      <div className="space-y-3">
-        <label className="text-sm font-medium text-foreground">
-          Text-to-Speech language
-        </label>
-        <p className="text-xs text-muted-foreground -mt-2">
-          Pick a language for each side. We&apos;ll use a curated native-speaker
-          voice — Pro plans get our premium AI voice when available.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-foreground">
+            Text-to-Speech language
+          </label>
+          <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+            Pick a language for each side. We&apos;ll use a curated
+            native-speaker voice — Pro plans get our premium AI voice
+            when available.
+          </p>
+        </div>
+
+        {previewCard && (
+          <div className="rounded-lg border border-border bg-muted/40 p-3">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Example card from this pack
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase text-muted-foreground">
+                  Front
+                </p>
+                <p className="mt-0.5 text-sm font-medium truncate" title={previewCard.front}>
+                  {previewCard.front}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase text-muted-foreground">
+                  Back
+                </p>
+                <p className="mt-0.5 text-sm font-medium truncate" title={previewCard.back}>
+                  {previewCard.back}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
+            <label className="mb-1 block text-xs text-muted-foreground">
               Front language
+              {previewCard && (
+                <span className="text-muted-foreground/60">
+                  {" "}
+                  — voice for &ldquo;{truncate(previewCard.front, 18)}&rdquo;
+                </span>
+              )}
             </label>
             <select
               className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -220,8 +265,14 @@ export function DeckForm({ mode, initialData }: DeckFormProps) {
             </select>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
+            <label className="mb-1 block text-xs text-muted-foreground">
               Back language
+              {previewCard && (
+                <span className="text-muted-foreground/60">
+                  {" "}
+                  — voice for &ldquo;{truncate(previewCard.back, 18)}&rdquo;
+                </span>
+              )}
             </label>
             <select
               className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
