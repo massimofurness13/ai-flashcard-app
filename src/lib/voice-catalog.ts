@@ -67,12 +67,20 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     label: "English (Australia)",
     nativeLabel: "English (Australia)",
     google: { name: "en-AU-Neural2-A", languageCode: "en-AU" },
+    elevenlabs: {
+      voiceId: "IKne3meq5aSn9XLyUdCD", // Charlie — Australian male, casual
+      model: "eleven_multilingual_v2",
+    },
   },
   {
     code: "en-IN",
     label: "English (India)",
     nativeLabel: "English (India)",
     google: { name: "en-IN-Wavenet-A", languageCode: "en-IN" },
+    elevenlabs: {
+      voiceId: "JBFqnCBsd6RMkjVDRZzb", // George — British male, warm (closest to Indian-English register)
+      model: "eleven_multilingual_v2",
+    },
   },
 
   // ── Spanish (regional variants) ──────────────────────────────────────
@@ -81,6 +89,10 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     label: "Spanish (Spain)",
     nativeLabel: "Español (España)",
     google: { name: "es-ES-Neural2-A", languageCode: "es-ES" },
+    elevenlabs: {
+      voiceId: "ErXwobaYiN019PkySvjV", // Antoni — warm male, works well in Spanish
+      model: "eleven_multilingual_v2",
+    },
   },
   {
     code: "es-MX",
@@ -88,12 +100,20 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     nativeLabel: "Español (México)",
     // Google does not offer Neural2 for es-MX, only Wavenet/Standard.
     google: { name: "es-MX-Wavenet-A", languageCode: "es-MX" },
+    elevenlabs: {
+      voiceId: "AZnzlk1XvdvUeBnXmlld", // Domi — strong female
+      model: "eleven_multilingual_v2",
+    },
   },
   {
     code: "es-US",
     label: "Spanish (Latin America)",
     nativeLabel: "Español (Latinoamérica)",
     google: { name: "es-US-Neural2-A", languageCode: "es-US" },
+    elevenlabs: {
+      voiceId: "21m00Tcm4TlvDq8ikWAM", // Rachel — clear neutral female
+      model: "eleven_multilingual_v2",
+    },
   },
 
   // ── French ───────────────────────────────────────────────────────────
@@ -102,12 +122,20 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     label: "French (France)",
     nativeLabel: "Français (France)",
     google: { name: "fr-FR-Neural2-A", languageCode: "fr-FR" },
+    elevenlabs: {
+      voiceId: "MF3mGyEYCl7XYWbV9V6O", // Elli — young female, natural French pronunciation
+      model: "eleven_multilingual_v2",
+    },
   },
   {
     code: "fr-CA",
     label: "French (Canada)",
     nativeLabel: "Français (Canada)",
     google: { name: "fr-CA-Neural2-A", languageCode: "fr-CA" },
+    elevenlabs: {
+      voiceId: "TxGEqnHWrfWFTfGW9XjX", // Josh — young male
+      model: "eleven_multilingual_v2",
+    },
   },
 
   // ── German ───────────────────────────────────────────────────────────
@@ -116,6 +144,10 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     label: "German",
     nativeLabel: "Deutsch",
     google: { name: "de-DE-Neural2-A", languageCode: "de-DE" },
+    elevenlabs: {
+      voiceId: "VR6AewLTigWG4xSOukaG", // Arnold — crisp male, strong consonants suit German
+      model: "eleven_multilingual_v2",
+    },
   },
 
   // ── Italian ──────────────────────────────────────────────────────────
@@ -124,6 +156,10 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     label: "Italian",
     nativeLabel: "Italiano",
     google: { name: "it-IT-Neural2-A", languageCode: "it-IT" },
+    elevenlabs: {
+      voiceId: "piTKgcLEGmPE4e6mEKli", // Nicole — soft female, fluid in Italian
+      model: "eleven_multilingual_v2",
+    },
   },
 
   // ── Portuguese ───────────────────────────────────────────────────────
@@ -132,12 +168,20 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     label: "Portuguese (Brazil)",
     nativeLabel: "Português (Brasil)",
     google: { name: "pt-BR-Neural2-A", languageCode: "pt-BR" },
+    elevenlabs: {
+      voiceId: "pNInz6obpgDQGcFmaJgB", // Adam — deep male, suits Brazilian PT
+      model: "eleven_multilingual_v2",
+    },
   },
   {
     code: "pt-PT",
     label: "Portuguese (Portugal)",
     nativeLabel: "Português (Portugal)",
     google: { name: "pt-PT-Wavenet-A", languageCode: "pt-PT" },
+    elevenlabs: {
+      voiceId: "XrExE9yKIg1WjnnlVkGX", // Matilda — warm female
+      model: "eleven_multilingual_v2",
+    },
   },
 
   // ── Asian languages ──────────────────────────────────────────────────
@@ -166,6 +210,10 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     label: "Russian",
     nativeLabel: "Русский",
     google: { name: "ru-RU-Wavenet-C", languageCode: "ru-RU" },
+    elevenlabs: {
+      voiceId: "yoZ06aMxZJJ28mfd3POQ", // Sam — raspy male, works for Russian tone
+      model: "eleven_multilingual_v2",
+    },
   },
   {
     code: "ar-SA",
@@ -184,6 +232,10 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     label: "Dutch",
     nativeLabel: "Nederlands",
     google: { name: "nl-NL-Wavenet-D", languageCode: "nl-NL" },
+    elevenlabs: {
+      voiceId: "XB0fDUnXU5powFXDhCwa", // Charlotte — soft female
+      model: "eleven_multilingual_v2",
+    },
   },
 ];
 
