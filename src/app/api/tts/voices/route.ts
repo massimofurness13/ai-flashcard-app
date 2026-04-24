@@ -23,7 +23,6 @@ export async function GET(request: NextRequest) {
     commit: process.env.RENDER_GIT_COMMIT ?? "unknown",
     branch: process.env.RENDER_GIT_BRANCH ?? "unknown",
     googleConfigured: Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
-    elevenLabsConfigured: Boolean(process.env.ELEVENLABS_API_KEY),
   };
 
   try {

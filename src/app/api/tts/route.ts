@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
-import { isProUser } from "@/lib/subscription";
 import { getVoiceEntry } from "@/lib/voice-catalog";
 import { getOrCreateAudioUrl } from "@/lib/tts-server";
 
@@ -15,10 +14,9 @@ const RequestSchema = z.object({
  *   body: { text: string, languageCode: "es-MX" | ... }
  *   returns: { audioUrl: string } — public CDN URL of the MP3.
  *
- * Pro users get ElevenLabs Multilingual v2 when a curated voice exists
- * for the language; everyone else gets Google Cloud Neural2. Audio is
- * cached in Supabase Storage keyed by sha256(text+provider+voice), so
- * a given (text, voice) pair is generated once ever, shared across all
+ * Serves Google Cloud TTS (Chirp 3 HD with Neural2 / Wavenet fallback)
+ * from a Supabase Storage cache keyed by sha256(text + voice). A given
+ * (text, voice) pair is generated exactly once ever, shared across all
  * users of the product forever.
  */
 export async function POST(request: NextRequest) {
@@ -48,10 +46,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const isPro = await isProUser(auth.userId);
-
   try {
-    const audioUrl = await getOrCreateAudioUrl(parsed.data.text, entry, isPro);
+    const audioUrl = await getOrCreateAudioUrl(parsed.data.text, entry);
     return NextResponse.json({ audioUrl });
   } catch (err) {
     // Surface the real error in the response body so debugging doesn't
@@ -60,11 +56,7 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("TTS generation failed", err);
     return NextResponse.json(
-      {
-        error: "TTS generation failed",
-        detail: message,
-        provider: isPro ? "elevenlabs-or-google" : "google",
-      },
+      { error: "TTS generation failed", detail: message },
       { status: 502 }
     );
   }

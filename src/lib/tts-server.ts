@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import textToSpeech from "@google-cloud/text-to-speech";
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { resolveVoice, type VoiceEntry, type ResolvedVoice } from "./voice-catalog";
 
 // Audio uses a dedicated bucket because the card-images bucket has MIME
@@ -18,25 +17,21 @@ let bucketReady = false;
 /**
  * Cache architecture: hash (normalised text + provider + voice) → one blob,
  * shared across every user in the product. Once any user has triggered
- * generation for "Hola" with Google Spanish voice, every subsequent user
- * anywhere plays it for free from CDN.
+ * generation for "Hola" with a given voice, every subsequent user anywhere
+ * plays it for free from CDN.
  *
- * Why these specific inputs to the hash:
- *   - text: obviously
- *   - provider + voice: different voices produce different audio, must be
- *     in the key
- * Language code is implicit in the voice (Google voice "es-MX-Neural2-A"
- * encodes es-MX), so not included separately.
+ * Hash inputs:
+ *   - text (normalised)
+ *   - provider + voice name (different voices produce different audio)
+ * Language code is implicit in the voice (e.g. "es-MX-Chirp3-HD-Aoede"
+ * already encodes the locale), so not included separately.
  */
 function normaliseText(text: string): string {
   return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function cacheKey(text: string, voice: ResolvedVoice): string {
-  const voiceTag =
-    voice.provider === "elevenlabs"
-      ? `11l:${voice.voiceId}:${voice.model}`
-      : `gcp:${voice.voiceName}`;
+  const voiceTag = `gcp:${voice.voiceName}`;
   const input = `${normaliseText(text)}|${voiceTag}`;
   return crypto.createHash("sha256").update(input).digest("hex").slice(0, 32);
 }
@@ -134,11 +129,11 @@ async function generateGoogle(
     if (!response.audioContent) throw new Error("Google TTS returned no audio");
     return Buffer.from(response.audioContent as Uint8Array);
   } catch (err) {
-    // If our catalog has a stale voice name (Google retires voices
-    // occasionally, and regional variants have inconsistent tier support),
-    // retry without a specific voice — Google picks any available voice
-    // for the language. Prevents a single bad entry in the catalog from
-    // bricking an entire language.
+    // If our catalog references a voice this service account doesn't have
+    // access to (Google retires voices occasionally; Chirp 3 HD isn't
+    // offered for every locale), retry without a specific voice. Google
+    // picks any available voice for the language. Keeps a single stale
+    // catalog entry from bricking an entire language.
     const msg = err instanceof Error ? err.message : String(err);
     const isVoiceMissing = /does not exist|not found|INVALID_ARGUMENT/i.test(msg);
     if (!isVoiceMissing) throw err;
@@ -175,92 +170,28 @@ export async function listGoogleVoices(
   }));
 }
 
-// ── ElevenLabs ──────────────────────────────────────────────────────────
-
-let elevenClient: ElevenLabsClient | null = null;
-
-function getElevenClient() {
-  if (elevenClient) return elevenClient;
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) throw new Error("ELEVENLABS_API_KEY not configured");
-  elevenClient = new ElevenLabsClient({ apiKey });
-  return elevenClient;
-}
-
-async function generateEleven(
-  text: string,
-  voiceId: string,
-  model: string
-): Promise<Buffer> {
-  const client = getElevenClient();
-  // The SDK returns a web ReadableStream of audio chunks. We concatenate
-  // to a single Buffer for the Supabase upload.
-  const stream = await client.textToSpeech.convert(voiceId, {
-    text,
-    modelId: model,
-    outputFormat: "mp3_44100_128",
-  });
-  const chunks: Uint8Array[] = [];
-  const reader = stream.getReader();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) chunks.push(value);
-  }
-  const total = chunks.reduce((n, c) => n + c.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const c of chunks) {
-    out.set(c, offset);
-    offset += c.length;
-  }
-  return Buffer.from(out);
-}
-
 // ── Public API ──────────────────────────────────────────────────────────
 
 /**
- * Get or create the audio URL for `text` in the voice resolved from
- * `entry` + `isPro`. Returns a Supabase Storage public URL. Lazy:
- * generates on first call for a given (text, voice) pair, cached forever.
+ * Get or create the audio URL for `text` in the voice resolved for
+ * `entry`. Returns a Supabase Storage public URL. Lazy: generates on
+ * first call for a given (text, voice) pair, cached forever.
  */
 export async function getOrCreateAudioUrl(
   text: string,
-  entry: VoiceEntry,
-  isPro: boolean
+  entry: VoiceEntry
 ): Promise<string> {
-  // If the user is Pro but ELEVENLABS_API_KEY isn't configured, silently
-  // demote to Google rather than failing the whole request. Means Pro
-  // works the moment Google is set up, and ElevenLabs becomes a drop-in
-  // upgrade the moment the key lands in env.
-  const effectiveIsPro = isPro && Boolean(process.env.ELEVENLABS_API_KEY);
-  const voice = resolveVoice(entry, effectiveIsPro);
+  const voice = resolveVoice(entry);
   const hash = cacheKey(text, voice);
   const path = `${AUDIO_PREFIX}/${hash}.mp3`;
 
   if (await blobExists(path)) return publicUrl(path);
 
-  let mp3: Buffer;
-  if (voice.provider === "elevenlabs") {
-    try {
-      mp3 = await generateEleven(text, voice.voiceId, voice.model);
-    } catch (err) {
-      // If ElevenLabs errors at runtime (quota, network, voice ID removed)
-      // fall back to Google. The premium experience is degraded rather
-      // than absent — better than the user hearing nothing.
-      console.warn(
-        `ElevenLabs failed for ${entry.code}, falling back to Google:`,
-        err instanceof Error ? err.message : err
-      );
-      mp3 = await generateGoogle(
-        text,
-        entry.google.name,
-        entry.google.languageCode
-      );
-    }
-  } else {
-    mp3 = await generateGoogle(text, voice.voiceName, voice.languageCode);
-  }
+  const mp3 = await generateGoogle(
+    text,
+    voice.voiceName,
+    voice.languageCode
+  );
 
   return uploadAudio(path, mp3);
 }
