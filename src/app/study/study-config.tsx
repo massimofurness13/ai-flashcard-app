@@ -38,6 +38,48 @@ interface StudyConfigProps {
 // Used only for the pre-session time estimate on the CTA — not exact.
 const SECONDS_PER_CARD = 12;
 
+// Shared localStorage key with the account-settings page. Each field
+// is nullable — missing fields fall through to hardcoded defaults.
+const SETTINGS_KEY = "flashmind-settings";
+
+interface PersistedDefaults {
+  defaultCards?: number;
+  defaultAutoFlip?: number;
+  defaultAutoAdvance?: number;
+  defaultOrientation?: "front" | "back" | "mixed";
+}
+
+/**
+ * Read the persisted study defaults. Safe to call during SSR — returns
+ * an empty object server-side, full values client-side.
+ */
+function readDefaults(): PersistedDefaults {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as PersistedDefaults;
+  } catch {
+    return {};
+  }
+}
+
+/** Merge a partial patch into the existing settings blob. */
+function writeDefaults(patch: PersistedDefaults): void {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = JSON.parse(
+      localStorage.getItem(SETTINGS_KEY) || "{}"
+    ) as PersistedDefaults;
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ ...existing, ...patch })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 type RecencyPreset = "7" | "30" | "all" | "none";
 
 const RECENCY_PRESETS: { key: RecencyPreset; label: string }[] = [
@@ -79,12 +121,63 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
       : decks.map((d) => d.id)
   );
   const [filter, setFilter] = useState<StudyFilter>(preselectedFilter || "due");
+  // Start with hardcoded defaults to stay SSR-safe — the useEffect
+  // below hydrates with localStorage values on the client. A brief
+  // flash of defaults is acceptable since the session-settings card
+  // sits below the fold on most screens.
   const [cardsPerSession, setCardsPerSession] = useState(25);
   const [customCards, setCustomCards] = useState("");
   const [isCustomCards, setIsCustomCards] = useState(false);
   const [autoFlip, setAutoFlip] = useState(0);
   const [autoAdvance, setAutoAdvance] = useState(0);
   const [orientation, setOrientation] = useState<"front" | "back" | "mixed">("front");
+
+  // Hydrate session-settings from localStorage on mount. URL params
+  // win over saved defaults for this visit (e.g. home page sends
+  // `?limit=12` for "cards left in daily goal"), but don't overwrite
+  // the saved defaults — the user would be surprised if a contextual
+  // home-page nudge permanently changed their preference.
+  useEffect(() => {
+    const d = readDefaults();
+    const urlLimit = searchParams.get("limit");
+
+    if (urlLimit) {
+      const parsed = parseInt(urlLimit, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        setCardsPerSession(parsed);
+        if (
+          !(CARDS_PER_SESSION_OPTIONS as readonly number[]).includes(parsed)
+        ) {
+          setCustomCards(String(parsed));
+          setIsCustomCards(true);
+        }
+      }
+    } else if (typeof d.defaultCards === "number") {
+      setCardsPerSession(d.defaultCards);
+      if (
+        !(CARDS_PER_SESSION_OPTIONS as readonly number[]).includes(
+          d.defaultCards
+        )
+      ) {
+        setCustomCards(String(d.defaultCards));
+        setIsCustomCards(true);
+      }
+    }
+
+    if (typeof d.defaultAutoFlip === "number") setAutoFlip(d.defaultAutoFlip);
+    if (typeof d.defaultAutoAdvance === "number")
+      setAutoAdvance(d.defaultAutoAdvance);
+    if (
+      d.defaultOrientation === "front" ||
+      d.defaultOrientation === "back" ||
+      d.defaultOrientation === "mixed"
+    ) {
+      setOrientation(d.defaultOrientation);
+    }
+    // Intentional: only run once on mount. searchParams listening here
+    // would re-hydrate mid-edit and stomp the user's choices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [availableTags, setAvailableTags] = useState<{ name: string; count: number }[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>(() => {
     const param = searchParams.get("tags");
@@ -324,6 +417,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
                     setCardsPerSession(n);
                     setIsCustomCards(false);
                     setCustomCards("");
+                    writeDefaults({ defaultCards: n });
                   }}
                 >
                   {n}
@@ -340,6 +434,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
                   if (num > 0) {
                     setCardsPerSession(num);
                     setIsCustomCards(true);
+                    writeDefaults({ defaultCards: num });
                   }
                 }}
                 className="w-24 h-8 text-sm"
@@ -360,7 +455,11 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
                 max={AUTO_FLIP_MAX}
                 step={0.1}
                 value={autoFlip}
-                onChange={(e) => setAutoFlip(parseFloat(e.target.value))}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setAutoFlip(v);
+                  writeDefaults({ defaultAutoFlip: v });
+                }}
                 className="w-full"
               />
               <span className="text-xs text-muted-foreground">{AUTO_FLIP_MAX}s</span>
@@ -379,7 +478,11 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
                 max={AUTO_FLIP_MAX}
                 step={0.1}
                 value={autoAdvance}
-                onChange={(e) => setAutoAdvance(parseFloat(e.target.value))}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setAutoAdvance(v);
+                  writeDefaults({ defaultAutoAdvance: v });
+                }}
                 className="w-full"
               />
               <span className="text-xs text-muted-foreground">{AUTO_FLIP_MAX}s</span>
@@ -399,7 +502,11 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
                   key={opt.value}
                   variant={orientation === opt.value ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setOrientation(opt.value as typeof orientation)}
+                  onClick={() => {
+                    const v = opt.value as typeof orientation;
+                    setOrientation(v);
+                    writeDefaults({ defaultOrientation: v });
+                  }}
                 >
                   {opt.label}
                 </Button>
