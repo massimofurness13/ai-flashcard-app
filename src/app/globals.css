@@ -171,7 +171,11 @@ body.font-xlarge { font-size: 20px; }
 }
 
 .flashcard-deal-out {
-  animation: card-deal-out 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  /* Matches DEAL_OUT_MS in study-session.tsx (200ms). Keep these in
+   * sync — if the animation is longer than the setTimeout, the user
+   * sees the card re-enter mid-slide. Shorter, and the slide gets
+   * cut off. */
+  animation: card-deal-out 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes card-enter {

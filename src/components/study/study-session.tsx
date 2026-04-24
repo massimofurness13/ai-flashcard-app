@@ -46,7 +46,9 @@ export interface StudyStats {
   ratings: Record<number, number>;
 }
 
-const DEAL_OUT_MS = 350;
+// Shorter deal-out animation keeps the session feeling fast. Longer
+// than this reads as sluggish; shorter than ~150ms reads as a glitch.
+const DEAL_OUT_MS = 200;
 
 export function StudySession({
   initialCards,
@@ -96,15 +98,15 @@ export function StudySession({
     [cards, currentIndex]
   );
 
-  // Warm the server-side TTS cache for upcoming cards — same idea as the
-  // image preloader. Emit one preload item per side (front + back) so
-  // both directions are warm by the time the user flips.
+  // Warm both the URL cache and the browser MP3 cache for the CURRENT
+  // card and the next couple. Including the current card matters for
+  // the first card of a session — otherwise the user hits the slow
+  // network path on card #1 before the preloader has caught up.
+  // After that, ref-based dedupe inside VoicePreloader means we only
+  // fetch each pair once.
   const upcomingVoiceItems = useMemo<VoicePreloadItem[]>(() => {
     const items: VoicePreloadItem[] = [];
-    const slice = cards.slice(
-      currentIndex + 1,
-      currentIndex + 1 + VOICE_PRELOAD_AHEAD
-    );
+    const slice = cards.slice(currentIndex, currentIndex + VOICE_PRELOAD_AHEAD + 1);
     for (const c of slice) {
       if (c.deck.frontLanguageCode && c.front) {
         items.push({ text: c.front, languageCode: c.deck.frontLanguageCode });
