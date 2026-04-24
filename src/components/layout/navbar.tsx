@@ -93,8 +93,14 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-xl font-bold text-primary">{APP_NAME}</span>
+        <Link href="/" className="group flex items-center" aria-label={APP_NAME}>
+          {/* Wordmark — "Flash" in italic honey gold, "Mind" in roman.
+           * The italic-on-roman contrast in a single serif face is the
+           * whole brand signature. Resist the urge to dress it up. */}
+          <span className="font-editorial text-xl leading-none tracking-tight sm:text-2xl">
+            <span className="italic text-[color:var(--primary)]">Flash</span>
+            <span className="text-foreground">Mind</span>
+          </span>
         </Link>
 
         {user && (
