@@ -7,8 +7,14 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useKeyboardNav } from "@/hooks/use-keyboard-nav";
 import { ImagePreloader } from "./image-preloader";
+import { VoicePreloader, type VoicePreloadItem } from "./voice-preloader";
 
 const PRELOAD_AHEAD = 5;
+// Voice preload window is tighter than image preload (3 vs 5) because
+// each TTS call costs real money on first generation — we want to warm
+// only the cards the user is very likely to reach. Once cached, they're
+// free forever so this only matters for brand-new content.
+const VOICE_PRELOAD_AHEAD = 3;
 
 interface Card {
   id: string;
@@ -89,6 +95,26 @@ export function StudySession({
         .map((c) => c.imageUrl),
     [cards, currentIndex]
   );
+
+  // Warm the server-side TTS cache for upcoming cards — same idea as the
+  // image preloader. Emit one preload item per side (front + back) so
+  // both directions are warm by the time the user flips.
+  const upcomingVoiceItems = useMemo<VoicePreloadItem[]>(() => {
+    const items: VoicePreloadItem[] = [];
+    const slice = cards.slice(
+      currentIndex + 1,
+      currentIndex + 1 + VOICE_PRELOAD_AHEAD
+    );
+    for (const c of slice) {
+      if (c.deck.frontLanguageCode && c.front) {
+        items.push({ text: c.front, languageCode: c.deck.frontLanguageCode });
+      }
+      if (c.deck.backLanguageCode && c.back) {
+        items.push({ text: c.back, languageCode: c.deck.backLanguageCode });
+      }
+    }
+    return items;
+  }, [cards, currentIndex]);
 
   // Auto-flip timer
   useEffect(() => {
@@ -197,6 +223,7 @@ export function StudySession({
   return (
     <div className="space-y-6">
       <ImagePreloader urls={upcomingImageUrls} />
+      <VoicePreloader items={upcomingVoiceItems} />
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
           {currentCard.deck.emoji} {currentCard.deck.name}
