@@ -54,9 +54,17 @@ export async function POST(request: NextRequest) {
     const audioUrl = await getOrCreateAudioUrl(parsed.data.text, entry, isPro);
     return NextResponse.json({ audioUrl });
   } catch (err) {
+    // Surface the real error in the response body so debugging doesn't
+    // require SSH-ing into Render logs every time. The client falls back
+    // to Web Speech on any non-200, so exposing this doesn't break UX.
+    const message = err instanceof Error ? err.message : String(err);
     console.error("TTS generation failed", err);
     return NextResponse.json(
-      { error: "TTS generation failed" },
+      {
+        error: "TTS generation failed",
+        detail: message,
+        provider: isPro ? "elevenlabs-or-google" : "google",
+      },
       { status: 502 }
     );
   }

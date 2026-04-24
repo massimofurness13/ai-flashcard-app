@@ -26,8 +26,6 @@ export default function AccountPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState("");
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [defaultCards, setDefaultCards] = useState(10);
   const [customCards, setCustomCards] = useState("");
@@ -45,19 +43,10 @@ export default function AccountPage() {
       setUser(user);
     });
 
-    // Load TTS voices
-    function loadVoices() {
-      const v = window.speechSynthesis?.getVoices() || [];
-      setVoices(v);
-    }
-    loadVoices();
-    window.speechSynthesis?.addEventListener("voiceschanged", loadVoices);
-
     // Load saved settings from localStorage
     const saved = localStorage.getItem("flashmind-settings");
     if (saved) {
       const settings = JSON.parse(saved);
-      setSelectedVoice(settings.voice || "");
       setTtsSpeed(settings.ttsSpeed || 1);
       setDefaultCards(settings.defaultCards || 10);
       setDefaultAutoFlip(settings.defaultAutoFlip || 0);
@@ -67,17 +56,12 @@ export default function AccountPage() {
         applyFontSize(settings.fontSize);
       }
     }
-
-    return () => {
-      window.speechSynthesis?.removeEventListener("voiceschanged", loadVoices);
-    };
   }, []);
 
   function saveSettings() {
     localStorage.setItem(
       "flashmind-settings",
       JSON.stringify({
-        voice: selectedVoice,
         ttsSpeed,
         defaultCards,
         defaultAutoFlip,
@@ -99,7 +83,6 @@ export default function AccountPage() {
     localStorage.setItem(
       "flashmind-settings",
       JSON.stringify({
-        voice: selectedVoice,
         ttsSpeed,
         defaultCards,
         defaultAutoFlip,
@@ -112,10 +95,10 @@ export default function AccountPage() {
   function testVoice() {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance("This is a test of the text to speech voice.");
+    const utterance = new SpeechSynthesisUtterance(
+      "This is a sample at the current playback speed."
+    );
     utterance.rate = ttsSpeed;
-    const voice = voices.find((v) => v.name === selectedVoice);
-    if (voice) utterance.voice = voice;
     window.speechSynthesis.speak(utterance);
   }
 
@@ -309,30 +292,20 @@ export default function AccountPage() {
         </CardContent>
       </Card>
 
-      {/* TTS Settings */}
+      {/* TTS Settings — voices are now set per-pack (front & back language
+          on each Pack's Edit page), so this section only hosts the global
+          speed slider that applies across every pack. */}
       <Card>
         <CardHeader>
           <CardTitle>Text-to-Speech</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium mb-2 block">Voice</label>
-            <select
-              className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              value={selectedVoice}
-              onChange={(e) => {
-                setSelectedVoice(e.target.value);
-                saveSettings();
-              }}
-            >
-              <option value="">Default</option>
-              {voices.map((v) => (
-                <option key={v.name} value={v.name}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
-            </select>
-          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Voices are configured per pack. Open any pack → Edit Pack and set
+            the <strong>Front language</strong> and <strong>Back language</strong>{" "}
+            there — we&apos;ll use the right native-speaker voice for each side
+            automatically.
+          </p>
 
           <div>
             <label className="text-sm font-medium mb-2 block">
@@ -350,10 +323,13 @@ export default function AccountPage() {
               }}
               className="w-full"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Applies across all packs, for both cloud and device voices.
+            </p>
           </div>
 
           <Button variant="outline" onClick={testVoice}>
-            Test Voice
+            Test speed with a sample
           </Button>
         </CardContent>
       </Card>
