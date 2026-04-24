@@ -1,9 +1,9 @@
 import { ImageResponse } from "next/og";
 
-// Apple-touch-icon — shown when the PWA is added to the iOS home screen
-// and in older Safari tabs. Uses the same warm palette as the standard
-// icon but with slightly different proportions so the F reads on the
-// smaller iOS grid tile.
+// Apple touch icon — same line-art lightning bolt as icon.tsx, sized
+// at 180×180 for the iOS home-screen tile. Proportions nudged slightly
+// so the bolt feels anchored at smaller size (iOS tiles have larger
+// padding than favicons).
 
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
@@ -20,23 +20,24 @@ export default function AppleIcon() {
           alignItems: "center",
           justifyContent: "center",
           backgroundImage:
-            "radial-gradient(circle at 30% 20%, rgba(212, 163, 115, 0.35), transparent 55%)",
+            "radial-gradient(circle at 50% 50%, rgba(212, 163, 115, 0.28), transparent 55%)",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            fontFamily: "Georgia, 'Times New Roman', serif",
-            fontSize: 135,
-            fontStyle: "italic",
-            fontWeight: 500,
-            color: "#d4a373",
-            marginLeft: -8,
-            lineHeight: 1,
-          }}
+        <svg
+          width="130"
+          height="130"
+          viewBox="0 0 100 100"
+          style={{ display: "flex" }}
         >
-          F
-        </div>
+          <path
+            d="M 62 12 L 24 56 L 44 56 L 28 88 L 70 44 L 50 44 Z"
+            fill="none"
+            stroke="#d4a373"
+            strokeWidth="3"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        </svg>
       </div>
     ),
     size
