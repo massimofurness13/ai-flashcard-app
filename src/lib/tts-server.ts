@@ -92,13 +92,35 @@ async function generateGoogle(
   languageCode: string
 ): Promise<Buffer> {
   const client = getGoogleClient();
-  const [response] = await client.synthesizeSpeech({
-    input: { text },
-    voice: { languageCode, name: voiceName },
-    audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
-  });
-  if (!response.audioContent) throw new Error("Google TTS returned no audio");
-  return Buffer.from(response.audioContent as Uint8Array);
+  try {
+    const [response] = await client.synthesizeSpeech({
+      input: { text },
+      voice: { languageCode, name: voiceName },
+      audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
+    });
+    if (!response.audioContent) throw new Error("Google TTS returned no audio");
+    return Buffer.from(response.audioContent as Uint8Array);
+  } catch (err) {
+    // If our catalog has a stale voice name (Google retires voices
+    // occasionally, and regional variants have inconsistent tier support),
+    // retry without a specific voice — Google picks any available voice
+    // for the language. Prevents a single bad entry in the catalog from
+    // bricking an entire language.
+    const msg = err instanceof Error ? err.message : String(err);
+    const isVoiceMissing = /does not exist|not found|INVALID_ARGUMENT/i.test(msg);
+    if (!isVoiceMissing) throw err;
+
+    console.warn(
+      `Google TTS voice "${voiceName}" unavailable; falling back to default voice for ${languageCode}`
+    );
+    const [response] = await client.synthesizeSpeech({
+      input: { text },
+      voice: { languageCode },
+      audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
+    });
+    if (!response.audioContent) throw new Error("Google TTS returned no audio");
+    return Buffer.from(response.audioContent as Uint8Array);
+  }
 }
 
 // ── ElevenLabs ──────────────────────────────────────────────────────────

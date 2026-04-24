@@ -72,7 +72,7 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     code: "en-IN",
     label: "English (India)",
     nativeLabel: "English (India)",
-    google: { name: "en-IN-Neural2-A", languageCode: "en-IN" },
+    google: { name: "en-IN-Wavenet-A", languageCode: "en-IN" },
   },
 
   // ── Spanish (regional variants) ──────────────────────────────────────
@@ -86,7 +86,8 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     code: "es-MX",
     label: "Spanish (Mexico)",
     nativeLabel: "Español (México)",
-    google: { name: "es-MX-Neural2-A", languageCode: "es-MX" },
+    // Google does not offer Neural2 for es-MX, only Wavenet/Standard.
+    google: { name: "es-MX-Wavenet-A", languageCode: "es-MX" },
   },
   {
     code: "es-US",
@@ -176,7 +177,7 @@ export const VOICE_CATALOG: VoiceEntry[] = [
     code: "hi-IN",
     label: "Hindi",
     nativeLabel: "हिन्दी",
-    google: { name: "hi-IN-Neural2-A", languageCode: "hi-IN" },
+    google: { name: "hi-IN-Wavenet-A", languageCode: "hi-IN" },
   },
   {
     code: "nl-NL",
