@@ -167,8 +167,8 @@ export function ImageQuotaCard() {
               free credits to try AI images.
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Upgrade to Pro for 750 AI image credits every month — up to 750
-              Quick ✨ images or 150 Premium 🎨 images, plus unlimited AI text
+              Upgrade to Pro for 500 AI image credits every month — up to 500
+              Quick ✨ images or 100 Premium 🎨 images, plus unlimited AI text
               generation and Anki import/export.
             </p>
             <Button

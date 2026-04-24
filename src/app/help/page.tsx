@@ -16,7 +16,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "How do the AI image credits work?",
-    a: "Every card can have a generated image. Quick (FLUX schnell) costs 1 credit, Premium (FLUX dev) costs 5 credits. Free accounts get 15 lifetime credits. Pro gets 750 credits every month plus any top-ups you buy — purchased credits never expire.",
+    a: "Every card can have a generated image. Quick (FLUX schnell) costs 1 credit, Premium (FLUX dev) costs 5 credits. Free accounts get 15 lifetime credits. Pro gets 500 credits every month plus any top-ups you buy — purchased credits never expire.",
   },
   {
     q: "Why do cards sometimes show the back first?",

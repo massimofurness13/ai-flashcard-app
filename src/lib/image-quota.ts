@@ -8,8 +8,8 @@ import type { ImageTier } from "@/lib/image-gen";
  *   Premium 🎨 = 5 credits (FLUX dev, $0.025 cost)
  *
  * Free tier: 15 lifetime credits (= 15 Quick or 3 Premium) to try the feature
- * Pro tier:  750 credits per month, refreshes on Stripe billing cycle
- *            (worst case 150 Premium images = $3.75 cost, always profitable)
+ * Pro tier:  500 credits per month, refreshes on Stripe billing cycle
+ *            (worst case 100 Premium images = $2.50 cost, always profitable)
  * Top-ups:   Purchased credits stack on top of monthly, never expire
  *
  * Order of consumption: monthly allowance first, then purchased credits,
@@ -17,7 +17,7 @@ import type { ImageTier } from "@/lib/image-gen";
  */
 
 export const FREE_LIFETIME_CREDITS = 15;
-export const PRO_MONTHLY_CREDITS = 750;
+export const PRO_MONTHLY_CREDITS = 500;
 
 export const TIER_COSTS: Record<ImageTier, number> = {
   quick: 1,
