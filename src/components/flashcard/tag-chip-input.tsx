@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface TagChipInputProps {
   /** Comma-separated tag string, same shape as Card.tags */
@@ -33,12 +33,19 @@ export function TagChipInput({
   placeholder = "Add tag…",
 }: TagChipInputProps) {
   const [input, setInput] = useState("");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const tags = parse(value);
+  // Memoised parse so the array reference is stable across renders.
+  // Previously this was a fresh `parse(value)` call on every render —
+  // when used as a useEffect dependency it created an infinite render
+  // loop (every render → new array ref → effect re-runs → setState →
+  // re-render → new array ref again). The thrash was severe enough
+  // that the Next.js client router silently dropped navigation
+  // events, making the navbar feel completely unresponsive on any
+  // page that mounted this component.
+  const tags = useMemo(() => parse(value), [value]);
 
   // Fetch the user's existing tag list once on mount for autocomplete.
   useEffect(() => {
@@ -50,21 +57,17 @@ export function TagChipInput({
       .catch(() => setAllTags([]));
   }, []);
 
-  // Recompute suggestions whenever input or existing tags change.
-  useEffect(() => {
+  // Recompute suggestions during render via useMemo — no setState in
+  // an effect needed, no risk of feedback loops. The result is
+  // deterministic from the inputs, so memoising is the correct shape.
+  const suggestions = useMemo(() => {
     const trimmed = input.trim().toLowerCase();
-    if (!trimmed) {
-      setSuggestions([]);
-      return;
-    }
-    const matches = allTags
+    if (!trimmed) return [];
+    return allTags
       .filter(
-        (t) =>
-          t.toLowerCase().includes(trimmed) &&
-          !tags.includes(t)
+        (t) => t.toLowerCase().includes(trimmed) && !tags.includes(t)
       )
       .slice(0, 6);
-    setSuggestions(matches);
   }, [input, allTags, tags]);
 
   function addTag(tag: string) {
