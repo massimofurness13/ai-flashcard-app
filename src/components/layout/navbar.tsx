@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { APP_NAME } from "@/lib/constants";
 import { ThemeToggle } from "./theme-toggle";
@@ -54,6 +54,26 @@ export function Navbar() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Document-level outside-click handler — replaces the old fixed-
+  // overlay pattern that could cover the nav items at z-40.
+  // Each Link inside the dropdown also calls setShowDropdown(false)
+  // explicitly, so a successful click on a menu item closes it
+  // before navigation happens.
+  useEffect(() => {
+    if (!showDropdown) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showDropdown]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -148,12 +168,13 @@ export function Navbar() {
             </div>
           )}
           {user && (
-            <div className="relative">
+            <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-primary/10 transition-colors"
               >
                 {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={avatarUrl}
                     alt={displayName}
@@ -169,41 +190,39 @@ export function Navbar() {
                 </span>
               </button>
 
+              {/* No more fixed-inset overlay. Outside-click is handled
+               * by the document-level mousedown listener above —
+               * keeps the rest of the navbar (and the page!) clickable
+               * the whole time the dropdown is open. */}
               {showDropdown && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowDropdown(false)}
-                  />
-                  <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-border bg-background shadow-lg py-1">
-                    <div className="px-3 py-2 border-b border-border">
-                      <p className="text-sm font-medium truncate">{displayName}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {user.email}
-                      </p>
-                    </div>
-                    <Link
-                      href="/account"
-                      onClick={() => setShowDropdown(false)}
-                      className="block px-3 py-2 text-sm hover:bg-primary/10 transition-colors"
-                    >
-                      Settings
-                    </Link>
-                    <Link
-                      href="/archive"
-                      onClick={() => setShowDropdown(false)}
-                      className="block px-3 py-2 text-sm hover:bg-primary/10 transition-colors"
-                    >
-                      Archived Packs
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-primary/10 transition-colors"
-                    >
-                      Sign Out
-                    </button>
+                <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-border bg-background shadow-lg py-1">
+                  <div className="px-3 py-2 border-b border-border">
+                    <p className="text-sm font-medium truncate">{displayName}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {user.email}
+                    </p>
                   </div>
-                </>
+                  <Link
+                    href="/account"
+                    onClick={() => setShowDropdown(false)}
+                    className="block px-3 py-2 text-sm hover:bg-primary/10 transition-colors"
+                  >
+                    Settings
+                  </Link>
+                  <Link
+                    href="/archive"
+                    onClick={() => setShowDropdown(false)}
+                    className="block px-3 py-2 text-sm hover:bg-primary/10 transition-colors"
+                  >
+                    Archived Packs
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-primary/10 transition-colors"
+                  >
+                    Sign Out
+                  </button>
+                </div>
               )}
             </div>
           )}

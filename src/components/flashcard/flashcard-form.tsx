@@ -32,6 +32,11 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
   const [imageUrl, setImageUrl] = useState(initialData?.imageUrl || "");
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Visible save outcome — replaces the silent failure mode where a
+  // non-OK API response would just turn the spinner off and leave the
+  // user wondering whether anything happened.
+  const [saveError, setSaveError] = useState("");
+  const [savedConfirm, setSavedConfirm] = useState(false);
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -62,6 +67,8 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setSaveError("");
+    setSavedConfirm(false);
 
     const url =
       mode === "edit"
@@ -69,31 +76,50 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
         : `/api/decks/${deckId}/cards`;
     const method = mode === "edit" ? "PATCH" : "POST";
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        front: front.trim(),
-        back: back.trim(),
-        hint: hint.trim() || null,
-        tags: tags.trim() || null,
-        imageUrl: imageUrl || null,
-      }),
-    });
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          front: front.trim(),
+          back: back.trim(),
+          hint: hint.trim() || null,
+          tags: tags.trim() || null,
+          imageUrl: imageUrl || null,
+        }),
+      });
 
-    if (res.ok) {
-      router.push(`/decks/${deckId}`);
+      if (!res.ok) {
+        let msg = "Save failed. Please try again.";
+        try {
+          const data = await res.json();
+          if (data?.error) msg = data.error;
+        } catch {
+          // body wasn't JSON — fall through to generic message
+        }
+        setSaveError(msg);
+        setSaving(false);
+        return;
+      }
+
+      // Order matters: refresh the server cache for the deck view
+      // FIRST so when we land there it shows the just-saved card,
+      // then push the navigation. router.refresh is a no-op on the
+      // current page; the actual reload happens on the destination.
+      setSavedConfirm(true);
       router.refresh();
+      router.push(`/decks/${deckId}`);
+    } catch {
+      setSaveError("Network error. Please try again.");
+      setSaving(false);
     }
-
-    setSaving(false);
   }
 
   async function handleDelete() {
     if (!confirm("Delete this card?")) return;
     await fetch(`/api/cards/${initialData?.id}`, { method: "DELETE" });
-    router.push(`/decks/${deckId}`);
     router.refresh();
+    router.push(`/decks/${deckId}`);
   }
 
   return (
@@ -128,25 +154,54 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
 
       <TagChipInput value={tags} onChange={setTags} />
 
-      {/* Image Upload + AI Generation */}
+      {/* Card image. Three states:
+       *   - imageUrl set → preview + remove + Quick/Premium regen
+       *   - imageUrl empty + uploading → spinner inside upload tile
+       *   - imageUrl empty → upload tile + Quick/Premium generate
+       *
+       * Crucially the regen buttons are now visible in BOTH the
+       * has-image and empty states. Previously they were only shown
+       * when the card had no image, so a user with a generated image
+       * had no way to ask for a different one without first removing
+       * what they had. */}
       <div>
         <label className="text-sm font-medium mb-2 block">
           Card Image (optional)
         </label>
+
         {imageUrl ? (
-          <div className="relative inline-block">
-            <img
-              src={imageUrl}
-              alt="Card image"
-              className="w-40 h-40 object-cover rounded-lg border border-border"
-            />
-            <button
-              type="button"
-              onClick={() => setImageUrl("")}
-              className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold hover:opacity-80"
-            >
-              X
-            </button>
+          <div className="space-y-3">
+            <div className="relative inline-block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imageUrl}
+                alt="Card image"
+                className="w-40 h-40 object-cover rounded-lg border border-border"
+              />
+              <button
+                type="button"
+                onClick={() => setImageUrl("")}
+                className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold hover:opacity-80"
+                aria-label="Remove image"
+              >
+                X
+              </button>
+            </div>
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Replace with AI
+              </p>
+              {/* AiImageGenerator already handles its own quota dialog
+               * + tier picker; just feed it the current text + a
+               * callback that swaps the imageUrl in place. */}
+              <AiImageGenerator
+                front={front}
+                back={back}
+                currentImageUrl={imageUrl}
+                onImageGenerated={(url) => setImageUrl(url)}
+                isPro={isPro}
+              />
+            </div>
           </div>
         ) : (
           <div className="flex gap-3 items-start">
@@ -186,7 +241,16 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
         />
       </div>
 
-      <div className="flex gap-3">
+      {saveError && (
+        <p className="text-sm text-destructive">{saveError}</p>
+      )}
+      {savedConfirm && !saveError && (
+        <p className="text-sm text-[color:var(--glow)]">
+          Saved — taking you back to the pack…
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={!front.trim() || !back.trim() || saving}>
           {saving
             ? "Saving..."
@@ -201,23 +265,30 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
             disabled={!front.trim() || !back.trim() || saving}
             onClick={async () => {
               setSaving(true);
-              const res = await fetch(`/api/decks/${deckId}/cards`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  front: front.trim(),
-                  back: back.trim(),
-                  hint: hint.trim() || null,
-                  tags: tags.trim() || null,
-                  imageUrl: imageUrl || null,
-                }),
-              });
-              if (res.ok) {
-                setFront("");
-                setBack("");
-                setHint("");
-                setTags("");
-                setImageUrl("");
+              setSaveError("");
+              try {
+                const res = await fetch(`/api/decks/${deckId}/cards`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    front: front.trim(),
+                    back: back.trim(),
+                    hint: hint.trim() || null,
+                    tags: tags.trim() || null,
+                    imageUrl: imageUrl || null,
+                  }),
+                });
+                if (res.ok) {
+                  setFront("");
+                  setBack("");
+                  setHint("");
+                  setTags("");
+                  setImageUrl("");
+                } else {
+                  setSaveError("Save failed. Please try again.");
+                }
+              } catch {
+                setSaveError("Network error. Please try again.");
               }
               setSaving(false);
             }}
