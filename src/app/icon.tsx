@@ -1,26 +1,30 @@
 import { ImageResponse } from "next/og";
 
-// App icon — hand-traced clone of the line-art lightning bolt from
-// round-3 option F. Pure vector: thin warm-gold outline stroke on warm
-// near-black with an ambient glow. Crisp at every size (16×16 favicon
-// through 512×512 app icon) because it's strokes, not a rasterised
-// generation with AI-upscale blur.
+// App icon — bold solid lightning bolt that survives 16×16 favicon
+// rendering. The previous version was a thin outline stroke at 2.5
+// units in a 100-unit viewBox, which downscales to roughly 0.4 px at
+// favicon size — invisible. This version uses a FILLED bolt sized
+// almost edge-to-edge, so even at favicon scale it reads as a clear
+// silhouette.
 //
-// Path geometry:
-//   (62,12)  top point (slightly right of centre)
-//   ↓ diagonal down-left
-//   (24,56)  middle-left notch
-//   → short horizontal step
-//   (44,56)  inner notch
-//   ↓ diagonal down-left again
-//   (28,88)  bottom point (slightly left of centre)
-//   ↗ diagonal up-right — the "bounce"
-//   (70,44)  middle-right notch
-//   ← short horizontal step
-//   (50,44)  inner notch
-//   Z        close back to top
-// All in a 100×100 viewBox; stroke width of 2.5 gives the same thin
-// neon feel as the FLUX reference without any rasterisation artefacts.
+// Path geometry (filled, 100×100 viewBox, padded ~6 units from each
+// edge so the shape never touches the rounded corners):
+//   (60, 6)   top-right starting point
+//   ↓ steep diagonal to the middle-left notch
+//   (16, 52)
+//   →
+//   (40, 52)
+//   ↓ second diagonal segment to the bottom point
+//   (32, 94)
+//   ↗ "bounce" back up to the middle-right notch
+//   (84, 44)
+//   ←
+//   (56, 44)
+//   close back up to the top
+// The result is a chunky bolt, no inner negative space — exactly what
+// shows clearly at 16×16. A 2-unit dark stroke around the perimeter
+// keeps the silhouette crisp against light backgrounds (dark mode tab
+// vs. light mode tab — the warm near-black ring works on both).
 
 export const size = { width: 512, height: 512 };
 export const contentType = "image/png";
@@ -36,24 +40,23 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          // Soft warm glow behind the bolt — gives the same atmospheric
-          // depth the FLUX reference had without needing SVG filters
-          // (Satori doesn't support feGaussianBlur).
+          // Soft warm halo behind the bolt — gives the icon depth
+          // without fighting the silhouette at small sizes.
           backgroundImage:
-            "radial-gradient(circle at 50% 50%, rgba(212, 163, 115, 0.28), transparent 55%)",
+            "radial-gradient(circle at 50% 50%, rgba(212, 163, 115, 0.32), transparent 58%)",
         }}
       >
         <svg
-          width="360"
-          height="360"
+          width="460"
+          height="460"
           viewBox="0 0 100 100"
           style={{ display: "flex" }}
         >
           <path
-            d="M 62 12 L 24 56 L 44 56 L 28 88 L 70 44 L 50 44 Z"
-            fill="none"
-            stroke="#d4a373"
-            strokeWidth="2.5"
+            d="M 60 6 L 16 52 L 40 52 L 32 94 L 84 44 L 56 44 Z"
+            fill="#d4a373"
+            stroke="#0f0d0a"
+            strokeWidth="2"
             strokeLinejoin="round"
             strokeLinecap="round"
           />

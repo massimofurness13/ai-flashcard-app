@@ -51,39 +51,15 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
   const searchParams = useSearchParams();
   const [generationActive, setGenerationActive] = useState(false);
   const [initialPending, setInitialPending] = useState(0);
-  const [kickOffLoading, setKickOffLoading] = useState(false);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   const cardsWithoutImages = deck.cards.filter((c) => !c.imageUrl).length;
   const generationKey = `gen-active-${deck.id}`;
   const generationTotalKey = `gen-total-${deck.id}`;
 
-  // Fire-and-forget: tell the server to generate missing images in the
-  // background. User can navigate away, close the tab, or keep working.
-  async function generateMissingImages(tier: "quick" | "premium" = "quick") {
-    if (cardsWithoutImages === 0) return;
-
-    setKickOffLoading(true);
-    try {
-      const res = await fetch("/api/images/generate-deck-background", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deckId: deck.id, tier }),
-      });
-      const data = await res.json();
-      if (res.ok && data.queued > 0) {
-        const expiresAt = Date.now() + 10 * 60 * 1000;
-        sessionStorage.setItem(generationKey, String(expiresAt));
-        sessionStorage.setItem(generationTotalKey, String(data.queued));
-        setInitialPending(data.queued);
-        setGenerationActive(true);
-      } else if (!res.ok) {
-        alert(data.error || "Could not start image generation.");
-      }
-    } finally {
-      setKickOffLoading(false);
-    }
-  }
+  // Bulk image generation now lives on the Edit cards page. The deck
+  // view just polls and renders the "generating…" banner when it sees
+  // ?generating=true on mount or a stored sessionStorage flag.
 
   // On mount, check if we arrived with ?generating=true (from the generate
   // page after save) or if there's an active generation from before.
@@ -191,32 +167,11 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
         </div>
 
         <div className="flex items-center gap-2">
-          {deck.cards.length > 0 && isPro && cardsWithoutImages > 0 && !generationActive && (
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                onClick={() => generateMissingImages("quick")}
-                disabled={kickOffLoading}
-                title={`Quick (FLUX schnell): ${cardsWithoutImages} credits, ~${estimateImageGenTime(cardsWithoutImages)}`}
-              >
-                <span className="flex items-center gap-1.5">
-                  <span>✨</span>
-                  Quick ({cardsWithoutImages})
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => generateMissingImages("premium")}
-                disabled={kickOffLoading}
-                title={`Premium (FLUX dev): ${cardsWithoutImages * 5} credits, ~${estimateImageGenTime(cardsWithoutImages * 2)}`}
-              >
-                <span className="flex items-center gap-1.5">
-                  <span>🎨</span>
-                  Premium ({cardsWithoutImages * 5})
-                </span>
-              </Button>
-            </div>
-          )}
+          {/* The old Quick (N) / Premium (5N) buttons were confusing —
+           * users read "97" as "97 credits remaining" rather than
+           * "97 cards × 1 credit each." Image generation now lives
+           * inside the Edit cards page, where the silver/gold tier
+           * slider explains the cost trade-off in context. */}
           {deck.cards.length > 0 && (
             <Link href={`/study?deckIds=${deck.id}&filter=due`}>
               <Button variant="outline">Study</Button>
@@ -231,8 +186,11 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
               </Button>
             }
           >
+            <DropdownItem onClick={() => router.push(`/decks/${deck.id}/cards/edit`)}>
+              Edit Cards
+            </DropdownItem>
             <DropdownItem onClick={() => router.push(`/decks/${deck.id}/edit`)}>
-              Edit Pack
+              Edit Pack Settings
             </DropdownItem>
             <DropdownItem onClick={handleArchive}>
               Archive Pack
@@ -244,7 +202,7 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Link href={`/decks/${deck.id}/cards/new`}>
           <Button>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -253,6 +211,16 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
             Add Card
           </Button>
         </Link>
+        {deck.cards.length > 0 && (
+          <Link href={`/decks/${deck.id}/cards/edit`}>
+            <Button variant="outline">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Edit Cards
+            </Button>
+          </Link>
+        )}
         <AnkiExportButton
           deckId={deck.id}
           deckName={deck.name}

@@ -1,9 +1,9 @@
 import { ImageResponse } from "next/og";
 
-// Apple touch icon — same line-art lightning bolt as icon.tsx, sized
-// at 180×180 for the iOS home-screen tile. Proportions nudged slightly
-// so the bolt feels anchored at smaller size (iOS tiles have larger
-// padding than favicons).
+// Apple touch icon — solid filled lightning bolt to match the favicon
+// redesign. iOS home-screen tiles have a slightly larger safe area
+// than browser favicons, so we render the bolt a touch smaller here
+// (380/512 ratio at 180px = ~134px) and still get bold visibility.
 
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
@@ -20,20 +20,20 @@ export default function AppleIcon() {
           alignItems: "center",
           justifyContent: "center",
           backgroundImage:
-            "radial-gradient(circle at 50% 50%, rgba(212, 163, 115, 0.28), transparent 55%)",
+            "radial-gradient(circle at 50% 50%, rgba(212, 163, 115, 0.32), transparent 58%)",
         }}
       >
         <svg
-          width="130"
-          height="130"
+          width="155"
+          height="155"
           viewBox="0 0 100 100"
           style={{ display: "flex" }}
         >
           <path
-            d="M 62 12 L 24 56 L 44 56 L 28 88 L 70 44 L 50 44 Z"
-            fill="none"
-            stroke="#d4a373"
-            strokeWidth="3"
+            d="M 60 6 L 16 52 L 40 52 L 32 94 L 84 44 L 56 44 Z"
+            fill="#d4a373"
+            stroke="#0f0d0a"
+            strokeWidth="2"
             strokeLinejoin="round"
             strokeLinecap="round"
           />
