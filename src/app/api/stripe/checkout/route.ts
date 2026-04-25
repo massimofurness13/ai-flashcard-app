@@ -82,19 +82,36 @@ export async function POST(request: Request) {
     });
   }
 
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: "subscription",
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/account?success=true&plan=${plan}`,
-    cancel_url: `${origin}/pricing?canceled=true`,
-    metadata: { userId: auth.userId, plan },
-    // For users already on monthly upgrading to yearly: prorate the
-    // unused portion of the current month so they don't pay twice.
-    subscription_data: {
+  // Wrap the Stripe call so we can surface the real error to the
+  // client while debugging — Render's logs page hides the message
+  // text behind a cookie/query content filter, making it unreadable
+  // through browser automation. Once Stripe is wired up cleanly we
+  // can revert this to a generic 500.
+  try {
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "subscription",
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${origin}/account?success=true&plan=${plan}`,
+      cancel_url: `${origin}/pricing?canceled=true`,
       metadata: { userId: auth.userId, plan },
-    },
-  });
-
-  return NextResponse.json({ url: session.url, plan });
+      subscription_data: {
+        metadata: { userId: auth.userId, plan },
+      },
+    });
+    return NextResponse.json({ url: session.url, plan });
+  } catch (err) {
+    const e = err as { message?: string; type?: string; code?: string; raw?: { message?: string } };
+    return NextResponse.json(
+      {
+        error: "stripe_checkout_failed",
+        message: e?.message || e?.raw?.message || String(err),
+        type: e?.type,
+        code: e?.code,
+        priceIdUsed: priceId,
+        plan,
+      },
+      { status: 500 }
+    );
+  }
 }
