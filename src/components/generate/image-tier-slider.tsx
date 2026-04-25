@@ -15,11 +15,11 @@ interface ImageTierSliderProps {
   onChange: (value: number) => void;
   /**
    * Called when the user commits. `cap` is the maximum number of
-   * images to generate, in card index order — provided when the user
-   * is over budget and chose "Generate what I can afford" instead of
-   * topping up. Undefined means "generate all `total`".
+   * images to generate, in card index order. The slider ALWAYS passes
+   * a cap equal to (premium + quick) so we never attempt to generate
+   * an image for a card we can't pay for.
    */
-  onGenerate: (cap?: number) => void;
+  onGenerate: (cap: number) => void;
 }
 
 interface QuotaState {
@@ -32,42 +32,48 @@ const QUICK_COST = 1; // credits per Quick image
 const PREMIUM_COST = 5; // credits per Premium image
 
 /**
- * Greedy positional fit: walk cards 0..total, charge PREMIUM_COST for
- * the first `premiumCount`, QUICK_COST for the rest. Stop when adding
- * the next card would exceed `budget`. Returns how many cards we can
- * actually generate within budget and how much they'd cost.
+ * Compute the affordable mix given user intent + budget.
+ *
+ *   premium = clamp(intent, 0, floor(budget / 5))
+ *   quick   = min(total - premium, budget - 5*premium)
+ *   skipped = total - premium - quick   (cards that save without images)
+ *
+ * Slider value is "intended premium". As the user drags right:
+ *   - premium grows (budget permitting)
+ *   - quick shrinks because each premium spends 5× what a quick would
+ *   - skipped grows once budget runs out completely
+ *
+ * This means the slider always shows a *valid* mix (cost ≤ budget) —
+ * we never tell the user "you can't afford this", we tell them which
+ * affordable mix corresponds to where they dragged.
  */
-function fitWithinBudget(
+function affordableMix(
   total: number,
-  premiumCount: number,
+  intendedPremium: number,
   budget: number
-): { affordable: number; cost: number; affordablePremium: number } {
-  let cost = 0;
-  let affordable = 0;
-  let affordablePremium = 0;
-  for (let i = 0; i < total; i++) {
-    const itemCost = i < premiumCount ? PREMIUM_COST : QUICK_COST;
-    if (cost + itemCost > budget) break;
-    cost += itemCost;
-    affordable++;
-    if (i < premiumCount) affordablePremium++;
-  }
-  return { affordable, cost, affordablePremium };
+): { premium: number; quick: number; skipped: number; cost: number } {
+  const maxPremium = Math.min(total, Math.floor(budget / PREMIUM_COST));
+  const premium = Math.max(0, Math.min(intendedPremium, maxPremium));
+  const remainingBudget = budget - premium * PREMIUM_COST;
+  const quick = Math.max(0, Math.min(total - premium, remainingBudget));
+  const skipped = total - premium - quick;
+  const cost = premium * PREMIUM_COST + quick * QUICK_COST;
+  return { premium, quick, skipped, cost };
 }
 
 /**
- * Silver/gold tier slider used after AI card generation. Drives the
- * Quick/Premium split for image generation: slider value = Premium
- * count, remainder = Quick. Track is colour-split — left of the
- * thumb fills with honey gold (Premium portion accumulating as the
- * user drags right), right of the thumb stays silver (Quick portion).
+ * Silver/gold tier slider. Slider value = number of cards to make
+ * Premium; quick auto-fills the remaining budget; anything that
+ * doesn't fit becomes "skipped" (saves without an image).
  *
- * When the user's chosen mix exceeds their available credits we don't
- * just disable the button — we offer two real paths: top up credits
- * inline (Stripe checkout to one of three bundles) or "generate what
- * I can afford" (positional cap, remaining cards saved without
- * illustrations). The latter is what the user explicitly asked for —
- * a graceful degrade rather than a hard block.
+ * Track is split into three coloured segments — gold for premium,
+ * silver for quick, dim grey for skipped — so the budget trade-off
+ * is visible at a glance. As the user drags right, gold grows
+ * (premium up), silver shrinks (quick eats fewer credits), dim grows
+ * (more cards skipped). Inverse on drag-left.
+ *
+ * Top-up offer is always available as a soft CTA whenever skipped > 0,
+ * so users on a constrained budget have a one-click path to fix it.
  */
 export function ImageTierSlider({
   total,
@@ -86,25 +92,32 @@ export function ImageTierSlider({
       .catch(() => setQuota(null));
   }, []);
 
-  // Clamp in case props go out of bounds (e.g. user just removed cards).
-  const safePremium = Math.max(0, Math.min(premiumCount, total));
-  const quickCount = total - safePremium;
-  const totalCost = safePremium * PREMIUM_COST + quickCount * QUICK_COST;
-  const fillPct = total === 0 ? 0 : (safePremium / total) * 100;
+  // Until we know the budget, treat it as unlimited so the slider is
+  // usable. The over-budget panel only appears once quota lands.
+  const budget = quota?.totalRemaining ?? Number.POSITIVE_INFINITY;
+  const mix = affordableMix(total, premiumCount, budget);
+  const imaged = mix.premium + mix.quick;
 
-  // Style the native range input: left of thumb = gold, right = silver.
+  // Three-stop gradient for the track. Gold = premium, silver = quick,
+  // dim = skipped. Stops are positioned by card-count proportion so
+  // the visual segments line up with what the user is paying for.
+  const premiumPct = total === 0 ? 0 : (mix.premium / total) * 100;
+  const imagedPct = total === 0 ? 0 : (imaged / total) * 100;
   const trackBackground = `linear-gradient(to right,
-    color-mix(in oklch, var(--primary) 70%, transparent) 0%,
-    color-mix(in oklch, var(--primary) 70%, transparent) ${fillPct}%,
-    color-mix(in oklch, white 25%, transparent) ${fillPct}%,
-    color-mix(in oklch, white 25%, transparent) 100%)`;
+    color-mix(in oklch, var(--primary) 75%, transparent) 0%,
+    color-mix(in oklch, var(--primary) 75%, transparent) ${premiumPct}%,
+    color-mix(in oklch, white 28%, transparent) ${premiumPct}%,
+    color-mix(in oklch, white 28%, transparent) ${imagedPct}%,
+    color-mix(in oklch, white 8%, transparent) ${imagedPct}%,
+    color-mix(in oklch, white 8%, transparent) 100%)`;
 
-  const overBudget = quota !== null && totalCost > quota.totalRemaining;
-  const fit =
-    quota !== null
-      ? fitWithinBudget(total, safePremium, quota.totalRemaining)
-      : null;
-  const skipped = fit ? total - fit.affordable : 0;
+  // Slider max — user can drag premium up to either the total card
+  // count, or the budget cap, whichever is smaller. Past that point
+  // they'd just be paying for fewer total images.
+  const sliderMax =
+    quota === null
+      ? total
+      : Math.min(total, Math.floor(budget / PREMIUM_COST));
 
   async function handleBuy(bundle: string) {
     setPurchasing(bundle);
@@ -136,14 +149,16 @@ export function ImageTierSlider({
             Add AI illustrations
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Drag the slider to choose how many cards get the premium
-            illustration ({PREMIUM_COST} credits each, gold) versus the
-            quick illustration ({QUICK_COST} credit each, silver).
+            Drag right for more premium illustrations ({PREMIUM_COST} credits
+            each, gold), left for more quick ones ({QUICK_COST} credit each,
+            silver). The slider only shows mixes you can afford — anything
+            that doesn&apos;t fit your credits is skipped (the card saves
+            without an image).
           </p>
         </div>
 
-        {/* Live counts — gold + silver pill labels */}
-        <div className="flex items-center justify-between gap-3 text-sm">
+        {/* Live counts — three pills now: premium, quick, skipped */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
           <span className="inline-flex items-center gap-1.5">
             <span
               aria-hidden
@@ -151,127 +166,114 @@ export function ImageTierSlider({
               style={{ backgroundColor: "var(--primary)" }}
             />
             <span className="font-editorial text-base font-medium">
-              {safePremium}
+              {mix.premium}
             </span>
             <span className="text-muted-foreground">premium 🎨</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="font-editorial text-base font-medium">
-              {quickCount}
-            </span>
-            <span className="text-muted-foreground">quick ✨</span>
             <span
               aria-hidden
-              className="inline-block h-2 w-2 rounded-full bg-white/30"
+              className="inline-block h-2 w-2 rounded-full bg-white/40"
             />
+            <span className="font-editorial text-base font-medium">
+              {mix.quick}
+            </span>
+            <span className="text-muted-foreground">quick ✨</span>
           </span>
+          {mix.skipped > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="inline-block h-2 w-2 rounded-full bg-white/15"
+              />
+              <span className="font-editorial text-base font-medium">
+                {mix.skipped}
+              </span>
+              <span className="text-muted-foreground">no image</span>
+            </span>
+          )}
         </div>
 
-        {/* The slider itself. Native range input with custom track. */}
+        {/* The slider itself. Max is dynamic — capped at affordable
+         * premium so the thumb never represents an unspendable amount. */}
         <div className="space-y-2">
           <input
             type="range"
             min={0}
-            max={total}
+            max={sliderMax}
             step={1}
-            value={safePremium}
+            value={Math.min(premiumCount, sliderMax)}
             onChange={(e) => onChange(parseInt(e.target.value, 10))}
-            className="tier-slider w-full cursor-pointer"
+            disabled={sliderMax === 0}
+            className="tier-slider w-full cursor-pointer disabled:cursor-not-allowed"
             style={{ background: trackBackground }}
             aria-label="Number of premium illustrations"
           />
           <div className="flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
             <span>All quick</span>
-            <span>All premium</span>
+            <span>{sliderMax === total ? "All premium" : `Max ${sliderMax} premium`}</span>
           </div>
         </div>
 
         {/* Cost preview + budget context */}
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-muted-foreground">Estimated cost</span>
+            <span className="text-muted-foreground">Cost</span>
             <span className="font-editorial text-lg font-medium">
-              {totalCost.toLocaleString()} credit{totalCost === 1 ? "" : "s"}
+              {mix.cost.toLocaleString()} credit{mix.cost === 1 ? "" : "s"}
             </span>
           </div>
           <div className="mt-1 flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
             <span>
-              {safePremium > 0 && quickCount > 0
-                ? `${safePremium} × ${PREMIUM_COST} + ${quickCount} × ${QUICK_COST}`
-                : safePremium > 0
-                  ? `${safePremium} × ${PREMIUM_COST}`
-                  : `${quickCount} × ${QUICK_COST}`}
+              {mix.premium > 0 && mix.quick > 0
+                ? `${mix.premium} × ${PREMIUM_COST} + ${mix.quick} × ${QUICK_COST}`
+                : mix.premium > 0
+                  ? `${mix.premium} × ${PREMIUM_COST}`
+                  : mix.quick > 0
+                    ? `${mix.quick} × ${QUICK_COST}`
+                    : "—"}
             </span>
             {quota !== null && (
-              <span className={overBudget ? "text-destructive" : ""}>
-                {quota.totalRemaining.toLocaleString()} credits left
+              <span>
+                {(quota.totalRemaining - mix.cost).toLocaleString()} credits left
+                after
               </span>
             )}
           </div>
         </div>
 
         {/* Estimated time */}
-        <p className="text-xs text-muted-foreground">
-          Estimated time:{" "}
-          {estimateImageGenTime(
-            overBudget && fit ? fit.affordable : total
-          )}
-          . Cards generate in the background — you can keep editing
-          while images roll in.
-        </p>
+        {imaged > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Estimated time: {estimateImageGenTime(imaged)}. Cards generate
+            in the background — keep editing while images roll in.
+          </p>
+        )}
 
-        {/* Over-budget panel — top-up offer + graceful-degrade option */}
-        {overBudget && fit !== null && quota !== null && !showTopUp && (
-          <div
-            className="space-y-3 rounded-lg border p-4"
-            style={{ borderColor: "var(--destructive)" }}
-          >
-            <div>
-              <p className="font-medium text-sm" style={{ color: "var(--destructive)" }}>
-                Not enough credits
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                You have <strong className="text-foreground">{quota.totalRemaining}</strong>{" "}
-                credit{quota.totalRemaining === 1 ? "" : "s"}. With your current
-                mix you can only afford{" "}
-                <strong className="text-foreground">
-                  {fit.affordable} card{fit.affordable === 1 ? "" : "s"}
-                </strong>{" "}
-                (
-                {fit.affordablePremium > 0 ? `${fit.affordablePremium} premium` : ""}
-                {fit.affordablePremium > 0 && fit.affordable - fit.affordablePremium > 0
-                  ? " + "
-                  : ""}
-                {fit.affordable - fit.affordablePremium > 0
-                  ? `${fit.affordable - fit.affordablePremium} quick`
-                  : ""}
-                ). The remaining{" "}
-                <strong className="text-foreground">{skipped}</strong> would save
-                without illustrations.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                size="sm"
-                onClick={() => setShowTopUp(true)}
-              >
+        {/* Top-up offer when there are skipped cards. Soft CTA, not
+         * a blocker — user can always just generate the affordable
+         * mix and live with skipped cards. */}
+        {mix.skipped > 0 && quota !== null && !showTopUp && (
+          <div className="rounded-lg border border-border bg-card p-3 text-sm">
+            <p className="leading-relaxed text-muted-foreground">
+              <span className="text-foreground font-medium">
+                {mix.skipped} card{mix.skipped === 1 ? "" : "s"}
+              </span>{" "}
+              would save without illustrations. Want all{" "}
+              {total} illustrated?
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <Button size="sm" variant="outline" onClick={() => setShowTopUp(true)}>
                 Top up credits
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onGenerate(fit.affordable)}
-              >
-                Generate {fit.affordable} card{fit.affordable === 1 ? "" : "s"} only
-              </Button>
               <span className="text-xs text-muted-foreground">
-                or drag the slider left for more quick images
+                or generate the mix below as-is
               </span>
             </div>
           </div>
         )}
 
-        {/* Inline bundle picker — surfaced when user hits "Top up" */}
+        {/* Inline bundle picker */}
         {showTopUp && (
           <div className="space-y-3 rounded-lg border border-border bg-card p-4">
             <div className="flex items-baseline justify-between gap-3">
@@ -329,15 +331,22 @@ export function ImageTierSlider({
           </div>
         )}
 
-        {/* Primary actions when within budget */}
-        {!overBudget && (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => onGenerate()}>Generate images</Button>
+        {/* Primary action — always present, never disabled, because the
+         * mix shown is always affordable by construction. The cap sent
+         * to onGenerate is the imaged count, so cards beyond it skip
+         * cleanly without burning API calls. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={() => onGenerate(imaged)} disabled={imaged === 0}>
+            {imaged === 0
+              ? "No credits to spend"
+              : `Generate ${imaged} image${imaged === 1 ? "" : "s"}`}
+          </Button>
+          {imaged > 0 && (
             <span className="text-sm text-muted-foreground">
               or skip to save the pack without illustrations.
             </span>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );
