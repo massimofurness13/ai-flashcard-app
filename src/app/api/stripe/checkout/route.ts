@@ -48,46 +48,48 @@ export async function POST(request: Request) {
     );
   }
 
-  const { origin } = new URL(request.url);
-
-  // Reuse the user's existing Stripe customer if they have one
-  const subscription = await prisma.subscription.findUnique({
-    where: { userId: auth.userId },
-  });
-
-  let customerId = subscription?.stripeCustomerId;
-
-  if (!customerId) {
-    const user = await prisma.user.findUnique({
-      where: { id: auth.userId },
-      select: { email: true },
-    });
-
-    const customer = await stripe.customers.create({
-      email: user?.email,
-      metadata: { userId: auth.userId },
-    });
-
-    customerId = customer.id;
-
-    await prisma.subscription.upsert({
-      where: { userId: auth.userId },
-      update: { stripeCustomerId: customerId },
-      create: {
-        userId: auth.userId,
-        stripeCustomerId: customerId,
-        status: "inactive",
-        plan,
-      },
-    });
-  }
-
-  // Wrap the Stripe call so we can surface the real error to the
-  // client while debugging — Render's logs page hides the message
-  // text behind a cookie/query content filter, making it unreadable
-  // through browser automation. Once Stripe is wired up cleanly we
-  // can revert this to a generic 500.
+  // Wrap the ENTIRE Stripe interaction in try/catch — including the
+  // customer-create call which used to throw outside the try block.
+  // Render's logs page hides the message text behind a content
+  // filter, so we surface the real error in the response body for
+  // browser-driven debugging. Revert to a generic 500 once stable.
   try {
+    const { origin } = new URL(request.url);
+
+    // Reuse the user's existing Stripe customer if they have one
+    const subscription = await prisma.subscription.findUnique({
+      where: { userId: auth.userId },
+    });
+
+    let customerId = subscription?.stripeCustomerId;
+    let stripeStep = "customers.create";
+
+    if (!customerId) {
+      const user = await prisma.user.findUnique({
+        where: { id: auth.userId },
+        select: { email: true },
+      });
+
+      const customer = await stripe.customers.create({
+        email: user?.email,
+        metadata: { userId: auth.userId },
+      });
+
+      customerId = customer.id;
+
+      await prisma.subscription.upsert({
+        where: { userId: auth.userId },
+        update: { stripeCustomerId: customerId },
+        create: {
+          userId: auth.userId,
+          stripeCustomerId: customerId,
+          status: "inactive",
+          plan,
+        },
+      });
+    }
+
+    stripeStep = "checkout.sessions.create";
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
@@ -99,15 +101,23 @@ export async function POST(request: Request) {
         metadata: { userId: auth.userId, plan },
       },
     });
+    void stripeStep; // keep variable for debug; satisfies no-unused-vars
     return NextResponse.json({ url: session.url, plan });
   } catch (err) {
-    const e = err as { message?: string; type?: string; code?: string; raw?: { message?: string } };
+    const e = err as {
+      message?: string;
+      type?: string;
+      code?: string;
+      statusCode?: number;
+      raw?: { message?: string };
+    };
     return NextResponse.json(
       {
         error: "stripe_checkout_failed",
         message: e?.message || e?.raw?.message || String(err),
         type: e?.type,
         code: e?.code,
+        statusCode: e?.statusCode,
         priceIdUsed: priceId,
         plan,
       },
