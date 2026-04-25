@@ -48,80 +48,53 @@ export async function POST(request: Request) {
     );
   }
 
-  // Wrap the ENTIRE Stripe interaction in try/catch — including the
-  // customer-create call which used to throw outside the try block.
-  // Render's logs page hides the message text behind a content
-  // filter, so we surface the real error in the response body for
-  // browser-driven debugging. Revert to a generic 500 once stable.
-  try {
-    const { origin } = new URL(request.url);
+  const { origin } = new URL(request.url);
 
-    // Reuse the user's existing Stripe customer if they have one
-    const subscription = await prisma.subscription.findUnique({
+  // Reuse the user's existing Stripe customer if they have one
+  const subscription = await prisma.subscription.findUnique({
+    where: { userId: auth.userId },
+  });
+
+  let customerId = subscription?.stripeCustomerId;
+
+  if (!customerId) {
+    const user = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { email: true },
+    });
+
+    const customer = await stripe.customers.create({
+      email: user?.email,
+      metadata: { userId: auth.userId },
+    });
+
+    customerId = customer.id;
+
+    await prisma.subscription.upsert({
       where: { userId: auth.userId },
-    });
-
-    let customerId = subscription?.stripeCustomerId;
-    let stripeStep = "customers.create";
-
-    if (!customerId) {
-      const user = await prisma.user.findUnique({
-        where: { id: auth.userId },
-        select: { email: true },
-      });
-
-      const customer = await stripe.customers.create({
-        email: user?.email,
-        metadata: { userId: auth.userId },
-      });
-
-      customerId = customer.id;
-
-      await prisma.subscription.upsert({
-        where: { userId: auth.userId },
-        update: { stripeCustomerId: customerId },
-        create: {
-          userId: auth.userId,
-          stripeCustomerId: customerId,
-          status: "inactive",
-          plan,
-        },
-      });
-    }
-
-    stripeStep = "checkout.sessions.create";
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      mode: "subscription",
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/account?success=true&plan=${plan}`,
-      cancel_url: `${origin}/pricing?canceled=true`,
-      metadata: { userId: auth.userId, plan },
-      subscription_data: {
-        metadata: { userId: auth.userId, plan },
-      },
-    });
-    void stripeStep; // keep variable for debug; satisfies no-unused-vars
-    return NextResponse.json({ url: session.url, plan });
-  } catch (err) {
-    const e = err as {
-      message?: string;
-      type?: string;
-      code?: string;
-      statusCode?: number;
-      raw?: { message?: string };
-    };
-    return NextResponse.json(
-      {
-        error: "stripe_checkout_failed",
-        message: e?.message || e?.raw?.message || String(err),
-        type: e?.type,
-        code: e?.code,
-        statusCode: e?.statusCode,
-        priceIdUsed: priceId,
+      update: { stripeCustomerId: customerId },
+      create: {
+        userId: auth.userId,
+        stripeCustomerId: customerId,
+        status: "inactive",
         plan,
       },
-      { status: 500 }
-    );
+    });
   }
+
+  const session = await stripe.checkout.sessions.create({
+    customer: customerId,
+    mode: "subscription",
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: `${origin}/account?success=true&plan=${plan}`,
+    cancel_url: `${origin}/pricing?canceled=true`,
+    metadata: { userId: auth.userId, plan },
+    // For users already on monthly upgrading to yearly: prorate the
+    // unused portion of the current month so they don't pay twice.
+    subscription_data: {
+      metadata: { userId: auth.userId, plan },
+    },
+  });
+
+  return NextResponse.json({ url: session.url, plan });
 }
