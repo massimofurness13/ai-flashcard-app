@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { QuotaExceededDialog } from "@/components/subscription/quota-exceeded-dialog";
+import {
+  CreditBalance,
+  emitCreditsChanged,
+} from "@/components/subscription/credit-balance";
 import type { QuotaState } from "@/lib/image-quota";
 
 type Tier = "quick" | "premium";
@@ -58,6 +62,9 @@ export function AiImageGenerator({
 
       if (data.imageUrl) {
         onImageGenerated(data.imageUrl);
+        // Tell every mounted CreditBalance the user just spent some
+        // credits, so the visible balance updates without a refresh.
+        emitCreditsChanged();
       }
     } catch {
       setError("Network error. Please try again.");
@@ -111,8 +118,10 @@ export function AiImageGenerator({
         </Button>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        {label}: Quick ✨ is fast and clean. Premium 🎨 uses a richer illustrated style.
+        {label}: Quick ✨ is fast and clean. Premium 🎨 uses a richer
+        illustrated style.
       </p>
+      <CreditBalance />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

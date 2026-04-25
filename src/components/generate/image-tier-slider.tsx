@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CREDIT_BUNDLES } from "@/components/subscription/quota-exceeded-dialog";
+import {
+  CreditBalance,
+  useCreditBalance,
+} from "@/components/subscription/credit-balance";
 import { estimateImageGenTime } from "@/lib/utils";
 
 interface ImageTierSliderProps {
@@ -20,12 +24,6 @@ interface ImageTierSliderProps {
    * an image for a card we can't pay for.
    */
   onGenerate: (cap: number) => void;
-}
-
-interface QuotaState {
-  totalRemaining: number;
-  monthlyLimit: number;
-  isPro: boolean;
 }
 
 const QUICK_COST = 1; // credits per Quick image
@@ -81,16 +79,12 @@ export function ImageTierSlider({
   onChange,
   onGenerate,
 }: ImageTierSliderProps) {
-  const [quota, setQuota] = useState<QuotaState | null>(null);
+  // Shared hook so this slider's balance stays in sync with the
+  // header pill, the per-card buttons, and any other surface that
+  // dispatches credits:changed after a spend.
+  const { quota } = useCreditBalance();
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [showTopUp, setShowTopUp] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/images/quota")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: QuotaState | null) => setQuota(data))
-      .catch(() => setQuota(null));
-  }, []);
 
   // Until we know the budget, treat it as unlimited so the slider is
   // usable. The over-budget panel only appears once quota lands.
@@ -143,12 +137,16 @@ export function ImageTierSlider({
   return (
     <Card>
       <CardContent className="pt-6 space-y-5">
-        {/* Header */}
-        <div>
-          <p className="font-editorial text-xl font-medium">
-            Add AI illustrations
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
+        {/* Header. Live credit balance sits inline with the eyebrow
+         * so users always know what they're spending against. */}
+        <div className="space-y-1">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <p className="font-editorial text-xl font-medium">
+              Add AI illustrations
+            </p>
+            <CreditBalance />
+          </div>
+          <p className="text-sm text-muted-foreground">
             Drag right for more premium illustrations ({PREMIUM_COST} credits
             each, gold), left for more quick ones ({QUICK_COST} credit each,
             silver). The first N cards in the pack become premium; the rest

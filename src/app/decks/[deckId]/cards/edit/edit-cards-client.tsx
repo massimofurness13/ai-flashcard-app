@@ -9,8 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { ImageTierSlider } from "@/components/generate/image-tier-slider";
 import { QuotaExceededDialog } from "@/components/subscription/quota-exceeded-dialog";
-import type { QuotaState } from "@/lib/image-quota";
-import { formatRelativeDate } from "@/lib/utils";
+import {
+  CreditBalance,
+  useCreditBalance,
+  emitCreditsChanged,
+} from "@/components/subscription/credit-balance";
 
 const QUICK_COST = 1;
 const PREMIUM_COST = 5;
@@ -60,29 +63,11 @@ export function EditCardsClient({
   const [bulkGenError, setBulkGenError] = useState("");
   const imageUploadRef = useRef<HTMLInputElement>(null);
   const [uploadTargetId, setUploadTargetId] = useState<string | null>(null);
-  // Live credit balance — fetched on mount and refreshed every time a
-  // per-card generation completes. Drives both the visible pill in
-  // the header and the per-card button affordability.
-  const [quota, setQuota] = useState<QuotaState | null>(null);
+  // Shared hook — automatically refetches when emitCreditsChanged()
+  // fires anywhere on the page (e.g. after a per-card regen, or when
+  // any other component spends credits while this page is open).
+  const { quota, refresh: refreshQuota } = useCreditBalance();
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
-
-  async function refreshQuota() {
-    try {
-      const res = await fetch("/api/images/quota");
-      if (res.ok) {
-        const data = (await res.json()) as QuotaState;
-        setQuota(data);
-        return data;
-      }
-    } catch {
-      // Non-fatal — pill just won't update
-    }
-    return null;
-  }
-
-  useEffect(() => {
-    refreshQuota();
-  }, []);
 
   // Snapshot of last-saved values so we can skip redundant PATCH calls
   // on blur. Without this, every blur triggers a network round-trip
@@ -193,9 +178,12 @@ export function EditCardsClient({
       const data = await res.json();
 
       if (res.status === 402) {
-        // Server-side quota check failed — refresh local state with
-        // what the server returned, then show the top-up dialog.
-        if (data.quota) setQuota(data.quota as QuotaState);
+        // Server-side quota check failed — refetch from the source
+        // of truth so every mounted balance shows the new value,
+        // then surface the top-up dialog. The server-supplied state
+        // in `data.quota` is freshest but emitCreditsChanged keeps
+        // every balance on the page in sync, not just this one.
+        emitCreditsChanged();
         setQuotaDialogOpen(true);
         return;
       }
@@ -211,8 +199,10 @@ export function EditCardsClient({
         setCards((prev) =>
           prev.map((c) => (c.id === id ? { ...c, imageUrl: data.imageUrl } : c))
         );
-        // Refresh credit balance so the pill reflects the spend.
-        refreshQuota();
+        // Tell every mounted CreditBalance to refetch so the header
+        // pill, the slider header, and the per-card buttons all
+        // reflect the spend simultaneously.
+        emitCreditsChanged();
       }
     } catch {
       // Silent
@@ -299,6 +289,10 @@ export function EditCardsClient({
         setBulkGenLoading(false);
         return;
       }
+      // Server is about to spend credits in the background; nudge
+      // any still-mounted balance to refetch (the user might still
+      // be on this page for a moment before the route change).
+      emitCreditsChanged();
       router.push(`/decks/${deckId}?generating=true`);
       router.refresh();
     } catch {
@@ -364,26 +358,10 @@ export function EditCardsClient({
           {/* Credit balance pill — primary surface for "how much can I
            * spend right now". Click opens the top-up dialog so users
            * can buy more without leaving the page. */}
-          {quota && (
-            <button
-              type="button"
-              onClick={() => setQuotaDialogOpen(true)}
-              className="rounded-lg border border-border bg-card px-3 py-2 text-left transition-colors hover:border-primary/50"
-              title="Click to top up credits"
-            >
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">
-                Credits
-              </p>
-              <p className="font-editorial text-lg font-medium leading-tight mt-0.5">
-                {quota.totalRemaining.toLocaleString()}
-              </p>
-              {quota.resetAt && quota.isPro && (
-                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">
-                  Refresh {formatRelativeDate(quota.resetAt)}
-                </p>
-              )}
-            </button>
-          )}
+          <CreditBalance
+            variant="pill"
+            onClick={() => setQuotaDialogOpen(true)}
+          />
           <Link href={`/decks/${deckId}`}>
             <Button>Done</Button>
           </Link>
