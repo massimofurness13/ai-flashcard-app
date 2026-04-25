@@ -151,10 +151,27 @@ export function ImageTierSlider({
           <p className="mt-1 text-sm text-muted-foreground">
             Drag right for more premium illustrations ({PREMIUM_COST} credits
             each, gold), left for more quick ones ({QUICK_COST} credit each,
-            silver). The slider only shows mixes you can afford — anything
+            silver). The first N cards in the pack become premium; the rest
+            quick. The slider only shows mixes you can afford — anything
             that doesn&apos;t fit your credits is skipped (the card saves
             without an image).
           </p>
+        </div>
+
+        {/* Honest note about where the field is. AI image generation is
+         * still expensive and imperfect — the user sees the cost on
+         * every card, so we owe them an explanation for why. Promise
+         * to pass savings on as model costs drop, because that's what
+         * we'll actually do. */}
+        <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">
+            A note on AI images:
+          </span>{" "}
+          AI image generation is still in its infancy and remains
+          surprisingly expensive — that&apos;s why credits exist at all. As
+          the underlying models get cheaper and better, we&apos;ll pass
+          those savings straight back to you. Thanks for your patience while
+          the field catches up.
         </div>
 
         {/* Live counts — three pills now: premium, quick, skipped */}

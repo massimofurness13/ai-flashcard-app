@@ -98,6 +98,12 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const [ankiResult, setAnkiResult] = useState<AnkiResult | null>(null);
 
   const abortRef = useRef(false);
+  // Holds the in-flight image-generation promise so handleSave can
+  // await whatever's currently being generated before navigating.
+  // Without this, the last in-flight card's imageUrl would be set on
+  // local state AFTER handleSave's closure already snapshotted `cards`,
+  // so the just-finished image would never get saved to the deck.
+  const inFlightRef = useRef<Promise<void> | null>(null);
   const imageUploadRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTargetIndex, setUploadTargetIndex] = useState<number | null>(null);
@@ -247,27 +253,36 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
           next.add(card.index);
           return next;
         });
-        try {
-          const res = await fetch("/api/images/generate-ai", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              front: card.front,
-              back: card.back,
-              tier,
-            }),
-          });
-          const data = await res.json();
-          if (res.ok && data.imageUrl) {
-            setCards((prev) =>
-              prev.map((c, idx) =>
-                idx === card.index ? { ...c, imageUrl: data.imageUrl } : c
-              )
-            );
+        // Wrap the per-card work in a promise stored on inFlightRef so
+        // handleSave can await whatever's currently mid-flight before
+        // it snapshots `cards` and navigates away. Otherwise the last
+        // in-flight image would be charged-for-but-discarded.
+        const work = (async () => {
+          try {
+            const res = await fetch("/api/images/generate-ai", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                front: card.front,
+                back: card.back,
+                tier,
+              }),
+            });
+            const data = await res.json();
+            if (res.ok && data.imageUrl) {
+              setCards((prev) =>
+                prev.map((c, idx) =>
+                  idx === card.index ? { ...c, imageUrl: data.imageUrl } : c
+                )
+              );
+            }
+          } catch {
+            // Skip failed images — user can regenerate individually
           }
-        } catch {
-          // Skip failed images — user can regenerate individually
-        }
+        })();
+        inFlightRef.current = work;
+        await work;
+        inFlightRef.current = null;
         setPendingImageIndices((prev) => {
           const next = new Set(prev);
           next.delete(card.index);
@@ -329,6 +344,26 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   async function handleSave() {
     setSaving(true);
 
+    // Abort the client-side image loop so it stops queueing new
+    // requests, then await whatever's currently mid-flight so its
+    // imageUrl lands on `cards` before we snapshot it. Without this
+    // step the user would lose the credits they just spent on the
+    // in-flight card — image gets generated server-side, but the
+    // client navigates before the response comes back.
+    abortRef.current = true;
+    if (inFlightRef.current) {
+      try {
+        await inFlightRef.current;
+      } catch {
+        // Already swallowed inside the loop
+      }
+    }
+    // Pull the latest cards out of state via a microtask — setCards
+    // from the just-finished in-flight runs synchronously inside the
+    // awaited promise, but React commits async. A short flush gives
+    // the just-finished card's imageUrl a chance to land in cards.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     let deckId = targetDeckId;
 
     // No deck pre-selected → create a new one with the metadata the
@@ -375,11 +410,16 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       return;
     }
 
-    const res = await fetch(`/api/decks/${deckId}/cards`, {
+    // Snapshot the current card list (with whatever images landed
+    // before the abort). We need this both to write the cards AND to
+    // figure out how many premium slots are still owed to the
+    // background route.
+    const snapshot = cards;
+    const cardsRes = await fetch(`/api/decks/${deckId}/cards`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
-        cards.map((c) => ({
+        snapshot.map((c) => ({
           front: c.front,
           back: c.back,
           hint: c.hint || null,
@@ -388,12 +428,47 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       ),
     });
 
-    if (res.ok) {
-      // Stop any in-progress client-side generation
-      abortRef.current = true;
-      router.push(`/decks/${deckId}`);
-      router.refresh();
+    if (!cardsRes.ok) {
+      setError("Couldn't save cards. Please try again.");
+      setSaving(false);
+      return;
     }
+
+    // Hand off remaining work to the server-side background route.
+    // The premium budget the user committed to was `premiumCount`;
+    // we've already imaged `imagedPremium` of those positionally
+    // (premium tier is assigned to the first N cards in the list).
+    // Whatever's left is still owed: max(0, premiumCount - imagedPremium).
+    // The route picks up cards-without-imageUrl in createdAt order,
+    // matching the order we just inserted them in.
+    const stillMissing = snapshot.filter((c) => !c.imageUrl).length;
+    if (stillMissing > 0) {
+      const imagedPremium = snapshot
+        .slice(0, premiumCount)
+        .filter((c) => c.imageUrl).length;
+      const remainingPremium = Math.max(0, premiumCount - imagedPremium);
+
+      // Fire-and-forget — server keeps working even after we navigate.
+      // Errors here are surfaced via the deck view's polling, not
+      // the create flow, so we don't want to block on the response.
+      fetch("/api/images/generate-deck-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deckId,
+          premiumCount: remainingPremium,
+        }),
+      }).catch(() => {
+        // Silent — user can re-trigger from deck view if it never starts
+      });
+
+      // ?generating=true tells deck-view to start polling for incoming
+      // images and show the "Generating..." banner.
+      router.push(`/decks/${deckId}?generating=true`);
+    } else {
+      router.push(`/decks/${deckId}`);
+    }
+    router.refresh();
 
     setSaving(false);
   }
@@ -805,28 +880,29 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
             Review and edit your cards below, then save them to a pack.
           </p>
 
-          {/* Language pickers — moved here from the deck form so the
-           * user can see actual front/back text from a real card and
-           * pick the right voice for each side at a glance. */}
+          {/* Language pickers — section card styled to match the
+           * illustrations card below (Fraunces heading, same body
+           * type scale) so the review screen reads as a stack of
+           * settings panels rather than another flashcard. */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Text-to-speech language</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Pick a language for each side. We&apos;ll use a curated
-                native-speaker voice for that locale — Mexican Spanish in a
-                Mexican accent, Castilian in a Madrid accent, and so on.
-              </p>
+            <CardContent className="pt-6 space-y-4">
+              <div>
+                <p className="font-editorial text-xl font-medium">
+                  Text-to-speech language
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pick a language for each side. We&apos;ll use a curated
+                  native-speaker voice for that locale — Mexican Spanish in
+                  a Mexican accent, Castilian in a Madrid accent, and so on.
+                </p>
+              </div>
 
               {sampleCard && (
-                <div className="rounded-lg border border-border bg-muted/40 p-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Example card from this pack
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="label-caps mb-2">Example card from this pack</p>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="min-w-0">
-                      <p className="text-[10px] uppercase text-muted-foreground">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         Front
                       </p>
                       <p
@@ -837,7 +913,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                       </p>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[10px] uppercase text-muted-foreground">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         Back
                       </p>
                       <p
