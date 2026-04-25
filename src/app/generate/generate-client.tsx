@@ -127,27 +127,37 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   /**
    * Generate images for `currentCards`, with the FIRST `premiumCount`
    * cards getting the Premium tier (FLUX dev, 5 credits) and the rest
-   * getting Quick (FLUX schnell, 1 credit). The split is positional —
-   * front-loading premium so the user's most prominent cards (likely
-   * the first few they'll review) get the better artwork.
+   * getting Quick (FLUX schnell, 1 credit). `cap` truncates the work
+   * to the first N cards positionally — used when the user is over
+   * budget and chose "Generate what I can afford" rather than topping
+   * up. Cards beyond the cap save without illustrations.
    */
   const generateImagesForCards = useCallback(
-    async (currentCards: GeneratedCard[], premiumCount: number = 0) => {
+    async (
+      currentCards: GeneratedCard[],
+      premiumCount: number = 0,
+      cap?: number
+    ) => {
       const needingImages = currentCards
         .map((c, i) => ({ front: c.front, back: c.back, index: i }))
         .filter((_, i) => !currentCards[i].imageUrl);
 
-      if (needingImages.length === 0) return;
+      const slice =
+        typeof cap === "number"
+          ? needingImages.slice(0, Math.max(0, cap))
+          : needingImages;
+
+      if (slice.length === 0) return;
 
       setGeneratingImages(true);
       setImageProgress(0);
-      setImageTotalNeeded(needingImages.length);
-      setPendingImageIndices(new Set(needingImages.map((c) => c.index)));
+      setImageTotalNeeded(slice.length);
+      setPendingImageIndices(new Set(slice.map((c) => c.index)));
       abortRef.current = false;
 
-      for (let i = 0; i < needingImages.length; i++) {
+      for (let i = 0; i < slice.length; i++) {
         if (abortRef.current) break;
-        const card = needingImages[i];
+        const card = slice[i];
         const tier: "premium" | "quick" = i < premiumCount ? "premium" : "quick";
         setPendingImageIndices((prev) => {
           const next = new Set(prev);
@@ -555,16 +565,20 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
           {/* AI Images — silver/gold tier slider.
            * Shown only when there's at least one card without an image
            * yet, and we're not currently generating. The slider value
-           * IS the Premium count; remainder is Quick. */}
+           * IS the Premium count; remainder is Quick. The optional
+           * `cap` arg from the slider lets the user generate just
+           * what they can afford when over budget, leaving the rest
+           * to save without illustrations. */}
           {!generatingImages && cards.some((c) => !c.imageUrl) && (
             <ImageTierSlider
               total={cards.filter((c) => !c.imageUrl).length}
               premiumCount={Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length)}
               onChange={setPremiumCount}
-              onGenerate={() =>
+              onGenerate={(cap) =>
                 generateImagesForCards(
                   cards,
-                  Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length)
+                  Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length),
+                  cap
                 )
               }
             />
