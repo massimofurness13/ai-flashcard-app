@@ -72,7 +72,7 @@ const pricing = [
   },
   {
     name: "Pro",
-    price: "$6.99",
+    price: "$8.99",
     period: "/month",
     features: [
       "Everything in Free, plus:",

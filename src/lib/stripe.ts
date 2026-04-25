@@ -22,16 +22,20 @@ export const stripe = new Proxy({} as Stripe, {
   },
 });
 
-// Monthly Pro subscription — $6.99/mo
+// Monthly Pro subscription — $8.99/mo
+// Priced above the indie-SaaS comfort zone because AI image generation
+// + native-speaker TTS is a genuine moat. Once a user has 500+
+// illustrated cards they've built mastery on, churning back to plain
+// text flashcards has real switching cost.
 export const PRICE_ID = process.env.STRIPE_PRICE_ID || "";
-export const PRO_PRICE = 6.99;
+export const PRO_PRICE = 8.99;
 
-// Yearly Pro subscription — $69.99/yr (~17% off, "two months free")
+// Yearly Pro subscription — $79.99/yr (~26% off monthly, "three months free")
 // All 6,000 credits unlocked upfront so users porting an Anki library
 // can illustrate everything in one go without throttling. Top-up
 // purchases still stack on top and never expire.
 export const PRICE_ID_YEARLY = process.env.STRIPE_PRICE_ID_YEARLY || "";
-export const PRO_PRICE_YEARLY = 69.99;
+export const PRO_PRICE_YEARLY = 79.99;
 
 export type SubscriptionPlan = "monthly" | "yearly";
 

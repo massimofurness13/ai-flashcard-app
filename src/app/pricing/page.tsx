@@ -62,17 +62,18 @@ export default function PricingPage() {
     setLoading(false);
   }
 
-  // Math we want users to actually see — yearly is "two months free."
-  const monthlyPriceLabel = plan === "yearly" ? "$5.83" : "$6.99";
+  // Math we want users to actually see — yearly is "three months free."
+  // Monthly equivalent of yearly: $79.99 / 12 = $6.66/mo
+  const monthlyPriceLabel = plan === "yearly" ? "$6.66" : "$8.99";
   const billingLabel =
     plan === "yearly"
-      ? "$69.99 billed once a year"
+      ? "$79.99 billed once a year"
       : "billed monthly";
   const ctaLabel = loading
     ? "Opening checkout…"
     : plan === "yearly"
-      ? "Get yearly Pro · $69.99"
-      : "Get monthly Pro · $6.99";
+      ? "Get yearly Pro · $79.99"
+      : "Get monthly Pro · $8.99";
 
   return (
     <div className="max-w-4xl mx-auto py-8 space-y-8">
@@ -118,7 +119,7 @@ export default function PricingPage() {
                   : "bg-[color:var(--glow)]/20 text-[color:var(--glow)]"
               }`}
             >
-              2 months free
+              3 months free
             </span>
           </button>
         </div>
