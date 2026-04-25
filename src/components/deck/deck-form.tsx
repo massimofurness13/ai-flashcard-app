@@ -206,8 +206,8 @@ export function DeckForm({ mode, initialData, previewCard }: DeckFormProps) {
           </label>
           <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
             Pick a language for each side. We&apos;ll use a curated
-            native-speaker voice — Pro plans get our premium AI voice
-            when available.
+            native-speaker voice for that locale — Mexican Spanish in
+            a Mexican accent, Castilian in a Madrid accent, and so on.
           </p>
         </div>
 

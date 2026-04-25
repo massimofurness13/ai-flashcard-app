@@ -79,7 +79,7 @@ const pricing = [
       "AI card generation from any text",
       "500 AI image credits / month",
       "Anki .apkg import + export",
-      "Premium voice quality",
+      "Priority support",
     ],
     cta: "Start Pro",
     href: "/auth/signup",
