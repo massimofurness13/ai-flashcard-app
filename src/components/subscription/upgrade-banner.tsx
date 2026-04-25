@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { openStripeCheckout } from "@/lib/stripe-checkout";
 
 export function UpgradeBanner({ feature = "this feature" }: { feature?: string }) {
   const router = useRouter();
@@ -14,7 +15,8 @@ export function UpgradeBanner({ feature = "this feature" }: { feature?: string }
       const res = await fetch("/api/stripe/checkout", { method: "POST" });
       const data = await res.json();
       if (data.url) {
-        window.location.href = data.url;
+        openStripeCheckout(data.url);
+        setLoading(false);
         return;
       }
     } catch {}

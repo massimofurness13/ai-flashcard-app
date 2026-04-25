@@ -79,6 +79,11 @@ model Subscription {
   stripeCustomerId     String   @unique
   stripeSubscriptionId String?  @unique
   status               String   @default("inactive") // active, canceled, past_due, inactive
+  // Billing cadence — drives the credit allowance:
+  //   monthly = 500 credits / month, resets at currentPeriodEnd
+  //   yearly  = 6,000 credits / year, ALL unlocked upfront on activation,
+  //             resets at currentPeriodEnd (a year out)
+  plan                 String   @default("monthly")
   currentPeriodEnd     DateTime?
 
   createdAt DateTime @default(now())

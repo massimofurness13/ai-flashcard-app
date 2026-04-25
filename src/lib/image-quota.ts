@@ -7,26 +7,36 @@ import type { ImageTier } from "@/lib/image-gen";
  *   Quick ✨  = 1 credit (FLUX schnell, $0.003 cost)
  *   Premium 🎨 = 5 credits (FLUX dev, $0.025 cost)
  *
- * Free tier: 15 lifetime credits (= 15 Quick or 3 Premium) to try the feature
- * Pro tier:  500 credits per month, refreshes on Stripe billing cycle
- *            (worst case 100 Premium images = $2.50 cost, always profitable)
- * Top-ups:   Purchased credits stack on top of monthly, never expire
+ * Free tier:    15 lifetime credits (= 15 Quick or 3 Premium) to try the feature
+ * Pro Monthly:  500 credits per month, refreshes on Stripe billing cycle
+ * Pro Yearly:   6,000 credits per year, ALL unlocked upfront on activation,
+ *               refreshes once a year. Designed for migration use cases —
+ *               port an entire Anki library, illustrate it in one go.
+ * Top-ups:      Purchased credits stack on top, NEVER expire.
  *
- * Order of consumption: monthly allowance first, then purchased credits,
- * then lifetime free-trial credits.
+ * Order of consumption: subscription allowance first, then purchased
+ * credits, then lifetime free-trial credits. Subscription credits expire
+ * at cycle end; purchased credits are owned by the user forever.
  */
 
 export const FREE_LIFETIME_CREDITS = 15;
 export const PRO_MONTHLY_CREDITS = 500;
+export const PRO_YEARLY_CREDITS = 6000;
 
 export const TIER_COSTS: Record<ImageTier, number> = {
   quick: 1,
   premium: 5,
 };
 
+export type SubscriptionPlan = "monthly" | "yearly";
+
 export type QuotaState = {
   isPro: boolean;
+  /** "monthly" | "yearly" — null when not Pro */
+  plan: SubscriptionPlan | null;
+  /** Credits consumed in the current billing window */
   monthlyUsed: number;
+  /** Credits granted by the current subscription tier (500 monthly, 6000 yearly) */
   monthlyLimit: number;
   monthlyRemaining: number;
   credits: number;
@@ -39,7 +49,7 @@ export type QuotaState = {
 };
 
 export async function getQuotaState(userId: string): Promise<QuotaState> {
-  const [user, isPro] = await Promise.all([
+  const [user, isPro, subscription] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -50,21 +60,41 @@ export async function getQuotaState(userId: string): Promise<QuotaState> {
       },
     }),
     isProUser(userId),
+    prisma.subscription.findUnique({
+      where: { userId },
+      select: { plan: true, status: true },
+    }),
   ]);
+
+  // Plan only counts when the subscription is active. A canceled or
+  // past-due yearly user falls back to "no allowance" — they keep
+  // any purchased top-up credits but lose subscription credits.
+  const plan: SubscriptionPlan | null =
+    isPro && subscription?.plan === "yearly" ? "yearly" : isPro ? "monthly" : null;
+
+  const allowance =
+    plan === "yearly"
+      ? PRO_YEARLY_CREDITS
+      : plan === "monthly"
+        ? PRO_MONTHLY_CREDITS
+        : 0;
 
   if (!user) {
     return {
       isPro,
+      plan,
       monthlyUsed: 0,
-      monthlyLimit: isPro ? PRO_MONTHLY_CREDITS : 0,
-      monthlyRemaining: isPro ? PRO_MONTHLY_CREDITS : 0,
+      monthlyLimit: allowance,
+      monthlyRemaining: allowance,
       credits: 0,
       lifetimeFreeUsed: 0,
       lifetimeFreeRemaining: isPro ? 0 : FREE_LIFETIME_CREDITS,
-      totalRemaining: isPro ? PRO_MONTHLY_CREDITS : FREE_LIFETIME_CREDITS,
+      totalRemaining: isPro ? allowance : FREE_LIFETIME_CREDITS,
       resetAt: null,
       canAffordQuick: true,
-      canAffordPremium: isPro ? PRO_MONTHLY_CREDITS >= TIER_COSTS.premium : FREE_LIFETIME_CREDITS >= TIER_COSTS.premium,
+      canAffordPremium: isPro
+        ? allowance >= TIER_COSTS.premium
+        : FREE_LIFETIME_CREDITS >= TIER_COSTS.premium,
     };
   }
 
@@ -74,7 +104,7 @@ export async function getQuotaState(userId: string): Promise<QuotaState> {
       ? 0
       : user.monthlyImagesUsed;
 
-  const monthlyLimit = isPro ? PRO_MONTHLY_CREDITS : 0;
+  const monthlyLimit = allowance;
   const monthlyRemaining = Math.max(monthlyLimit - effectiveUsed, 0);
   const lifetimeFreeRemaining = isPro
     ? 0
@@ -83,6 +113,7 @@ export async function getQuotaState(userId: string): Promise<QuotaState> {
 
   return {
     isPro,
+    plan,
     monthlyUsed: effectiveUsed,
     monthlyLimit,
     monthlyRemaining,

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { QuotaState } from "@/lib/image-quota";
 import { formatRelativeDate } from "@/lib/utils";
 import { CREDIT_BUNDLES } from "./quota-exceeded-dialog";
+import { openStripeCheckout } from "@/lib/stripe-checkout";
 
 export function ImageQuotaCard() {
   const [quota, setQuota] = useState<QuotaState | null>(null);
@@ -32,7 +33,8 @@ export function ImageQuotaCard() {
       });
       const data = await res.json();
       if (data.url) {
-        window.location.href = data.url;
+        openStripeCheckout(data.url);
+        setPurchasing(null);
       } else {
         alert(data.error || "Could not start checkout.");
         setPurchasing(null);
@@ -176,7 +178,7 @@ export function ImageQuotaCard() {
               onClick={async () => {
                 const res = await fetch("/api/stripe/checkout", { method: "POST" });
                 const data = await res.json();
-                if (data.url) window.location.href = data.url;
+                if (data.url) openStripeCheckout(data.url);
               }}
             >
               Upgrade to Pro

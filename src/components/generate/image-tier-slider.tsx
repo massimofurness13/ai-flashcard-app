@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CREDIT_BUNDLES } from "@/components/subscription/quota-exceeded-dialog";
+import { openStripeCheckout } from "@/lib/stripe-checkout";
 import {
   CreditBalance,
   useCreditBalance,
@@ -123,7 +124,8 @@ export function ImageTierSlider({
       });
       const data = await res.json();
       if (data.url) {
-        window.location.href = data.url;
+        openStripeCheckout(data.url);
+        setPurchasing(null);
       } else {
         alert(data.error || "Could not start checkout. Please try again.");
         setPurchasing(null);

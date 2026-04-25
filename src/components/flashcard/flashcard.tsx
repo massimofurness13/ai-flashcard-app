@@ -22,6 +22,10 @@ interface FlashcardProps {
   /** When true, the visible side's text auto-plays via TTS each time
    * the card appears or flips. Study/Review use this; the edit form does not. */
   autoPlayVoice?: boolean;
+  /** When false, AI-generated images are blurred behind a "Resubscribe
+   *  to view" overlay. Lapsed Pro users keep their text + audio but lose
+   *  visibility on illustrations until they renew. */
+  isPro?: boolean;
   className?: string;
 }
 
@@ -38,6 +42,7 @@ export function Flashcard({
   frontLanguageCode,
   backLanguageCode,
   autoPlayVoice = false,
+  isPro = true,
   className,
 }: FlashcardProps) {
   // Prevent the flip animation from playing on initial render
@@ -77,7 +82,7 @@ export function Flashcard({
         <div className="flashcard-front rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
           {showImage && (
             <div className="mb-4 flex justify-center">
-              <FlashcardImage imageUrl={imageUrl} cardText={front} />
+              <FlashcardImage imageUrl={imageUrl} cardText={front} isPro={isPro} />
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
@@ -104,7 +109,7 @@ export function Flashcard({
         <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
           {showImage && (
             <div className="mb-4 flex justify-center">
-              <FlashcardImage imageUrl={imageUrl} cardText={front} />
+              <FlashcardImage imageUrl={imageUrl} cardText={front} isPro={isPro} />
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">

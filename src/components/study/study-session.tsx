@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useKeyboardNav } from "@/hooks/use-keyboard-nav";
 import { ImagePreloader } from "./image-preloader";
 import { VoicePreloader, type VoicePreloadItem } from "./voice-preloader";
+import { useCreditBalance } from "@/components/subscription/credit-balance";
 
 const PRELOAD_AHEAD = 5;
 // Voice preload window is tighter than image preload (3 vs 5) because
@@ -66,6 +67,14 @@ export function StudySession({
     cardsReviewed: 0,
     ratings: { 1: 0, 3: 0, 5: 0 },
   });
+
+  // Pro status drives whether AI illustrations show in clear or
+  // behind a "Resubscribe to view" blur. Hook is shared with the
+  // credits pill / quota checks so only one /api/images/quota fetch
+  // happens during the session. Default to true while loading so we
+  // don't briefly flash the blur on an active Pro user.
+  const { quota } = useCreditBalance();
+  const isPro = quota?.isPro ?? true;
 
   const autoFlipRef = useRef<NodeJS.Timeout | null>(null);
   const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
@@ -250,6 +259,7 @@ export function StudySession({
           hint={currentCard.hint}
           isFlipped={isFlipped}
           onFlip={handleFlip}
+          isPro={isPro}
           frontVoice={frontVoiceName}
           backVoice={backVoiceName}
           frontLanguageCode={

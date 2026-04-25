@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { openStripeCheckout } from "@/lib/stripe-checkout";
 
 interface AccountInfo {
   createdAt: string | null;
@@ -55,7 +56,7 @@ export function AccountInfoCard() {
     try {
       const res = await fetch("/api/stripe/checkout", { method: "POST" });
       const data = await res.json();
-      if (data.url) window.location.href = data.url;
+      if (data.url) openStripeCheckout(data.url);
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,8 @@ export function AccountInfoCard() {
     try {
       const res = await fetch("/api/stripe/portal", { method: "POST" });
       const data = await res.json();
-      if (data.url) window.location.href = data.url;
+      // Stripe Customer Portal also opens externally — same IAP rationale.
+      if (data.url) openStripeCheckout(data.url);
     } finally {
       setLoading(false);
     }

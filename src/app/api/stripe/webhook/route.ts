@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, planFromPriceId } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 import Stripe from "stripe";
 
@@ -70,12 +70,20 @@ export async function POST(request: Request) {
         const periodEndDate = periodEnd ? new Date(periodEnd * 1000) : null;
         const userId = session.metadata?.userId || "";
 
+        // Plan is derived from the Stripe price ID, not from
+        // metadata — the price ID is the only thing the user can't
+        // tamper with from the client. If the env price ID matches
+        // the yearly product, this is yearly; otherwise monthly.
+        const priceId = subscription.items.data[0]?.price.id;
+        const plan = planFromPriceId(priceId);
+
         await prisma.subscription.upsert({
           where: { stripeCustomerId: session.customer as string },
           update: {
             stripeSubscriptionId: subscription.id,
             status: subscription.status,
             currentPeriodEnd: periodEndDate,
+            plan,
           },
           create: {
             userId,
@@ -83,11 +91,16 @@ export async function POST(request: Request) {
             stripeSubscriptionId: subscription.id,
             status: subscription.status,
             currentPeriodEnd: periodEndDate,
+            plan,
           },
         });
 
-        // Align image quota reset with Stripe billing cycle and clear
-        // any prior monthly usage so the new Pro period starts fresh.
+        // Align quota reset with the Stripe billing cycle and clear
+        // any prior usage so the new Pro period starts fresh. For
+        // yearly subs, periodEndDate is one year out — getQuotaState
+        // sees the yearly plan and grants 6,000 credits against this
+        // single window. For monthly, it's the standard 30-day cycle
+        // with 500 credits.
         if (userId && periodEndDate) {
           await prisma.user.update({
             where: { id: userId },
@@ -112,9 +125,18 @@ export async function POST(request: Request) {
         select: { userId: true, currentPeriodEnd: true },
       });
 
+      // Plan can change mid-cycle (monthly → yearly upgrade with
+      // proration). Re-derive from the current price every time.
+      const priceId = subscription.items.data[0]?.price.id;
+      const plan = planFromPriceId(priceId);
+
       await prisma.subscription.updateMany({
         where: { stripeSubscriptionId: subscription.id },
-        data: { status: subscription.status, currentPeriodEnd: periodEndDate },
+        data: {
+          status: subscription.status,
+          currentPeriodEnd: periodEndDate,
+          plan,
+        },
       });
 
       // On successful renewal (new periodEnd is later than the previous one),
