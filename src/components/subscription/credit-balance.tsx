@@ -72,12 +72,13 @@ export function useCreditBalance(): {
 
 interface CreditBalanceProps {
   /**
-   * `inline` is a one-line label that fits next to a button group:
-   *   "Balance: 423 credits · refresh in 12 days"
-   * `pill` is a small clickable card-style block for the page header.
+   * `inline` — one-line label next to a button group ("Balance: 423 credits…")
+   * `pill`   — clickable card-style block for page headers
+   * `compact` — tight icon + number ("✨ 423"), designed for the navbar.
+   *             Click goes to /account to top up.
    */
-  variant?: "inline" | "pill";
-  /** Click handler — only honoured for the pill variant. */
+  variant?: "inline" | "pill" | "compact";
+  /** Click handler — used by pill + compact variants. */
   onClick?: () => void;
   className?: string;
 }
@@ -108,6 +109,48 @@ export function CreditBalance({
     quota.isPro && quota.resetAt
       ? `refresh ${formatRelativeDate(quota.resetAt)}`
       : null;
+
+  if (variant === "compact") {
+    // Tight navbar-friendly format: glyph + count.
+    // Hides on small screens (use mobile nav for that surface) and
+    // shrinks on narrow viewports. Click defaults to /account so users
+    // can top up — a parent can override with onClick to open a dialog.
+    const inner = (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors hover:bg-primary/10",
+          // Use the destructive accent when balance is in single digits
+          // — a subtle visual nudge to top up before they hit a wall.
+          quota.totalRemaining < 5
+            ? "text-destructive"
+            : "text-muted-foreground hover:text-foreground",
+          className
+        )}
+        title={`${quota.totalRemaining.toLocaleString()} credits remaining${
+          refreshText ? ` · ${refreshText}` : ""
+        }`}
+      >
+        <span aria-hidden>✨</span>
+        <span className="tabular-nums">{quota.totalRemaining.toLocaleString()}</span>
+      </span>
+    );
+    if (onClick) {
+      return (
+        <button type="button" onClick={onClick} className="cursor-pointer">
+          {inner}
+        </button>
+      );
+    }
+    // No onClick → wrap in an internal Link to /account
+    // (using a plain anchor here would full-reload; the consumer can
+    // pass onClick={() => router.push('/account')} for client routing
+    // or just rely on the default href below).
+    return (
+      <a href="/account" className="cursor-pointer">
+        {inner}
+      </a>
+    );
+  }
 
   if (variant === "pill") {
     return (

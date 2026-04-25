@@ -8,6 +8,7 @@ import { APP_NAME } from "@/lib/constants";
 import { ThemeToggle } from "./theme-toggle";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { CreditBalance } from "@/components/subscription/credit-balance";
 
 const navItems = [
   {
@@ -150,6 +151,16 @@ export function Navbar() {
         )}
 
         <div className="flex items-center gap-2">
+          {/* Credit balance pill — visible on every page so users always
+           * know what they have to spend. Click goes to /account where
+           * they can top up. Always shown when logged in (mobile users
+           * spend credits too — they need to see the balance). */}
+          {user && (
+            <CreditBalance
+              variant="compact"
+              onClick={() => router.push("/account")}
+            />
+          )}
           <ThemeToggle />
           {!user && (
             <div className="flex items-center gap-2">
