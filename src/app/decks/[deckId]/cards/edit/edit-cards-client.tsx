@@ -8,6 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { ImageTierSlider } from "@/components/generate/image-tier-slider";
+import { QuotaExceededDialog } from "@/components/subscription/quota-exceeded-dialog";
+import type { QuotaState } from "@/lib/image-quota";
+import { formatRelativeDate } from "@/lib/utils";
+
+const QUICK_COST = 1;
+const PREMIUM_COST = 5;
 
 interface CardData {
   id: string;
@@ -54,6 +60,29 @@ export function EditCardsClient({
   const [bulkGenError, setBulkGenError] = useState("");
   const imageUploadRef = useRef<HTMLInputElement>(null);
   const [uploadTargetId, setUploadTargetId] = useState<string | null>(null);
+  // Live credit balance — fetched on mount and refreshed every time a
+  // per-card generation completes. Drives both the visible pill in
+  // the header and the per-card button affordability.
+  const [quota, setQuota] = useState<QuotaState | null>(null);
+  const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
+
+  async function refreshQuota() {
+    try {
+      const res = await fetch("/api/images/quota");
+      if (res.ok) {
+        const data = (await res.json()) as QuotaState;
+        setQuota(data);
+        return data;
+      }
+    } catch {
+      // Non-fatal — pill just won't update
+    }
+    return null;
+  }
+
+  useEffect(() => {
+    refreshQuota();
+  }, []);
 
   // Snapshot of last-saved values so we can skip redundant PATCH calls
   // on blur. Without this, every blur triggers a network round-trip
@@ -136,17 +165,41 @@ export function EditCardsClient({
     }
   }
 
-  async function regenerateImage(id: string) {
+  /**
+   * Per-card AI image generation. Pre-flight check prevents the API
+   * round-trip when the user clearly can't afford the tier; if the
+   * server returns 402 (race condition — two tabs or background gen
+   * spent credits in between), we still surface the quota dialog.
+   */
+  async function regenerateImage(id: string, tier: "quick" | "premium") {
     const card = cards.find((c) => c.id === id);
     if (!card) return;
+
+    const cost = tier === "premium" ? PREMIUM_COST : QUICK_COST;
+    // Pre-flight: if quota state says we don't have it, open the
+    // top-up dialog and bail before burning a request.
+    if (quota && quota.totalRemaining < cost) {
+      setQuotaDialogOpen(true);
+      return;
+    }
+
     setPendingImages((prev) => new Set(prev).add(id));
     try {
       const res = await fetch("/api/images/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ front: card.front, back: card.back, tier: "quick" }),
+        body: JSON.stringify({ front: card.front, back: card.back, tier }),
       });
       const data = await res.json();
+
+      if (res.status === 402) {
+        // Server-side quota check failed — refresh local state with
+        // what the server returned, then show the top-up dialog.
+        if (data.quota) setQuota(data.quota as QuotaState);
+        setQuotaDialogOpen(true);
+        return;
+      }
+
       if (res.ok && data.imageUrl) {
         // Persist the new imageUrl on the card row before reflecting
         // it locally — otherwise a refresh would lose it.
@@ -158,6 +211,8 @@ export function EditCardsClient({
         setCards((prev) =>
           prev.map((c) => (c.id === id ? { ...c, imageUrl: data.imageUrl } : c))
         );
+        // Refresh credit balance so the pill reflects the spend.
+        refreshQuota();
       }
     } catch {
       // Silent
@@ -305,9 +360,34 @@ export function EditCardsClient({
             {deckName} · {cards.length} card{cards.length === 1 ? "" : "s"}
           </p>
         </div>
-        <Link href={`/decks/${deckId}`}>
-          <Button>Done</Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* Credit balance pill — primary surface for "how much can I
+           * spend right now". Click opens the top-up dialog so users
+           * can buy more without leaving the page. */}
+          {quota && (
+            <button
+              type="button"
+              onClick={() => setQuotaDialogOpen(true)}
+              className="rounded-lg border border-border bg-card px-3 py-2 text-left transition-colors hover:border-primary/50"
+              title="Click to top up credits"
+            >
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">
+                Credits
+              </p>
+              <p className="font-editorial text-lg font-medium leading-tight mt-0.5">
+                {quota.totalRemaining.toLocaleString()}
+              </p>
+              {quota.resetAt && quota.isPro && (
+                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">
+                  Refresh {formatRelativeDate(quota.resetAt)}
+                </p>
+              )}
+            </button>
+          )}
+          <Link href={`/decks/${deckId}`}>
+            <Button>Done</Button>
+          </Link>
+        </div>
       </div>
 
       {/* Hidden file input for per-card uploads */}
@@ -411,14 +491,27 @@ export function EditCardsClient({
                         alt={`Image for card ${index + 1}`}
                         className="w-16 h-16 object-cover rounded-lg border border-border"
                       />
-                      <div className="flex gap-1">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">
+                          Regen:
+                        </span>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="text-xs"
-                          onClick={() => regenerateImage(card.id)}
+                          onClick={() => regenerateImage(card.id, "quick")}
+                          title={`Quick regenerate · ${QUICK_COST} credit`}
                         >
-                          Regenerate
+                          ✨ Quick · {QUICK_COST}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => regenerateImage(card.id, "premium")}
+                          title={`Premium regenerate · ${PREMIUM_COST} credits`}
+                        >
+                          🎨 Premium · {PREMIUM_COST}
                         </Button>
                         <Button
                           variant="ghost"
@@ -439,14 +532,24 @@ export function EditCardsClient({
                       </div>
                     </>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         className="text-xs"
-                        onClick={() => regenerateImage(card.id)}
+                        onClick={() => regenerateImage(card.id, "quick")}
+                        title={`Quick image · ${QUICK_COST} credit`}
                       >
-                        Generate Image
+                        ✨ Quick · {QUICK_COST}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => regenerateImage(card.id, "premium")}
+                        title={`Premium image · ${PREMIUM_COST} credits`}
+                      >
+                        🎨 Premium · {PREMIUM_COST}
                       </Button>
                       <Button
                         variant="outline"
@@ -470,6 +573,16 @@ export function EditCardsClient({
           <Button>Done</Button>
         </Link>
       </div>
+
+      {/* Surfaces when the user clicks a generate button they can't
+       * afford, OR when the API responds 402. Includes the renewal
+       * date for the monthly allowance and an inline credit-bundle
+       * picker so users can top up without leaving the page. */}
+      <QuotaExceededDialog
+        open={quotaDialogOpen}
+        quota={quota}
+        onClose={() => setQuotaDialogOpen(false)}
+      />
     </div>
   );
 }

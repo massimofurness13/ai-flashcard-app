@@ -189,6 +189,13 @@ export function Navbar() {
                     >
                       Settings
                     </Link>
+                    <Link
+                      href="/archive"
+                      onClick={() => setShowDropdown(false)}
+                      className="block px-3 py-2 text-sm hover:bg-primary/10 transition-colors"
+                    >
+                      Archived Packs
+                    </Link>
                     <button
                       onClick={handleLogout}
                       className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-primary/10 transition-colors"
