@@ -32,7 +32,11 @@ export function DropdownMenu({ trigger, children, align = "right", className }: 
       {open && (
         <div
           className={cn(
-            "absolute z-50 mt-2 min-w-[200px] rounded-lg border border-border bg-card p-1 shadow-lg",
+            // Higher z, beefier shadow + backdrop-blur so the menu
+            // visually separates from the warm-dark content underneath
+            // (the home-page hero card has the same bg-card colour, so
+            // a plain border isn't enough to distinguish them).
+            "absolute z-[60] mt-2 min-w-[200px] overflow-hidden rounded-xl border border-border bg-[color-mix(in_oklch,var(--card)_92%,white)] p-1 shadow-2xl shadow-black/40 backdrop-blur-md",
             align === "right" ? "right-0" : "left-0",
             className
           )}

@@ -94,10 +94,10 @@ export function HomePage({
         style={{ left: "-1.5rem" }}
       />
 
-      <div className="space-y-10">
+      <div className="space-y-12 sm:space-y-14">
         {/* ── Masthead ────────────────────────────────────────────── */}
         <header
-          className="reveal flex items-start justify-between gap-4"
+          className="reveal flex items-start justify-between gap-4 pb-2"
           style={{ "--delay": "0ms" } as React.CSSProperties}
         >
           <div>

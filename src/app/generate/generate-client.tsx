@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UpgradeBanner } from "@/components/subscription/upgrade-banner";
+import { ImageTierSlider } from "@/components/generate/image-tier-slider";
 import { estimateImageGenTime } from "@/lib/utils";
 
 interface GeneratedCard {
@@ -33,7 +34,11 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const preselectedDeckId = searchParams.get("deckId") || "";
   const [topic, setTopic] = useState("");
   const [material, setMaterial] = useState("");
-  const [generateImages, setGenerateImages] = useState(false);
+  // Number of cards (positionally first) that should get the Premium
+  // FLUX-dev tier when the user clicks "Generate images". 0 = all
+  // Quick. Defaults to 0 so the user makes a deliberate budget choice
+  // rather than getting an opinionated split they didn't ask for.
+  const [premiumCount, setPremiumCount] = useState(0);
   const [targetDeckId, setTargetDeckId] = useState(preselectedDeckId);
   const [newDeckName, setNewDeckName] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -54,52 +59,80 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const [pdfExtracting, setPdfExtracting] = useState(false);
 
   /**
-   * Read a PDF, extract its text on-device (no server upload), and
-   * append into the study-material textarea so the user can review
-   * before hitting Generate.
+   * Read a study-material file (.pdf, .txt, .md, .csv, .json, etc.)
+   * and append its text into the textarea. PDFs go through pdfjs to
+   * extract text on-device; everything else is just FileReader.readAsText.
+   * Server never sees the file — extraction happens in the browser.
    */
   async function handlePdfPicked(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setError("Please choose a PDF file.");
-      if (pdfInputRef.current) pdfInputRef.current.value = "";
-      return;
-    }
+
     setPdfExtracting(true);
     setError("");
+
+    const lowerName = file.name.toLowerCase();
+    const isPdf =
+      file.type === "application/pdf" || lowerName.endsWith(".pdf");
+    const isText =
+      file.type.startsWith("text/") ||
+      /\.(txt|md|markdown|csv|tsv|json|html?|xml)$/i.test(lowerName);
+
     try {
-      const { extractPdfText } = await import("@/lib/pdf-extract");
-      const result = await extractPdfText(file);
-      if (!result.text) {
-        setError("No extractable text found in that PDF (it may be scanned images).");
-        return;
-      }
-      // Merge with whatever's already there
-      setMaterial((prev) =>
-        prev.trim() ? `${prev}\n\n${result.text}` : result.text
-      );
-      if (!topic.trim()) {
-        // Seed topic with the filename so the user has something to start with
-        setTopic(file.name.replace(/\.pdf$/i, ""));
-      }
-      if (result.truncated) {
+      if (isPdf) {
+        const { extractPdfText } = await import("@/lib/pdf-extract");
+        const result = await extractPdfText(file);
+        if (!result.text) {
+          setError("No extractable text found in that PDF (it may be scanned images).");
+          return;
+        }
+        setMaterial((prev) =>
+          prev.trim() ? `${prev}\n\n${result.text}` : result.text
+        );
+        if (!topic.trim()) {
+          setTopic(file.name.replace(/\.pdf$/i, ""));
+        }
+        if (result.truncated) {
+          setError(
+            `Only the first 50 pages were extracted (PDF had ${result.pages}+ pages).`
+          );
+        }
+      } else if (isText) {
+        // Plain-text family — read directly.
+        const text = await file.text();
+        if (!text.trim()) {
+          setError("That file appears to be empty.");
+          return;
+        }
+        setMaterial((prev) =>
+          prev.trim() ? `${prev}\n\n${text}` : text
+        );
+        if (!topic.trim()) {
+          setTopic(file.name.replace(/\.[^.]+$/, ""));
+        }
+      } else {
         setError(
-          `Only the first 50 pages were extracted (PDF had ${result.pages}+ pages).`
+          "Unsupported file type. Try PDF, plain text, Markdown, CSV, JSON, or HTML."
         );
       }
     } catch (err) {
-      console.error("PDF extract failed:", err);
-      setError("Couldn't read that PDF. Try pasting the text directly instead.");
+      console.error("File extract failed:", err);
+      setError("Couldn't read that file. Try pasting the text directly instead.");
     } finally {
       setPdfExtracting(false);
       if (pdfInputRef.current) pdfInputRef.current.value = "";
     }
   }
 
-  // Shared image generation helper
+  /**
+   * Generate images for `currentCards`, with the FIRST `premiumCount`
+   * cards getting the Premium tier (FLUX dev, 5 credits) and the rest
+   * getting Quick (FLUX schnell, 1 credit). The split is positional —
+   * front-loading premium so the user's most prominent cards (likely
+   * the first few they'll review) get the better artwork.
+   */
   const generateImagesForCards = useCallback(
-    async (currentCards: GeneratedCard[]) => {
+    async (currentCards: GeneratedCard[], premiumCount: number = 0) => {
       const needingImages = currentCards
         .map((c, i) => ({ front: c.front, back: c.back, index: i }))
         .filter((_, i) => !currentCards[i].imageUrl);
@@ -115,6 +148,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       for (let i = 0; i < needingImages.length; i++) {
         if (abortRef.current) break;
         const card = needingImages[i];
+        const tier: "premium" | "quick" = i < premiumCount ? "premium" : "quick";
         setPendingImageIndices((prev) => {
           const next = new Set(prev);
           next.add(card.index);
@@ -124,7 +158,11 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
           const res = await fetch("/api/images/generate-ai", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ front: card.front, back: card.back }),
+            body: JSON.stringify({
+              front: card.front,
+              back: card.back,
+              tier,
+            }),
           });
           const data = await res.json();
           if (res.ok && data.imageUrl) {
@@ -185,12 +223,9 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       }
 
       setCards(generated);
-
-      // Auto-trigger image generation if toggle is ON
-      if (generateImages) {
-        // Small delay so the edit UI renders first
-        setTimeout(() => generateImagesForCards(generated), 100);
-      }
+      // No auto-trigger — image generation is now an explicit step on
+      // the review screen via the silver/gold tier slider, after the
+      // user can see how many cards they have and pick the mix.
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -236,7 +271,12 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       // Stop any in-progress client-side generation
       abortRef.current = true;
 
-      const hasPendingImages = generateImages && cards.some((c) => !c.imageUrl);
+      // After tier-slider redesign, user explicitly opts into image
+       // generation by clicking "Generate images" on the review screen.
+       // If they have any cards still missing images at save time, we
+       // assume they intentionally skipped and don't kick off background
+       // generation. They can always trigger it from the deck view.
+      const hasPendingImages = false;
 
       if (hasPendingImages) {
         // Kick off server-side background generation for any cards
@@ -400,13 +440,13 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                 onClick={() => pdfInputRef.current?.click()}
                 disabled={pdfExtracting}
               >
-                {pdfExtracting ? "Reading PDF…" : "Upload PDF"}
+                {pdfExtracting ? "Reading file…" : "Upload File"}
               </Button>
             </div>
             <Textarea
               id="material"
               label=""
-              placeholder="Paste text from your textbook, notes, or upload a PDF. The AI will generate cards based on this content."
+              placeholder="Paste text from your textbook, notes, or upload a file (PDF, TXT, Markdown, CSV, JSON, HTML). The AI will generate cards based on this content."
               value={material}
               onChange={(e) => setMaterial(e.target.value)}
               rows={6}
@@ -414,36 +454,17 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
             <input
               ref={pdfInputRef}
               type="file"
-              accept="application/pdf,.pdf"
+              accept="application/pdf,.pdf,text/plain,.txt,.md,.markdown,.csv,.tsv,.json,.html,.htm,.xml"
               onChange={handlePdfPicked}
               className="hidden"
             />
           </div>
 
-          {/* AI Image Generation Toggle */}
-          <label className="flex items-center justify-between p-4 rounded-lg border border-border cursor-pointer hover:bg-accent/50 transition-colors">
-            <div>
-              <p className="font-medium text-sm">Generate AI Images</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Automatically create illustrations for each card
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={generateImages}
-              onClick={() => setGenerateImages(!generateImages)}
-              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
-                generateImages ? "bg-primary" : "bg-muted"
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
-                  generateImages ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </label>
+          {/* AI image choice deliberately omitted from this step — the
+           * card count isn't known yet so we can't show the user a
+           * meaningful credit-cost preview. Image-tier selection lives
+           * on the review screen, after generation, where the slider
+           * has a real total to divide. */}
 
           {error && (
             <p className="text-sm text-destructive">{error}</p>
@@ -531,28 +552,22 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
             </Card>
           )}
 
-          {/* Manual generate images button (when toggle was OFF) */}
-          {!generatingImages && !generateImages && cards.some((c) => !c.imageUrl) && (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">AI Images</p>
-                    <p className="text-sm text-muted-foreground">
-                      {cards.some((c) => c.imageUrl)
-                        ? `${cards.filter((c) => c.imageUrl).length} of ${cards.length} cards have images`
-                        : `Generate illustrations for all ${cards.filter((c) => !c.imageUrl).length} cards · ${estimateImageGenTime(cards.filter((c) => !c.imageUrl).length)}`}
-                    </p>
-                  </div>
-                  <Button variant="outline" onClick={() => generateImagesForCards(cards)}>
-                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                    </svg>
-                    Generate AI Images
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          {/* AI Images — silver/gold tier slider.
+           * Shown only when there's at least one card without an image
+           * yet, and we're not currently generating. The slider value
+           * IS the Premium count; remainder is Quick. */}
+          {!generatingImages && cards.some((c) => !c.imageUrl) && (
+            <ImageTierSlider
+              total={cards.filter((c) => !c.imageUrl).length}
+              premiumCount={Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length)}
+              onChange={setPremiumCount}
+              onGenerate={() =>
+                generateImagesForCards(
+                  cards,
+                  Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length)
+                )
+              }
+            />
           )}
 
           <div className="space-y-3">

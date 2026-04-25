@@ -221,6 +221,51 @@ body.font-xlarge { font-size: 20px; }
   }
 }
 
+/* ── Image-tier slider (Quick/Premium gold/silver split) ──────────
+ * The track background is set inline as a gradient on the input
+ * itself; this rule just nukes the browser default appearance and
+ * sets a thumb that visually sits on the gold/silver boundary. */
+.tier-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 9999px;
+  outline: none;
+  /* `background` is overridden inline per render */
+}
+
+.tier-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.tier-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.tier-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.tier-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+}
+
 /* Subtle card-lift interaction. Restraint on purpose — a serious
  * editorial app doesn't bounce around. 1px rise, shadow warmth. */
 .editorial-card {
