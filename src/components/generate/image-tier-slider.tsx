@@ -148,14 +148,27 @@ export function ImageTierSlider({
             </p>
             <CreditBalance />
           </div>
-          <p className="text-sm text-muted-foreground">
-            Drag right for more premium illustrations ({PREMIUM_COST} credits
-            each, gold), left for more quick ones ({QUICK_COST} credit each,
-            silver). The first N cards in the pack become premium; the rest
-            quick. The slider only shows mixes you can afford — anything
-            that doesn&apos;t fit your credits is skipped (the card saves
-            without an image).
-          </p>
+          <div className="text-sm text-muted-foreground space-y-2 leading-relaxed">
+            <p>
+              <span className="text-foreground font-medium">Quick</span> images
+              cost {QUICK_COST} credit each — clean and simple. They&apos;re
+              fine if you&apos;re running out of credits and want to populate
+              packs quickly and cheaply.
+            </p>
+            <p>
+              That said, we&apos;d definitely recommend{" "}
+              <span className="text-foreground font-medium">Premium</span> ({PREMIUM_COST}{" "}
+              credits each). They&apos;re much higher quality and way more
+              memorable — and memorable is the whole point. If you&apos;re
+              serious about your learning and want cards that actually stick
+              in your mind, Premium is what we&apos;d pick.
+            </p>
+            <p className="text-xs">
+              Drag the slider to set your mix. The first cards in the pack
+              get Premium; the rest get Quick. Anything you can&apos;t afford
+              saves without an image.
+            </p>
+          </div>
         </div>
 
         {/* Honest note about where the field is. AI image generation is

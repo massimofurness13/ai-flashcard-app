@@ -3,10 +3,30 @@ import { requireAuth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 
+/**
+ * Credit top-up checkout. Bundles are mapped to real Stripe price
+ * IDs (configured via env) so each purchase shows up against a
+ * proper Product in the Stripe dashboard with clean reporting.
+ *
+ * Earlier versions used inline price_data — switched once the user
+ * created live Products in Stripe and provided the price IDs.
+ */
 const BUNDLES = {
-  "500":  { amount: 500,  priceCents: 499,  label: "500 AI image credits" },
-  "1500": { amount: 1500, priceCents: 1199, label: "1500 AI image credits" },
-  "5000": { amount: 5000, priceCents: 3499, label: "5000 AI image credits" },
+  "500": {
+    amount: 500,
+    label: "500 AI image credits",
+    priceIdEnv: "STRIPE_PRICE_ID_CREDITS_500",
+  },
+  "1500": {
+    amount: 1500,
+    label: "1500 AI image credits",
+    priceIdEnv: "STRIPE_PRICE_ID_CREDITS_1500",
+  },
+  "5000": {
+    amount: 5000,
+    label: "5000 AI image credits",
+    priceIdEnv: "STRIPE_PRICE_ID_CREDITS_5000",
+  },
 } as const;
 
 type BundleId = keyof typeof BUNDLES;
@@ -26,6 +46,15 @@ export async function POST(request: Request) {
   }
 
   const pack = BUNDLES[bundle as BundleId];
+  const priceId = process.env[pack.priceIdEnv];
+  if (!priceId) {
+    return NextResponse.json(
+      {
+        error: `${pack.priceIdEnv} is not configured on the server.`,
+      },
+      { status: 500 }
+    );
+  }
 
   // Reuse the user's existing Stripe customer if they have one
   const existing = await prisma.subscription.findUnique({
@@ -59,16 +88,7 @@ export async function POST(request: Request) {
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: { name: pack.label },
-          unit_amount: pack.priceCents,
-        },
-        quantity: 1,
-      },
-    ],
+    line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${origin}/account?credits=added`,
     cancel_url: `${origin}/account?credits=canceled`,
     metadata: {

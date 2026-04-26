@@ -14,6 +14,10 @@ type Tier = "quick" | "premium";
 interface AiImageGeneratorProps {
   front: string;
   back: string;
+  /** Kept in the API for callers that already pass it (the
+   *  flashcard-form's "Replace with AI" panel). Currently unused
+   *  internally — the recommend-Premium copy reads the same on the
+   *  empty + replace states. */
   currentImageUrl?: string;
   onImageGenerated: (url: string) => void;
   /** Legacy prop — no longer used for gating */
@@ -23,7 +27,6 @@ interface AiImageGeneratorProps {
 export function AiImageGenerator({
   front,
   back,
-  currentImageUrl,
   onImageGenerated,
 }: AiImageGeneratorProps) {
   const [generatingTier, setGeneratingTier] = useState<Tier | null>(null);
@@ -73,8 +76,6 @@ export function AiImageGenerator({
     }
   }
 
-  const label = currentImageUrl ? "Replace image" : "Generate image";
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
@@ -117,9 +118,10 @@ export function AiImageGenerator({
           )}
         </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        {label}: Quick ✨ is fast and clean. Premium 🎨 uses a richer
-        illustrated style.
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        Quick is clean and cheap (1 credit). Premium is what we&apos;d
+        recommend — much higher quality and far more memorable. If
+        you want a card that actually sticks, Premium is the pick.
       </p>
       <CreditBalance />
 
