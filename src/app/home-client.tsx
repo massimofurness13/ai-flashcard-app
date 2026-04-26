@@ -50,6 +50,35 @@ function getTodayLabel(): string {
   });
 }
 
+// Picks the celebration phrase shown when the daily goal is hit.
+// Rotates through a small pool seeded by today's date so the phrase
+// is stable for the whole day but changes day-to-day. Streak-aware
+// variants only enter the pool once the user has at least a 2-day
+// run — "1 for 1" reads awkwardly, and the generic ones don't add
+// much on a fresh streak.
+function getCelebrationPhrase(streak: number): string {
+  const warm = [
+    "Nicely done.",
+    "Solid work.",
+    "Well played.",
+    "That'll do nicely.",
+    "Bang on.",
+  ];
+  const streakAware =
+    streak >= 2
+      ? [
+          `${streak} for ${streak}.`,
+          `Day ${streak}, locked in.`,
+          "Building the habit.",
+          "Sticking with it.",
+        ]
+      : [];
+  const pool = [...warm, ...streakAware];
+  const d = new Date();
+  const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return pool[seed % pool.length];
+}
+
 export function HomePage({
   folders,
   unfolderedDecks,
@@ -161,7 +190,7 @@ export function HomePage({
                         You&apos;re done for today.
                         <br />
                         <span className="italic text-[color:var(--glow)]">
-                          Beautifully.
+                          {getCelebrationPhrase(streak)}
                         </span>
                       </>
                     ) : remaining === dailyGoal ? (
