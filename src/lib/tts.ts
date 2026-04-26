@@ -36,8 +36,32 @@ export interface SpeakHandle {
   onError?: (cb: () => void) => void;
 }
 
-// Keep a singleton audio element so a new speak() cancels the previous one.
-let currentAudio: HTMLAudioElement | null = null;
+// Persistent module-level <audio> element. The browser grants autoplay
+// trust per-element after the first user-gesture-initiated play() —
+// reusing the same element across cards means subsequent plays don't
+// need a fresh gesture, which is what was breaking auto-audio in
+// study sessions (each card was creating a new Audio() and losing
+// the trust grant). We just swap `.src` for each new clip.
+let persistentAudio: HTMLAudioElement | null = null;
+function getPersistentAudio(): HTMLAudioElement {
+  if (typeof window === "undefined") {
+    throw new Error("getPersistentAudio called on server");
+  }
+  if (!persistentAudio) {
+    persistentAudio = new Audio();
+    persistentAudio.preload = "auto";
+  }
+  return persistentAudio;
+}
+
+// Tracks the most recent set of callbacks bound to the audio element
+// so cancel() can detach them cleanly when a new speak() takes over.
+let activeCallbacks: {
+  ended: (() => void)[];
+  error: (() => void)[];
+  endedListener?: () => void;
+  errorListener?: () => void;
+} | null = null;
 
 // ── Client-side URL cache ───────────────────────────────────────────
 // Shared across the module so VoicePreloader and speak() can communicate.
@@ -113,10 +137,22 @@ function getSettings(): { ttsSpeed: number } {
 }
 
 function cancelAll() {
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.src = "";
-    currentAudio = null;
+  if (persistentAudio) {
+    persistentAudio.pause();
+    // We DON'T set src="" here — that destroys the element's autoplay
+    // trust and forces a fresh gesture for the next play. Just pausing
+    // is enough; the next play() will swap in a new src and resume.
+  }
+  if (activeCallbacks) {
+    if (persistentAudio) {
+      if (activeCallbacks.endedListener) {
+        persistentAudio.removeEventListener("ended", activeCallbacks.endedListener);
+      }
+      if (activeCallbacks.errorListener) {
+        persistentAudio.removeEventListener("error", activeCallbacks.errorListener);
+      }
+    }
+    activeCallbacks = null;
   }
   if (typeof window !== "undefined" && window.speechSynthesis) {
     window.speechSynthesis.cancel();
@@ -186,25 +222,44 @@ function playAudioUrl(url: string): SpeakHandle {
     error: [],
   };
 
+  // Detach any callbacks from the previous play and pause the element.
+  // The element itself stays alive so its autoplay grant carries over.
   cancelAll();
-  const audio = new Audio(url);
-  audio.preload = "auto";
+  const audio = getPersistentAudio();
+  audio.src = url;
   audio.playbackRate = getSettings().ttsSpeed;
-  audio.addEventListener("ended", () => callbacks.ended.forEach((cb) => cb()));
-  audio.addEventListener("error", () => callbacks.error.forEach((cb) => cb()));
+  // Explicitly load() so the new src starts buffering immediately
+  // even if the previous play was paused mid-stream.
+  audio.load();
 
-  currentAudio = audio;
+  const endedListener = () => callbacks.ended.forEach((cb) => cb());
+  const errorListener = () => callbacks.error.forEach((cb) => cb());
+  audio.addEventListener("ended", endedListener);
+  audio.addEventListener("error", errorListener);
+
+  activeCallbacks = {
+    ended: callbacks.ended,
+    error: callbacks.error,
+    endedListener,
+    errorListener,
+  };
+
   void audio.play().catch(() => {
-    // Autoplay may be blocked until user gesture — a silent fail is fine,
-    // the manual voice button will succeed on click.
+    // First-ever play in a session may be blocked by autoplay policy;
+    // subsequent plays succeed because the element is now trusted.
+    // Either way, surface as an end so the parent's audioFinished gate
+    // doesn't deadlock waiting for a clip that never started.
     callbacks.error.forEach((cb) => cb());
   });
 
   return {
     cancel: () => {
       audio.pause();
-      audio.src = "";
-      if (currentAudio === audio) currentAudio = null;
+      audio.removeEventListener("ended", endedListener);
+      audio.removeEventListener("error", errorListener);
+      if (activeCallbacks?.endedListener === endedListener) {
+        activeCallbacks = null;
+      }
     },
     onEnded: (cb) => callbacks.ended.push(cb),
     onError: (cb) => callbacks.error.push(cb),
