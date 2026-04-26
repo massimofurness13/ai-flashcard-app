@@ -70,6 +70,9 @@ export function StudySession({
   // entry simply won't match the current key, so audioFinished
   // becomes false without any effect-driven setState.
   const [lastAudioKey, setLastAudioKey] = useState<string | null>(null);
+  // User-facing pause: freezes the countdown wheel and cancels any
+  // in-flight audio. Resume picks up from the same offset.
+  const [isPaused, setIsPaused] = useState(false);
   const [stats, setStats] = useState<StudyStats>({
     cardsReviewed: 0,
     ratings: { 1: 0, 3: 0, 5: 0 },
@@ -271,6 +274,7 @@ export function StudySession({
             showBackFirst ? currentCard.deck.frontLanguageCode : currentCard.deck.backLanguageCode
           }
           autoPlayVoice
+          paused={isPaused}
           onAudioEnd={() => setLastAudioKey(currentAudioKey)}
         />
       </div>
@@ -284,21 +288,19 @@ export function StudySession({
             </Button>
             {/* Auto-flip countdown — same wheel as auto-advance, gated
              * on the front-side audio so it doesn't tick down while
-             * the voice is still speaking the front of the card. */}
+             * the voice is still speaking the front of the card.
+             * `runId` is keyed only on card+side so pause/resume
+             * doesn't reset the wheel. */}
             {autoFlipSeconds > 0 && (
-              <>
+              <div className="flex items-center gap-2">
                 <CountdownWheel
                   seconds={autoFlipSeconds}
-                  runId={`flip:${currentCard.id}:${audioFinished ? "ready" : "wait"}`}
-                  active={audioFinished}
+                  runId={`flip:${currentCard.id}`}
+                  active={audioFinished && !isPaused}
                   onComplete={() => setIsFlipped(true)}
                 />
-                <p className="text-xs text-muted-foreground text-center">
-                  {audioFinished
-                    ? "Flipping…"
-                    : "Listening… countdown starts when audio finishes"}
-                </p>
-              </>
+                <PauseToggle paused={isPaused} onToggle={() => setIsPaused((p) => !p)} />
+              </div>
             )}
           </div>
         )}
@@ -316,24 +318,48 @@ export function StudySession({
         )}
 
         {isAutoAdvance && isFlipped && !dealingOut && (
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2">
             <CountdownWheel
               seconds={autoAdvanceSeconds}
-              // Restart the wheel on every new card OR when the
-              // audio-finished gate flips true, so the countdown
-              // truly waits for speech to complete.
-              runId={`${currentCard.id}:${audioFinished ? "ready" : "wait"}`}
-              active={audioFinished}
+              runId={`adv:${currentCard.id}`}
+              active={audioFinished && !isPaused}
               onComplete={handleCountdownComplete}
             />
-            <p className="text-xs text-muted-foreground text-center">
-              {audioFinished
-                ? "Next card incoming…"
-                : "Listening… countdown starts when audio finishes"}
-            </p>
+            <PauseToggle paused={isPaused} onToggle={() => setIsPaused((p) => !p)} />
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+/** Small icon-only button for pausing/resuming the auto-flip and
+ *  auto-advance countdowns. Sits next to the wheel so the user can
+ *  reach for it as soon as they want a beat to think. */
+function PauseToggle({
+  paused,
+  onToggle,
+}: {
+  paused: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={onToggle}
+      aria-label={paused ? "Resume" : "Pause"}
+      title={paused ? "Resume" : "Pause"}
+    >
+      {paused ? (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
+        </svg>
+      ) : (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6" />
+        </svg>
+      )}
+    </Button>
   );
 }

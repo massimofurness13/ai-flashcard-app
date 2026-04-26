@@ -4,32 +4,32 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface CountdownWheelProps {
-  /** Seconds the countdown should run for. */
+  /** Total duration of the countdown in seconds. */
   seconds: number;
-  /** Any value that changes when the countdown should restart
-   *  (e.g. card index + isFlipped). */
+  /** Any value that changes when the countdown should reset to full
+   *  and start over (e.g. card identity + flipped side). */
   runId: string | number;
   /** Fires once the countdown reaches zero. */
   onComplete: () => void;
-  /** When false, the wheel pauses (no JS tick, no CSS animation).
-   *  Used to delay the timer until audio has finished. */
+  /** When false the wheel is paused — interval stops, drain freezes
+   *  in place. Going false → true resumes from the same offset, NOT
+   *  from full. The only thing that resets to full is a runId change. */
   active?: boolean;
   className?: string;
 }
 
-const RADIUS = 16; // SVG units in a 40-unit viewBox
+const RADIUS = 16;
 const CIRC = 2 * Math.PI * RADIUS;
 
 /**
  * Visible auto-advance countdown: a circle that drains over `seconds`
- * with the remaining whole number inside. Restarts whenever `runId`
- * changes; pauses entirely while `active` is false.
+ * with the remaining whole number inside.
  *
- * Drain is implemented with a CSS transition on stroke-dashoffset so
- * it stays smooth even if the JS thread is blocked. The two-phase
- * useEffect (set 0, then set CIRC on the next frame) is what makes
- * the transition fire — going straight to the final value would skip
- * the animation since the initial render IS the final state.
+ * The drain is driven entirely by the JS tick (no CSS transition) so
+ * pause/resume works exactly as you'd expect — the offset freezes at
+ * the moment `active` flips to false, then continues from there when
+ * it flips back to true. We track elapsed time across pauses by
+ * remembering the wall-clock at start and adjusting on resume.
  */
 export function CountdownWheel({
   seconds,
@@ -38,76 +38,62 @@ export function CountdownWheel({
   active = true,
   className,
 }: CountdownWheelProps) {
-  // Visible "drain" value — 0 = full circle, CIRC = empty.
-  // Re-keyed each run so we render at offset=0, then a single
-  // requestAnimationFrame in an effect bumps to CIRC, triggering the
-  // CSS transition. State is set INSIDE a callback (rAF), not in the
-  // body of the effect, which keeps the lint rule happy.
-  const [offset, setOffset] = useState(0);
-  const [remaining, setRemaining] = useState(seconds);
-  // Stash the latest onComplete in a ref so the interval below can
-  // call the freshest version without rerunning when the prop changes
-  // (which would restart the wheel mid-tick). Updated inside an
-  // effect so we don't mutate during render.
+  const [elapsed, setElapsed] = useState(0);
+
+  // Latest onComplete in a ref so we don't restart the timer when the
+  // parent passes a new arrow function.
   const onCompleteRef = useRef(onComplete);
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
 
+  // Reset elapsed-time state when the runId changes (new card / side).
+  // Setting state inside an effect callback is needed here because
+  // we need to react to a parent-controlled prop change.
+  const lastRunIdRef = useRef(runId);
   useEffect(() => {
-    let raf1 = 0;
-    let raf2 = 0;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    if (!active) {
-      // Snap back to full when paused — reset happens via callback,
-      // not synchronous setState in the effect body.
-      raf1 = requestAnimationFrame(() => {
-        setOffset(0);
-        setRemaining(seconds);
-      });
-      return () => cancelAnimationFrame(raf1);
+    if (lastRunIdRef.current !== runId) {
+      lastRunIdRef.current = runId;
+      setElapsed(0);
     }
+  }, [runId]);
 
-    // Two-frame trick: first frame commits offset=0, second frame
-    // sets offset=CIRC, which triggers the linear CSS transition.
-    raf1 = requestAnimationFrame(() => {
-      setOffset(0);
-      setRemaining(seconds);
-      raf2 = requestAnimationFrame(() => {
-        setOffset(CIRC);
-      });
-    });
-
+  // Tick every 50ms while active. Resume math: remember wall-clock
+  // start each time we (re)enter the active phase, and treat the
+  // already-elapsed time as a head start.
+  useEffect(() => {
+    if (!active) return;
+    const headStart = elapsed;
     const startedAt = Date.now();
     let fired = false;
-    intervalId = setInterval(() => {
-      const elapsed = (Date.now() - startedAt) / 1000;
-      const left = Math.max(0, seconds - elapsed);
-      setRemaining(left);
-      if (left <= 0 && !fired) {
+    const id = setInterval(() => {
+      const total = headStart + (Date.now() - startedAt) / 1000;
+      const next = Math.min(total, seconds);
+      setElapsed(next);
+      if (next >= seconds && !fired) {
         fired = true;
-        if (intervalId) clearInterval(intervalId);
+        clearInterval(id);
         onCompleteRef.current?.();
       }
-    }, 100);
-
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      if (intervalId) clearInterval(intervalId);
-    };
+    }, 50);
+    return () => clearInterval(id);
+    // We INTENTIONALLY exclude `elapsed` here — it's the head-start
+    // captured at effect start. Including it would restart the timer
+    // every tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, runId, seconds]);
+
+  const remaining = Math.max(0, seconds - elapsed);
+  const offset = CIRC * Math.min(1, elapsed / seconds);
 
   return (
     <div
       className={cn("relative inline-flex items-center justify-center", className)}
       style={{ width: 56, height: 56 }}
-      aria-label={`Auto-advancing in ${Math.ceil(remaining)} seconds`}
+      aria-label={`${Math.ceil(remaining)} seconds remaining`}
       role="timer"
     >
       <svg width={56} height={56} viewBox="0 0 40 40" className="-rotate-90">
-        {/* Background track */}
         <circle
           cx="20"
           cy="20"
@@ -117,7 +103,6 @@ export function CountdownWheel({
           strokeOpacity="0.15"
           strokeWidth="3"
         />
-        {/* Draining stroke */}
         <circle
           cx="20"
           cy="20"
@@ -128,9 +113,6 @@ export function CountdownWheel({
           strokeLinecap="round"
           strokeDasharray={CIRC}
           strokeDashoffset={offset}
-          style={{
-            transition: active ? `stroke-dashoffset ${seconds}s linear` : "none",
-          }}
         />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center text-sm font-medium tabular-nums text-foreground">

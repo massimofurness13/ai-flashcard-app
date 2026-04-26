@@ -27,6 +27,10 @@ interface FlashcardProps {
    *  auto-advance countdown — so the timer never overlaps with the
    *  audio. Only meaningful when `autoPlayVoice` is true. */
   onAudioEnd?: () => void;
+  /** When true, suppresses auto-play. If a clip is currently playing
+   *  it gets cancelled. Going from paused → unpaused does NOT replay
+   *  audio for the same side — the user has already heard it. */
+  paused?: boolean;
   /** When false, AI-generated images are blurred behind a "Resubscribe
    *  to view" overlay. Lapsed Pro users keep their text + audio but lose
    *  visibility on illustrations until they renew. */
@@ -48,6 +52,7 @@ export function Flashcard({
   backLanguageCode,
   autoPlayVoice = false,
   onAudioEnd,
+  paused = false,
   isPro = true,
   className,
 }: FlashcardProps) {
@@ -75,8 +80,20 @@ export function Flashcard({
   // itself unlocks it. We notify the parent (via the ref) when audio
   // ends, errors, or is cancelled so the study session can start its
   // auto-advance/auto-flip countdown only after speech completes.
+  //
+  // When `paused` is true we skip starting playback entirely — and
+  // any in-flight handle from a previous render is cancelled by the
+  // cleanup. We deliberately fire the audio-end signal in that case
+  // so a paused → resumed cycle doesn't leave the parent's
+  // audioFinished gate stuck closed; the user has effectively
+  // "heard" the audio enough that the countdown should be allowed
+  // to continue from where it was paused.
   useEffect(() => {
     if (!autoPlayVoice) return;
+    if (paused) {
+      onAudioEndRef.current?.();
+      return;
+    }
     const text = isFlipped ? back : front;
     const voice = isFlipped ? backVoice : frontVoice;
     const lang = isFlipped ? backLanguageCode : frontLanguageCode;
@@ -91,11 +108,9 @@ export function Flashcard({
     handle.onError?.(fire);
     return () => {
       handle.cancel();
-      // Fire on cancel too so the parent isn't stuck waiting forever
-      // if the user advances the card before audio finishes.
       fire();
     };
-  }, [autoPlayVoice, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode]);
+  }, [autoPlayVoice, paused, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode]);
 
   return (
     <div
