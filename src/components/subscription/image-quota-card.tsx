@@ -117,10 +117,10 @@ export function ImageQuotaCard() {
                 Quick ✨ vs Premium 🎨
               </p>
               <p>
-                <span className="text-foreground font-medium">Quick</span> images
-                cost 1 credit each — clean and simple. They&apos;re fine if
-                you&apos;re running out of credits and want to populate packs
-                quickly and cheaply.
+                <span className="text-foreground font-medium">Quick</span>{" "}
+                images cost 1 credit each — clean and simple. They&apos;re
+                fine if you&apos;re running out of credits and want to
+                populate packs quickly and cheaply.
               </p>
               <p>
                 That said, we&apos;d definitely recommend{" "}

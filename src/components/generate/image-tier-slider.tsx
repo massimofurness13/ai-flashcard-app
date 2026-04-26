@@ -150,10 +150,10 @@ export function ImageTierSlider({
           </div>
           <div className="text-sm text-muted-foreground space-y-2 leading-relaxed">
             <p>
-              <span className="text-foreground font-medium">Quick</span> images
-              cost {QUICK_COST} credit each — clean and simple. They&apos;re
-              fine if you&apos;re running out of credits and want to populate
-              packs quickly and cheaply.
+              <span className="text-foreground font-medium">Quick</span>{" "}
+              images cost {QUICK_COST} credit each — clean and simple.
+              They&apos;re fine if you&apos;re running out of credits and want
+              to populate packs quickly and cheaply.
             </p>
             <p>
               That said, we&apos;d definitely recommend{" "}
