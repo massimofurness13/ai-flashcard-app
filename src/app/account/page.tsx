@@ -14,6 +14,7 @@ import {
   CARD_ORIENTATION_OPTIONS,
   FONT_SIZE_OPTIONS,
 } from "@/lib/constants";
+import { speak } from "@/lib/tts";
 import { ImageQuotaCard } from "@/components/subscription/image-quota-card";
 import { DailyGoalCard } from "@/components/account/daily-goal-card";
 import { AccountInfoCard } from "@/components/account/account-info-card";
@@ -93,13 +94,26 @@ export default function AccountPage() {
   }
 
   function testVoice() {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(
-      "This is a sample at the current playback speed."
-    );
-    utterance.rate = ttsSpeed;
-    window.speechSynthesis.speak(utterance);
+    // Use the same Google Chirp 3 HD pipeline as study sessions —
+    // routing through a real language code (en-GB here) instead of
+    // the browser's robotic Web Speech API. Persists the current
+    // slider value to localStorage first so getSettings() inside
+    // tts.ts reads back the speed the user is currently testing,
+    // even before they hit Save.
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem("flashmind-settings") || "{}"
+      );
+      localStorage.setItem(
+        "flashmind-settings",
+        JSON.stringify({ ...saved, ttsSpeed })
+      );
+    } catch {
+      /* non-fatal — speed override is best-effort */
+    }
+    speak("This is a sample at the current playback speed.", {
+      languageCode: "en-GB",
+    });
   }
 
   async function handleLogout() {
