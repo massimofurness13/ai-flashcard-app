@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { RatingButtons } from "./rating-buttons";
 import { Progress } from "@/components/ui/progress";
@@ -83,7 +83,6 @@ export function StudySession({
   const { quota } = useCreditBalance();
   const isPro = quota?.isPro ?? true;
 
-  const autoFlipRef = useRef<NodeJS.Timeout | null>(null);
 
   // Pre-compute each card's initial orientation ONCE at session start.
   // Random coin flip per card in mixed mode — no mid-session recomputation,
@@ -142,20 +141,10 @@ export function StudySession({
     return items;
   }, [cards, currentIndex]);
 
-  // Auto-flip timer (front → back). Independent of audio — auto-flip
-  // is for users who only want a peek before the answer reveals; the
-  // audio-aware timing applies to auto-advance, not auto-flip.
-  useEffect(() => {
-    if (dealingOut) return;
-    if (autoFlipSeconds > 0 && !isFlipped) {
-      autoFlipRef.current = setTimeout(() => {
-        setIsFlipped(true);
-      }, autoFlipSeconds * 1000);
-    }
-    return () => {
-      if (autoFlipRef.current) clearTimeout(autoFlipRef.current);
-    };
-  }, [autoFlipSeconds, isFlipped, currentIndex, dealingOut]);
+  // Auto-flip is driven by the CountdownWheel's onComplete in the JSX
+  // below — same pattern as auto-advance. The wheel itself only ticks
+  // while audioFinished is true, so the timer never overlaps with
+  // front-side speech.
 
   /**
    * Deal the current card out (slide/fade) then swap in the next card
@@ -289,9 +278,29 @@ export function StudySession({
       {/* Single action area — either Show Answer OR rating, never both */}
       <div className="min-h-[80px] flex items-start justify-center">
         {!isFlipped && !dealingOut && (
-          <Button variant="outline" onClick={handleFlip}>
-            Show Answer
-          </Button>
+          <div className="flex flex-col items-center gap-2">
+            <Button variant="outline" onClick={handleFlip}>
+              Show Answer
+            </Button>
+            {/* Auto-flip countdown — same wheel as auto-advance, gated
+             * on the front-side audio so it doesn't tick down while
+             * the voice is still speaking the front of the card. */}
+            {autoFlipSeconds > 0 && (
+              <>
+                <CountdownWheel
+                  seconds={autoFlipSeconds}
+                  runId={`flip:${currentCard.id}:${audioFinished ? "ready" : "wait"}`}
+                  active={audioFinished}
+                  onComplete={() => setIsFlipped(true)}
+                />
+                <p className="text-xs text-muted-foreground text-center">
+                  {audioFinished
+                    ? "Flipping…"
+                    : "Listening… countdown starts when audio finishes"}
+                </p>
+              </>
+            )}
+          </div>
         )}
 
         {!isAutoAdvance && isFlipped && !dealingOut && (

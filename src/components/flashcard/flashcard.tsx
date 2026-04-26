@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { FlashcardImage } from "./flashcard-image";
 import { VoiceButton, speakText } from "./voice-button";
@@ -58,11 +58,23 @@ export function Flashcard({
     return () => cancelAnimationFrame(timer);
   }, []);
 
-  // Auto-play TTS when the visible side changes. Mobile browsers require
-  // a user gesture before the first utterance, so a silent fail here is
-  // fine — the first click of Show Answer or the card itself unlocks it.
-  // Notify the parent when audio ends OR errors so the study session
-  // can start its auto-advance countdown only after speech completes.
+  // Stash onAudioEnd in a ref so it can be called from the audio
+  // effect WITHOUT being a dependency. Including the prop in deps
+  // would re-run the effect every parent re-render (the parent
+  // typically passes a fresh arrow function), which cancels the
+  // in-flight TTS handle and starts a new one — manifesting as the
+  // clip playing twice in a row.
+  const onAudioEndRef = useRef(onAudioEnd);
+  useEffect(() => {
+    onAudioEndRef.current = onAudioEnd;
+  }, [onAudioEnd]);
+
+  // Auto-play TTS when the visible side changes. Mobile browsers
+  // require a user gesture before the first utterance, so a silent
+  // fail here is fine — the first click of Show Answer or the card
+  // itself unlocks it. We notify the parent (via the ref) when audio
+  // ends, errors, or is cancelled so the study session can start its
+  // auto-advance/auto-flip countdown only after speech completes.
   useEffect(() => {
     if (!autoPlayVoice) return;
     const text = isFlipped ? back : front;
@@ -73,7 +85,7 @@ export function Flashcard({
     const fire = () => {
       if (fired) return;
       fired = true;
-      onAudioEnd?.();
+      onAudioEndRef.current?.();
     };
     handle.onEnded?.(fire);
     handle.onError?.(fire);
@@ -83,7 +95,7 @@ export function Flashcard({
       // if the user advances the card before audio finishes.
       fire();
     };
-  }, [autoPlayVoice, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode, onAudioEnd]);
+  }, [autoPlayVoice, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode]);
 
   return (
     <div
