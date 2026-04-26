@@ -53,34 +53,48 @@ function isVariant(v: string): v is Variant {
 }
 
 /**
- * Pull the Fraunces font binary from Google Fonts at request time.
- * We hit the css2 API, parse the first url(...) from the response,
- * then fetch the actual font file. We pass a User-Agent string that
- * Google's CDN responds to with a TTF (rather than the default woff2)
- * because Satori — the engine ImageResponse uses internally — has
- * the broadest format support for TTF.
+ * Pull the Fraunces font binary at request time.
+ *
+ * Earlier attempts hit the Google Fonts css2 API and parsed the first
+ * url(...) — but Google now serves WOFF2 to almost every User-Agent,
+ * and Satori (the engine ImageResponse uses internally) doesn't parse
+ * WOFF2. That caused "Unsupported OpenType signature wOF2" errors.
+ *
+ * Fix: bypass the CSS API entirely and pull the static TTF files from
+ * the official google/fonts GitHub repo, which serves real TTF bytes.
+ * We pin specific weights below so URLs don't drift over time.
  */
+const FRAUNCES_TTF_BASE =
+  "https://github.com/google/fonts/raw/main/ofl/fraunces/static";
+
+const FRAUNCES_FILES: Record<number, { roman: string; italic: string }> = {
+  500: {
+    roman: "Fraunces-Medium.ttf",
+    italic: "Fraunces-MediumItalic.ttf",
+  },
+  600: {
+    roman: "Fraunces-SemiBold.ttf",
+    italic: "Fraunces-SemiBoldItalic.ttf",
+  },
+  700: {
+    roman: "Fraunces-Bold.ttf",
+    italic: "Fraunces-BoldItalic.ttf",
+  },
+};
+
 async function loadFraunces(
   weight: number,
   italic: boolean
 ): Promise<ArrayBuffer> {
-  const ital = italic ? "1," : "0,";
-  const cssUrl = `https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@${ital}${weight}&display=swap`;
-  const css = await fetch(cssUrl, {
-    headers: {
-      // A non-modern UA forces Google to serve a TTF/woff link rather
-      // than woff2, which Satori may not parse reliably.
-      "User-Agent":
-        "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0",
-    },
-  }).then((r) => r.text());
-
-  const match = css.match(/src:\s*url\(([^)]+)\)/);
-  if (!match) {
-    throw new Error("Could not extract Fraunces font URL from Google CSS");
+  const files = FRAUNCES_FILES[weight] ?? FRAUNCES_FILES[600];
+  const filename = italic ? files.italic : files.roman;
+  const res = await fetch(`${FRAUNCES_TTF_BASE}/${filename}`);
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch Fraunces font (${filename}): ${res.status}`
+    );
   }
-  const fontData = await fetch(match[1]).then((r) => r.arrayBuffer());
-  return fontData;
+  return res.arrayBuffer();
 }
 
 export async function GET(
