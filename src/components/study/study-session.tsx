@@ -9,6 +9,7 @@ import { useKeyboardNav } from "@/hooks/use-keyboard-nav";
 import { ImagePreloader } from "./image-preloader";
 import { VoicePreloader, type VoicePreloadItem } from "./voice-preloader";
 import { useCreditBalance } from "@/components/subscription/credit-balance";
+import { CountdownWheel } from "./countdown-wheel";
 
 const PRELOAD_AHEAD = 5;
 // Voice preload window is tighter than image preload (3 vs 5) because
@@ -63,6 +64,12 @@ export function StudySession({
   const [isFlipped, setIsFlipped] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dealingOut, setDealingOut] = useState(false);
+  // Tracks which (card-id, side) combination has finished playing
+  // its TTS clip. Storing the identity rather than a boolean lets us
+  // implicitly "reset" when the user changes card or flips — a stale
+  // entry simply won't match the current key, so audioFinished
+  // becomes false without any effect-driven setState.
+  const [lastAudioKey, setLastAudioKey] = useState<string | null>(null);
   const [stats, setStats] = useState<StudyStats>({
     cardsReviewed: 0,
     ratings: { 1: 0, 3: 0, 5: 0 },
@@ -77,7 +84,6 @@ export function StudySession({
   const isPro = quota?.isPro ?? true;
 
   const autoFlipRef = useRef<NodeJS.Timeout | null>(null);
-  const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Pre-compute each card's initial orientation ONCE at session start.
   // Random coin flip per card in mixed mode — no mid-session recomputation,
@@ -95,6 +101,15 @@ export function StudySession({
   const total = cards.length;
   const progress = total > 0 ? currentIndex / total : 0;
   const showBackFirst = showBackFirstPerCard[currentIndex];
+
+  // Identifies the audio currently expected to be playing. The
+  // Flashcard fires onAudioEnd, we stamp this key into lastAudioKey,
+  // and audioFinished becomes true. Changing card/side automatically
+  // produces a new key, so the gate resets without any reset effect.
+  const currentAudioKey = currentCard
+    ? `${currentCard.id}:${isFlipped ? "back" : "front"}`
+    : "";
+  const audioFinished = lastAudioKey === currentAudioKey;
 
   // Preload the next N card images so the user never sees a blank image
   // when they advance. Memoized by index so the ref-based dedupe inside
@@ -127,7 +142,9 @@ export function StudySession({
     return items;
   }, [cards, currentIndex]);
 
-  // Auto-flip timer
+  // Auto-flip timer (front → back). Independent of audio — auto-flip
+  // is for users who only want a peek before the answer reveals; the
+  // audio-aware timing applies to auto-advance, not auto-flip.
   useEffect(() => {
     if (dealingOut) return;
     if (autoFlipSeconds > 0 && !isFlipped) {
@@ -160,22 +177,18 @@ export function StudySession({
     [currentIndex, total, onComplete]
   );
 
-  // Auto-advance timer — runs once the card is flipped, skips rating UI
-  useEffect(() => {
-    if (!isAutoAdvance) return;
-    if (!isFlipped) return;
-    if (dealingOut) return;
-
-    autoAdvanceRef.current = setTimeout(() => {
-      const newStats = { ...stats, cardsReviewed: stats.cardsReviewed + 1 };
-      setStats(newStats);
-      dealAndAdvance(newStats);
-    }, autoAdvanceSeconds * 1000);
-
-    return () => {
-      if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
-    };
-  }, [isAutoAdvance, isFlipped, autoAdvanceSeconds, currentIndex, stats, dealAndAdvance, dealingOut]);
+  // Auto-advance is triggered by the visible CountdownWheel below
+  // hitting zero — NOT by a setTimeout here. The wheel only starts
+  // ticking when both `isFlipped` and `audioFinished` are true, which
+  // means the back-side audio has already played to completion. This
+  // is the user's requested ordering: flip → audio → countdown →
+  // advance, with no overlap.
+  const handleCountdownComplete = useCallback(() => {
+    if (!isAutoAdvance || !isFlipped || dealingOut) return;
+    const newStats = { ...stats, cardsReviewed: stats.cardsReviewed + 1 };
+    setStats(newStats);
+    dealAndAdvance(newStats);
+  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance]);
 
   const handleFlip = useCallback(() => {
     if (dealingOut) return;
@@ -269,6 +282,7 @@ export function StudySession({
             showBackFirst ? currentCard.deck.frontLanguageCode : currentCard.deck.backLanguageCode
           }
           autoPlayVoice
+          onAudioEnd={() => setLastAudioKey(currentAudioKey)}
         />
       </div>
 
@@ -293,9 +307,22 @@ export function StudySession({
         )}
 
         {isAutoAdvance && isFlipped && !dealingOut && (
-          <p className="text-xs text-muted-foreground text-center">
-            Next card in {autoAdvanceSeconds.toFixed(1)}s…
-          </p>
+          <div className="flex flex-col items-center gap-2">
+            <CountdownWheel
+              seconds={autoAdvanceSeconds}
+              // Restart the wheel on every new card OR when the
+              // audio-finished gate flips true, so the countdown
+              // truly waits for speech to complete.
+              runId={`${currentCard.id}:${audioFinished ? "ready" : "wait"}`}
+              active={audioFinished}
+              onComplete={handleCountdownComplete}
+            />
+            <p className="text-xs text-muted-foreground text-center">
+              {audioFinished
+                ? "Next card incoming…"
+                : "Listening… countdown starts when audio finishes"}
+            </p>
+          </div>
         )}
       </div>
     </div>

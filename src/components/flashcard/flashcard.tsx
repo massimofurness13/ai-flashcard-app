@@ -22,6 +22,11 @@ interface FlashcardProps {
   /** When true, the visible side's text auto-plays via TTS each time
    * the card appears or flips. Study/Review use this; the edit form does not. */
   autoPlayVoice?: boolean;
+  /** Fires when the auto-played TTS clip finishes (or fails / is
+   *  cancelled mid-play). Study session uses this to start the
+   *  auto-advance countdown — so the timer never overlaps with the
+   *  audio. Only meaningful when `autoPlayVoice` is true. */
+  onAudioEnd?: () => void;
   /** When false, AI-generated images are blurred behind a "Resubscribe
    *  to view" overlay. Lapsed Pro users keep their text + audio but lose
    *  visibility on illustrations until they renew. */
@@ -42,6 +47,7 @@ export function Flashcard({
   frontLanguageCode,
   backLanguageCode,
   autoPlayVoice = false,
+  onAudioEnd,
   isPro = true,
   className,
 }: FlashcardProps) {
@@ -55,14 +61,29 @@ export function Flashcard({
   // Auto-play TTS when the visible side changes. Mobile browsers require
   // a user gesture before the first utterance, so a silent fail here is
   // fine — the first click of Show Answer or the card itself unlocks it.
+  // Notify the parent when audio ends OR errors so the study session
+  // can start its auto-advance countdown only after speech completes.
   useEffect(() => {
     if (!autoPlayVoice) return;
     const text = isFlipped ? back : front;
     const voice = isFlipped ? backVoice : frontVoice;
     const lang = isFlipped ? backLanguageCode : frontLanguageCode;
     const handle = speakText(text, { languageCode: lang, voiceName: voice });
-    return () => handle.cancel();
-  }, [autoPlayVoice, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode]);
+    let fired = false;
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      onAudioEnd?.();
+    };
+    handle.onEnded?.(fire);
+    handle.onError?.(fire);
+    return () => {
+      handle.cancel();
+      // Fire on cancel too so the parent isn't stuck waiting forever
+      // if the user advances the card before audio finishes.
+      fire();
+    };
+  }, [autoPlayVoice, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode, onAudioEnd]);
 
   return (
     <div
