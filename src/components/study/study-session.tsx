@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useCallback, useMemo } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { RatingButtons } from "./rating-buttons";
@@ -240,8 +241,8 @@ export function StudySession({
     <div className="space-y-6">
       <ImagePreloader urls={upcomingImageUrls} />
       <VoicePreloader items={upcomingVoiceItems} />
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-muted-foreground truncate">
           {currentCard.deck.emoji} {currentCard.deck.name}
           {isAutoAdvance && (
             <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide bg-primary/15 text-primary px-1.5 py-0.5 rounded">
@@ -249,9 +250,27 @@ export function StudySession({
             </span>
           )}
         </span>
-        <span className="text-sm text-muted-foreground">
-          {currentIndex + 1} / {total}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Edit-this-card affordance — opens in a new tab so the
+           *  current study session keeps its place. The user can fix
+           *  a typo or regenerate the image, save, close the tab, and
+           *  carry on with the same card without losing position. */}
+          <Link
+            href={`/decks/${currentCard.deck.id}/cards/${currentCard.id}/edit`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-foreground transition-colors"
+            title="Edit this card (opens in a new tab)"
+            aria-label="Edit this card"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </Link>
+          <span className="text-sm text-muted-foreground">
+            {currentIndex + 1} / {total}
+          </span>
+        </div>
       </div>
 
       <Progress value={progress * 100} />
