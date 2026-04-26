@@ -112,15 +112,23 @@ export function ImageQuotaCard() {
               )}
             </div>
 
-            <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground leading-relaxed">
-              <p className="font-medium text-foreground text-sm mb-1">
+            <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground leading-relaxed space-y-2">
+              <p className="font-medium text-foreground text-sm">
                 Quick ✨ vs Premium 🎨
               </p>
               <p>
-                Quick images cost 1 credit each and look clean and simple. Premium
-                images cost 5 credits each and use a richer painterly style —
-                worth it when you want the illustration to shine. Pick whichever
-                suits each card.
+                <span className="text-foreground font-medium">Quick</span> images
+                cost 1 credit each — clean and simple. They&apos;re fine if
+                you&apos;re running out of credits and want to populate packs
+                quickly and cheaply.
+              </p>
+              <p>
+                That said, we&apos;d definitely recommend{" "}
+                <span className="text-foreground font-medium">Premium</span>{" "}
+                (5 credits each). They&apos;re much higher quality and way
+                more memorable — and memorable is the whole point. If
+                you&apos;re serious about your learning and want cards that
+                actually stick in your mind, Premium is what we&apos;d pick.
               </p>
             </div>
 
