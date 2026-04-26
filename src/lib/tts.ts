@@ -159,7 +159,7 @@ function cancelAll() {
   }
 }
 
-async function fetchAudioUrl(
+async function fetchAudioUrlOnce(
   text: string,
   languageCode: string
 ): Promise<string | null> {
@@ -178,6 +178,23 @@ async function fetchAudioUrl(
   } catch {
     return null;
   }
+}
+
+/**
+ * Fetch the Supabase URL for a (text, languageCode) clip. Retries once
+ * on transient failure with a short backoff — most /api/tts misses
+ * during study sessions are intermittent (cold Render container, brief
+ * Supabase blip, Google TTS hiccup) and a single retry rescues them
+ * without inflicting the Web Speech fallback voice on the user.
+ */
+async function fetchAudioUrl(
+  text: string,
+  languageCode: string
+): Promise<string | null> {
+  const first = await fetchAudioUrlOnce(text, languageCode);
+  if (first) return first;
+  await new Promise((r) => setTimeout(r, 350));
+  return fetchAudioUrlOnce(text, languageCode);
 }
 
 function speakViaWebSpeech(
@@ -308,11 +325,13 @@ export function speak(
     (async () => {
       const url = await fetchAudioUrl(text, options.languageCode!);
       if (!url) {
-        // Fall back to Web Speech with the voice hint if available.
-        const inner = speakViaWebSpeech(text, options.voiceName);
-        handle.cancel = inner.cancel;
-        inner.onEnded?.(() => endedCbs.forEach((cb) => cb()));
-        inner.onError?.(() => errorCbs.forEach((cb) => cb()));
+        // Decks with a language code MUST use the Google Chirp 3 HD
+        // voice — the user has explicitly opted into native-speaker
+        // audio. If the server can't deliver it (rate limit, network
+        // blip, etc.) we silently end the clip rather than swap in
+        // the robotic Web Speech voice. The countdown gate fires via
+        // onError so the study session still advances normally.
+        errorCbs.forEach((cb) => cb());
         return;
       }
       const inner = playAudioUrl(url);
@@ -324,6 +343,8 @@ export function speak(
     return handle;
   }
 
+  // No language code on the deck — legacy / hand-made cards. Web
+  // Speech is the intended path here, not a fallback.
   return speakViaWebSpeech(text, options.voiceName);
 }
 
