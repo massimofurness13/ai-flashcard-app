@@ -281,27 +281,20 @@ export function StudySession({
 
       {/* Single action area — either Show Answer OR rating, never both */}
       <div className="min-h-[80px] flex items-start justify-center">
-        {!isFlipped && !dealingOut && (
-          <div className="flex flex-col items-center gap-2">
-            <Button variant="outline" onClick={handleFlip}>
-              Show Answer
-            </Button>
-            {/* Auto-flip countdown — same wheel as auto-advance, gated
-             * on the front-side audio so it doesn't tick down while
-             * the voice is still speaking the front of the card.
-             * `runId` is keyed only on card+side so pause/resume
-             * doesn't reset the wheel. */}
-            {autoFlipSeconds > 0 && (
-              <div className="flex items-center gap-2">
-                <CountdownWheel
-                  seconds={autoFlipSeconds}
-                  runId={`flip:${currentCard.id}`}
-                  active={audioFinished && !isPaused}
-                  onComplete={() => setIsFlipped(true)}
-                />
-                <PauseToggle paused={isPaused} onToggle={() => setIsPaused((p) => !p)} />
-              </div>
-            )}
+        {/* Pre-flip action area. The card itself is tappable to flip
+         * (Flashcard's outer div has onClick={onFlip}) so we don't
+         * need an explicit "Show Answer" button. When auto-flip is
+         * configured we show the countdown wheel + pause; otherwise
+         * the area stays empty so the user just taps when ready. */}
+        {!isFlipped && !dealingOut && autoFlipSeconds > 0 && (
+          <div className="flex items-center gap-2">
+            <CountdownWheel
+              seconds={autoFlipSeconds}
+              runId={`flip:${currentCard.id}`}
+              active={audioFinished && !isPaused}
+              onComplete={() => setIsFlipped(true)}
+            />
+            <PauseToggle paused={isPaused} onToggle={() => setIsPaused((p) => !p)} />
           </div>
         )}
 

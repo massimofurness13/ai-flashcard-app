@@ -127,7 +127,17 @@ export function Flashcard({
         style={{ minHeight: "320px" }}
       >
         {/* Front face */}
-        <div className="flashcard-front rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
+        <div className="flashcard-front relative rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
+          {/* Volume button anchored to the top-right corner of the
+           *  card frame. Backdrop-blur + bg-card/70 keeps it legible
+           *  whether it sits over the image, the text, or empty space.
+           *  No more lonely icon hovering in a wide bottom row. */}
+          <VoiceButton
+            text={front}
+            languageCode={frontLanguageCode}
+            voiceName={frontVoice}
+            className="absolute top-2 right-2 z-10 bg-card/70 backdrop-blur-sm rounded-full"
+          />
           {showImage && (
             <div className="mb-4 flex justify-center">
               <FlashcardImage imageUrl={imageUrl} cardText={front} isPro={isPro} />
@@ -138,23 +148,21 @@ export function Flashcard({
               {front}
             </p>
           </div>
-          <div className="flex items-center justify-between mt-4">
-            {hint && (
-              <p className="text-xs text-muted-foreground italic">
-                Hint: {hint}
-              </p>
-            )}
-            <VoiceButton
-              text={front}
-              languageCode={frontLanguageCode}
-              voiceName={frontVoice}
-              className="ml-auto"
-            />
-          </div>
+          {hint && (
+            <p className="text-xs text-muted-foreground italic mt-4">
+              Hint: {hint}
+            </p>
+          )}
         </div>
 
-        {/* Back face */}
-        <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
+        {/* Back face — volume button mirrors the front (top-right). */}
+        <div className="flashcard-back relative rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
+          <VoiceButton
+            text={back}
+            languageCode={backLanguageCode}
+            voiceName={backVoice}
+            className="absolute top-2 right-2 z-10 bg-card/70 backdrop-blur-sm rounded-full"
+          />
           {showImage && (
             <div className="mb-4 flex justify-center">
               <FlashcardImage imageUrl={imageUrl} cardText={front} isPro={isPro} />
@@ -162,13 +170,6 @@ export function Flashcard({
           )}
           <div className="flex-1 flex items-center justify-center">
             <p className="text-lg text-center text-card-foreground">{back}</p>
-          </div>
-          <div className="flex justify-end mt-4">
-            <VoiceButton
-              text={back}
-              languageCode={backLanguageCode}
-              voiceName={backVoice}
-            />
           </div>
         </div>
       </div>
