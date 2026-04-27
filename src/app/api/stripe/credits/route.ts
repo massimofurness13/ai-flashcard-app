@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { stripe } from "@/lib/stripe";
+import { stripe, resolveLiveCustomerId } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 
 /**
@@ -57,34 +57,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Reuse the user's existing Stripe customer if they have one
-    const existing = await prisma.subscription.findUnique({
-      where: { userId: auth.userId },
-      select: { stripeCustomerId: true },
+    const user = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { email: true },
     });
-
-    let customerId = existing?.stripeCustomerId;
-
-    if (!customerId) {
-      const user = await prisma.user.findUnique({
-        where: { id: auth.userId },
-        select: { email: true },
-      });
-      const customer = await stripe.customers.create({
-        email: user?.email,
-        metadata: { userId: auth.userId },
-      });
-      customerId = customer.id;
-      await prisma.subscription.upsert({
-        where: { userId: auth.userId },
-        update: { stripeCustomerId: customerId },
-        create: {
-          userId: auth.userId,
-          stripeCustomerId: customerId,
-          status: "inactive",
-        },
-      });
-    }
+    const customerId = await resolveLiveCustomerId(auth.userId, user?.email);
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

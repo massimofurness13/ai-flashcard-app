@@ -4,6 +4,7 @@ import {
   stripe,
   PRICE_ID,
   PRICE_ID_YEARLY,
+  resolveLiveCustomerId,
   type SubscriptionPlan,
 } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
@@ -50,51 +51,32 @@ export async function POST(request: Request) {
 
   const { origin } = new URL(request.url);
 
-  // Reuse the user's existing Stripe customer if they have one
-  const subscription = await prisma.subscription.findUnique({
-    where: { userId: auth.userId },
-  });
-
-  let customerId = subscription?.stripeCustomerId;
-
-  if (!customerId) {
+  try {
     const user = await prisma.user.findUnique({
       where: { id: auth.userId },
       select: { email: true },
     });
+    const customerId = await resolveLiveCustomerId(auth.userId, user?.email);
 
-    const customer = await stripe.customers.create({
-      email: user?.email,
-      metadata: { userId: auth.userId },
-    });
-
-    customerId = customer.id;
-
-    await prisma.subscription.upsert({
-      where: { userId: auth.userId },
-      update: { stripeCustomerId: customerId },
-      create: {
-        userId: auth.userId,
-        stripeCustomerId: customerId,
-        status: "inactive",
-        plan,
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "subscription",
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${origin}/account?success=true&plan=${plan}`,
+      cancel_url: `${origin}/pricing?canceled=true`,
+      metadata: { userId: auth.userId, plan },
+      // For users already on monthly upgrading to yearly: prorate the
+      // unused portion of the current month so they don't pay twice.
+      subscription_data: {
+        metadata: { userId: auth.userId, plan },
       },
     });
+
+    return NextResponse.json({ url: session.url, plan });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Stripe checkout failed.";
+    console.error("[stripe/checkout] failed:", err);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: "subscription",
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/account?success=true&plan=${plan}`,
-    cancel_url: `${origin}/pricing?canceled=true`,
-    metadata: { userId: auth.userId, plan },
-    // For users already on monthly upgrading to yearly: prorate the
-    // unused portion of the current month so they don't pay twice.
-    subscription_data: {
-      metadata: { userId: auth.userId, plan },
-    },
-  });
-
-  return NextResponse.json({ url: session.url, plan });
 }

@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { prisma } from "./db";
 
 let _stripe: Stripe | null = null;
 
@@ -38,6 +39,61 @@ export const PRICE_ID_YEARLY = process.env.STRIPE_PRICE_ID_YEARLY || "";
 export const PRO_PRICE_YEARLY = 79.99;
 
 export type SubscriptionPlan = "monthly" | "yearly";
+
+/**
+ * Resolve a usable Stripe customer ID for the given user, robust to
+ * test→live mode cutovers.
+ *
+ * The DB may hold a customer ID created under a different STRIPE_SECRET_KEY
+ * (typically test-mode IDs left over after the live-mode flip). Calling
+ * checkout with one of those throws "No such customer". This helper:
+ *
+ *   1. Returns the stored ID if it still resolves in the current mode.
+ *   2. Creates a fresh customer (and overwrites the DB) if it doesn't,
+ *      OR if the user has no stored ID yet.
+ *
+ * The deleted check matters because Stripe's retrieve endpoint returns
+ * a 200 with `{ deleted: true }` for soft-deleted customers — we treat
+ * those the same as missing.
+ */
+export async function resolveLiveCustomerId(
+  userId: string,
+  email: string | null | undefined
+): Promise<string> {
+  const stripeClient = getStripe();
+  const sub = await prisma.subscription.findUnique({
+    where: { userId },
+    select: { stripeCustomerId: true },
+  });
+
+  if (sub?.stripeCustomerId) {
+    try {
+      const existing = await stripeClient.customers.retrieve(
+        sub.stripeCustomerId
+      );
+      if (!("deleted" in existing && existing.deleted)) {
+        return sub.stripeCustomerId;
+      }
+    } catch {
+      // 404 / "No such customer" — fall through to recreate
+    }
+  }
+
+  const customer = await stripeClient.customers.create({
+    email: email ?? undefined,
+    metadata: { userId },
+  });
+  await prisma.subscription.upsert({
+    where: { userId },
+    update: { stripeCustomerId: customer.id },
+    create: {
+      userId,
+      stripeCustomerId: customer.id,
+      status: "inactive",
+    },
+  });
+  return customer.id;
+}
 
 /**
  * Map a Stripe price ID back to our internal plan label. Used by the
