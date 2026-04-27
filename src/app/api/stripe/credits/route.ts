@@ -56,48 +56,59 @@ export async function POST(request: Request) {
     );
   }
 
-  // Reuse the user's existing Stripe customer if they have one
-  const existing = await prisma.subscription.findUnique({
-    where: { userId: auth.userId },
-    select: { stripeCustomerId: true },
-  });
-
-  let customerId = existing?.stripeCustomerId;
-
-  if (!customerId) {
-    const user = await prisma.user.findUnique({
-      where: { id: auth.userId },
-      select: { email: true },
-    });
-    const customer = await stripe.customers.create({
-      email: user?.email,
-      metadata: { userId: auth.userId },
-    });
-    customerId = customer.id;
-    await prisma.subscription.upsert({
+  try {
+    // Reuse the user's existing Stripe customer if they have one
+    const existing = await prisma.subscription.findUnique({
       where: { userId: auth.userId },
-      update: { stripeCustomerId: customerId },
-      create: {
+      select: { stripeCustomerId: true },
+    });
+
+    let customerId = existing?.stripeCustomerId;
+
+    if (!customerId) {
+      const user = await prisma.user.findUnique({
+        where: { id: auth.userId },
+        select: { email: true },
+      });
+      const customer = await stripe.customers.create({
+        email: user?.email,
+        metadata: { userId: auth.userId },
+      });
+      customerId = customer.id;
+      await prisma.subscription.upsert({
+        where: { userId: auth.userId },
+        update: { stripeCustomerId: customerId },
+        create: {
+          userId: auth.userId,
+          stripeCustomerId: customerId,
+          status: "inactive",
+        },
+      });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "payment",
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${origin}/account?credits=added`,
+      cancel_url: `${origin}/account?credits=canceled`,
+      metadata: {
         userId: auth.userId,
-        stripeCustomerId: customerId,
-        status: "inactive",
+        bundle,
+        creditsAmount: String(pack.amount),
+        type: "credit_purchase",
       },
     });
+
+    return NextResponse.json({ url: session.url });
+  } catch (err) {
+    // Surface Stripe errors as JSON so the client can show them in
+    // the alert. Otherwise the route returns Next's default HTML
+    // error page, the client's res.json() throws, and the user sees
+    // a generic "Network error" with no actionable info.
+    const message =
+      err instanceof Error ? err.message : "Stripe checkout failed.";
+    console.error("[stripe/credits] checkout failed:", err);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: "payment",
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/account?credits=added`,
-    cancel_url: `${origin}/account?credits=canceled`,
-    metadata: {
-      userId: auth.userId,
-      bundle,
-      creditsAmount: String(pack.amount),
-      type: "credit_purchase",
-    },
-  });
-
-  return NextResponse.json({ url: session.url });
 }
