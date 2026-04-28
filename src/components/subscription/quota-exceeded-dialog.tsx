@@ -13,10 +13,12 @@ interface CreditBundle {
   label: string;
   perCredit: string;
   /** Plain-English "what you get" line. Premium images cost 5 credits
-   *  each; a typical illustrated pack is around 100 cards. So:
-   *    500   →  100 premium  ≈ one full pack
-   *    1500  →  300 premium  ≈ three full packs
-   *    5000  → 1000 premium  ≈ ten full packs
+   *  each; we estimate against packs of 50 cards (a sensible "starter
+   *  deck" size — bigger than a study session, smaller than a full
+   *  language unit). So:
+   *    500   →  100 premium  ≈  2 packs of 50
+   *    1500  →  300 premium  ≈  6 packs of 50
+   *    5000  → 1000 premium  ≈ 20 packs of 50
    *  Helps users translate an abstract credit number into "what does
    *  this actually buy me". */
   affords: string;
@@ -30,7 +32,7 @@ export const CREDIT_BUNDLES: CreditBundle[] = [
     priceCents: 499,
     label: "$4.99",
     perCredit: "1¢",
-    affords: "≈ 100 premium images — one full pack of cards.",
+    affords: "≈ 100 premium images — about 2 illustrated packs.",
   },
   {
     id: "1500",
@@ -38,7 +40,7 @@ export const CREDIT_BUNDLES: CreditBundle[] = [
     priceCents: 1199,
     label: "$11.99",
     perCredit: "0.8¢",
-    affords: "≈ 300 premium images — about three full packs.",
+    affords: "≈ 300 premium images — about 6 illustrated packs.",
     popular: true,
   },
   {
@@ -47,7 +49,7 @@ export const CREDIT_BUNDLES: CreditBundle[] = [
     priceCents: 3499,
     label: "$34.99",
     perCredit: "0.7¢",
-    affords: "≈ 1,000 premium images — about ten full packs.",
+    affords: "≈ 1,000 premium images — about 20 illustrated packs.",
   },
 ];
 

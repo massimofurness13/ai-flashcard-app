@@ -141,6 +141,10 @@ export function ImageQuotaCard() {
                   those images are yours forever. And unlike the monthly
                   Pro allowance, top-up credits never expire.
                 </p>
+                <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                  Estimates below assume premium images (5 credits each)
+                  and decks of 50 cards.
+                </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-3">
                 {CREDIT_BUNDLES.map((bundle) => (
@@ -179,6 +183,48 @@ export function ImageQuotaCard() {
                 ))}
               </div>
             </div>
+
+            {quota.plan === "monthly" && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-sm font-medium">
+                    Or unlock a year&apos;s worth of credits today
+                  </p>
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
+                    Best value
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  On monthly, your 500 credits trickle in — fine for steady
+                  study, slow if you want to illustrate a whole library now.
+                  The yearly plan ($79.99) drops all{" "}
+                  <span className="font-medium text-foreground">
+                    6,000 credits
+                  </span>{" "}
+                  into your account immediately — enough for about{" "}
+                  <span className="font-medium text-foreground">
+                    24 illustrated packs of 50
+                  </span>{" "}
+                  with no throttling. Roughly three months free vs paying
+                  monthly, plus your purchased top-ups still stack on top.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const res = await fetch("/api/stripe/checkout", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ plan: "yearly" }),
+                    });
+                    const data = await res.json();
+                    if (data.url) openStripeCheckout(data.url);
+                    else alert(data.error || "Could not start checkout.");
+                  }}
+                >
+                  Switch to yearly — $79.99
+                </Button>
+              </div>
+            )}
           </>
         ) : (
           <div className="space-y-3">
