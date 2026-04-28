@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { stripe, resolveLiveCustomerId } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
+import { getPublicOrigin } from "@/lib/public-origin";
 
 /**
  * Credit top-up checkout. Bundles are mapped to real Stripe price
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
-  const { origin } = new URL(request.url);
+  const origin = getPublicOrigin(request);
   const { bundle } = await request.json();
 
   if (!bundle || !(bundle in BUNDLES)) {

@@ -8,6 +8,7 @@ import {
   type SubscriptionPlan,
 } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
+import { getPublicOrigin } from "@/lib/public-origin";
 
 /**
  * Create a Stripe Checkout session for a Pro subscription. Body:
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { origin } = new URL(request.url);
+  const origin = getPublicOrigin(request);
 
   try {
     const user = await prisma.user.findUnique({

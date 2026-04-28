@@ -5,22 +5,30 @@
  * Apple/Google App Store IAP rules if the app is ever wrapped in a
  * native shell.
  *
- * The `noopener,noreferrer` features prevent the new tab from holding
- * a reference back to our window.
+ * Subtle bug we hit before: passing "noopener" to window.open's
+ * features string forces the returned reference to null even on
+ * success. We were treating null as "popup blocked" and then doing a
+ * same-window redirect on TOP of the (successfully opened) new tab —
+ * the user saw checkout open twice.
  *
- * If the browser blocks the popup (rare for user-initiated clicks),
- * we fall back to a same-window navigation so the user still gets to
- * pay — the IAP concern is the lesser of two evils vs. a dead button.
+ * Fix: open without noopener so we get a real Window reference back,
+ * then defensively null its opener. If the open call returns null we
+ * trust the browser actually blocked it and fall back to a
+ * same-window redirect so the user still gets to pay.
  */
 export function openStripeCheckout(url: string): void {
   if (typeof window === "undefined") return;
-  const win = window.open(url, "_blank", "noopener,noreferrer");
-  if (!win) {
-    // Popup blocker hit. Fall back to same-window so the user still
-    // gets to checkout. Keep the warning in console for ops.
-    console.warn(
-      "[stripe] popup blocked — falling back to same-window redirect"
-    );
-    window.location.href = url;
+  const win = window.open(url, "_blank");
+  if (win) {
+    try {
+      win.opener = null;
+    } catch {
+      // Cross-origin restrictions on opener — non-fatal.
+    }
+    return;
   }
+  console.warn(
+    "[stripe] popup blocked — falling back to same-window redirect"
+  );
+  window.location.href = url;
 }
