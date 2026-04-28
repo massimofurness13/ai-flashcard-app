@@ -114,7 +114,10 @@ export function Flashcard({
 
   return (
     <div
-      className={cn("flashcard-container w-full max-w-md mx-auto", className)}
+      className={cn(
+        "flashcard-container relative w-full max-w-md mx-auto",
+        className
+      )}
       style={{ minHeight: "320px" }}
     >
       <div
@@ -127,17 +130,7 @@ export function Flashcard({
         style={{ minHeight: "320px" }}
       >
         {/* Front face */}
-        <div className="flashcard-front relative rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
-          {/* Volume button anchored to the top-right corner of the
-           *  card frame. Backdrop-blur + bg-card/70 keeps it legible
-           *  whether it sits over the image, the text, or empty space.
-           *  No more lonely icon hovering in a wide bottom row. */}
-          <VoiceButton
-            text={front}
-            languageCode={frontLanguageCode}
-            voiceName={frontVoice}
-            className="absolute top-2 right-2 z-10 bg-card/70 backdrop-blur-sm rounded-full"
-          />
+        <div className="flashcard-front rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
           {showImage && (
             <div className="mb-4 flex justify-center">
               <FlashcardImage imageUrl={imageUrl} cardText={front} isPro={isPro} />
@@ -155,14 +148,8 @@ export function Flashcard({
           )}
         </div>
 
-        {/* Back face — volume button mirrors the front (top-right). */}
-        <div className="flashcard-back relative rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
-          <VoiceButton
-            text={back}
-            languageCode={backLanguageCode}
-            voiceName={backVoice}
-            className="absolute top-2 right-2 z-10 bg-card/70 backdrop-blur-sm rounded-full"
-          />
+        {/* Back face */}
+        <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
           {showImage && (
             <div className="mb-4 flex justify-center">
               <FlashcardImage imageUrl={imageUrl} cardText={front} isPro={isPro} />
@@ -173,6 +160,20 @@ export function Flashcard({
           </div>
         </div>
       </div>
+
+      {/* Single volume button hoisted OUT of the flipping inner so it
+       *  doesn't suffer from browser backface-visibility quirks (Safari
+       *  + backdrop-blur was leaking the back-face button onto the
+       *  front face, mirrored to top-left). It always reads whichever
+       *  side is currently visible — keyed on isFlipped so VoiceButton
+       *  remounts and grabs the right text/voice. */}
+      <VoiceButton
+        key={isFlipped ? "back" : "front"}
+        text={isFlipped ? back : front}
+        languageCode={isFlipped ? backLanguageCode : frontLanguageCode}
+        voiceName={isFlipped ? backVoice : frontVoice}
+        className="absolute top-2 right-2 z-20 bg-card/70 backdrop-blur-sm rounded-full"
+      />
     </div>
   );
 }
