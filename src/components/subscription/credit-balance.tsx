@@ -64,7 +64,15 @@ export function useCreditBalance(): {
       refresh();
     };
     window.addEventListener(CREDITS_CHANGED_EVENT, handler);
-    return () => window.removeEventListener(CREDITS_CHANGED_EVENT, handler);
+    // Re-fetch when the tab regains focus — covers the Stripe checkout
+    // tab → original tab handoff. The webhook updates the user's
+    // credit balance server-side; we just need any focused tab to
+    // notice the new value without a manual refresh.
+    window.addEventListener("focus", handler);
+    return () => {
+      window.removeEventListener(CREDITS_CHANGED_EVENT, handler);
+      window.removeEventListener("focus", handler);
+    };
   }, []);
 
   return { quota, refresh };

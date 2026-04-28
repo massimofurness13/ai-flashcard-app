@@ -68,8 +68,8 @@ export async function POST(request: Request) {
       customer: customerId,
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/account?credits=added`,
-      cancel_url: `${origin}/account?credits=canceled`,
+      success_url: `${origin}/checkout/done`,
+      cancel_url: `${origin}/checkout/cancelled`,
       metadata: {
         userId: auth.userId,
         bundle,

@@ -63,8 +63,8 @@ export async function POST(request: Request) {
       customer: customerId,
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/account?success=true&plan=${plan}`,
-      cancel_url: `${origin}/pricing?canceled=true`,
+      success_url: `${origin}/checkout/done?plan=${plan}`,
+      cancel_url: `${origin}/checkout/cancelled`,
       metadata: { userId: auth.userId, plan },
       // For users already on monthly upgrading to yearly: prorate the
       // unused portion of the current month so they don't pay twice.
