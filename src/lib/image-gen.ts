@@ -17,19 +17,26 @@ export type ImageTier = "quick" | "premium";
  *     sensory) and biases toward characters over static objects.
  *
  * V2: pushes harder on caricature, outrageous-in-service-of-meaning,
- *     and stylistic anchors. Designed to test whether more aggressive
- *     exaggeration produces more memorable results without breaking
- *     FLUX's anatomy (single-subject discipline preserved).
+ *     and stylistic anchors. Designed for Premium (FLUX dev, 28 steps)
+ *     which can render the extra complexity coherently. Schnell (Quick
+ *     tier) struggles with the loaded prompts — produces glitchy
+ *     anatomy, oversized sensory anchors — so Quick stays on v1.
  *
- * Pick via env: IMAGE_PROMPT_VERSION=v1|v2. Default v2. Both kept in
- * the codebase so we can flip back instantly without a code deploy
- * if v2 underperforms in user testing.
+ * Default routing: Premium → v2, Quick → v1.
+ * Env override: IMAGE_PROMPT_VERSION=v1|v2 forces a single version
+ * for both tiers. Use it to A/B test without redeploying.
  */
-function buildPrompt(cardFront: string, cardBack: string): string {
-  const version = process.env.IMAGE_PROMPT_VERSION === "v1" ? "v1" : "v2";
-  return version === "v1"
-    ? buildPromptV1(cardFront, cardBack)
-    : buildPromptV2(cardFront, cardBack);
+function buildPrompt(
+  cardFront: string,
+  cardBack: string,
+  tier: ImageTier
+): string {
+  const override = process.env.IMAGE_PROMPT_VERSION;
+  if (override === "v1") return buildPromptV1(cardFront, cardBack);
+  if (override === "v2") return buildPromptV2(cardFront, cardBack);
+  return tier === "premium"
+    ? buildPromptV2(cardFront, cardBack)
+    : buildPromptV1(cardFront, cardBack);
 }
 
 function buildPromptV1(cardFront: string, cardBack: string): string {
@@ -149,51 +156,50 @@ THE MEMORABILITY TEST (the only test that matters):
 
 Imagine a stranger glances at the finished image for two seconds,
 then is asked to describe it in detail ten minutes later. Could
-they? If your scene wouldn't pass that test, push it further. The
-brain remembers the WEIRD, the EMOTIONAL, the OVER-THE-TOP — not
-the tasteful and tidy.
-
-If the scene wouldn't make a kid point and ask "what's THAT?",
-push it further.
+they? The brain remembers the EMOTIONAL, the SPECIFIC, and the
+SLIGHTLY-UNEXPECTED — not the tasteful and tidy. Push the scene
+toward those qualities, but stop short of chaos.
 ──────────────────────────────────────────────────────────
 
 REQUIRED INGREDIENTS — a memorable scene needs at least TWO of
 these, ideally three. Stack them:
 
-  1. A character mid-action with a HUGE emotion. Not "happy" —
-     mouth-open belly-laughing, head tipped back, knees buckling.
-     Not "scared" — eyes saucer-wide, hair on end, body backflipping
-     mid-air. Caricature-level. Spell out face AND body.
+  1. A character mid-action with a clear, expressive emotion. Not
+     "happy" — open-mouthed laughing, head tipped back, shoulders
+     shaking. Not "scared" — eyes wide, body braced and recoiling.
+     Strong and expressive but grounded — exaggerated EMOTION,
+     not exaggerated anatomy. Spell out face AND body.
 
-  2. ONE outrageous element in service of meaning. Not "weird for
-     weird's sake" — weird BECAUSE it makes the meaning unforgettable:
+  2. ONE memorable element in service of meaning. Not "weird for
+     weird's sake" — distinct BECAUSE it makes the meaning
+     unforgettable:
        • impossible scale (a doctor riding a thermometer like a
          seesaw to mean "fever")
-       • physical literalisation of the metaphor (a man shovelling
-         stars from a cupboard, for "stargazing")
-       • absurd prop (a chef wearing a colander like a crown,
-         spaghetti spilling from the holes, for "Italian dinner")
-     The reader should immediately get WHY the absurdity matches
+       • physical literalisation of the metaphor (a man pulling
+         stars down from a cupboard for "stargazing")
+       • a notable prop (a chef with a colander balanced on their
+         head, spaghetti spilling, for "Italian dinner")
+     The reader should immediately get WHY the touch matches
      the meaning.
 
-  3. A loud sensory anchor. Steam billowing thick, sparks
-     showering, water exploding sideways, paint splattered, ONE
-     screaming-bright colour against a muted scene. Things that
-     make eyes lock on.
+  3. A clear sensory anchor. Steam curling, sparks flickering,
+     water splashing, paint dripping, ONE bright colour against
+     a muted scene. Things that make the eye stop — keep it
+     tasteful and in-frame, not chaotic.
 
   4. Tactile, kinetic specificity. "A cat mid-pounce, every claw
-     extended, fur puffed double-size" beats "a jumping cat".
+     extended, fur fluffed up" beats "a jumping cat".
 
 ──────────────────────────────────────────────────────────
 
 STYLE TARGET (informs the downstream image model):
 
-Picture-book illustration cranked to maximum — Quentin Blake
-energy meets Pixar emotional clarity meets editorial-cartoon
-exaggeration. Hand-drawn feel, bold outlines, bright but
-intentional palette, dynamic composition. NEVER photoreal,
-NEVER abstract, NEVER tasteful greyscale. Loud, warm,
-character-led.
+Picture-book illustration with confident character work — Quentin
+Blake energy meets Pixar emotional clarity meets editorial cartoon.
+Hand-drawn feel, bold outlines, bright but intentional palette,
+dynamic composition. NEVER photoreal, NEVER abstract. Warm,
+character-led, expressive but coherent — proportions can be
+stylised, anatomy must stay clean.
 
 ──────────────────────────────────────────────────────────
 HARD RULES (these protect against failure modes — non-negotiable):
@@ -230,8 +236,8 @@ CONTENT-TYPE GUIDANCE:
 
 • IDIOMS / FIGURATIVE PHRASES:
   - Shared English visual ("take the bull by the horns") →
-    depict the LITERAL imagery, dialled up. A grinning cowboy
-    grappling a bull twice his size, dust flying everywhere.
+    depict the LITERAL imagery, vividly. A determined cowboy
+    gripping a bull's horns mid-tussle, dust at their feet.
   - No English equivalent ("Se me fue el santo al cielo" =
     Spanish "I lost my train of thought") → depict the
     FIGURATIVE meaning, dramatically.
@@ -242,10 +248,10 @@ CONTENT-TYPE GUIDANCE:
   cloud above. NOT a still-life of a cup.
 
 • FACTUAL QUESTIONS: depict the answer's subject with one
-  unmistakable anchor + one outrageous touch. "Capital of Italy"
-  → the Colosseum with a tiny gladiator on top dropping a
-  pizza into the arena like a frisbee. Specific landmark =
-  anchor; pizza = absurd hook = sticky.
+  unmistakable anchor + one memorable touch. "Capital of Italy"
+  → the Colosseum with a tiny gladiator on top tossing a pizza
+  into the arena. Specific landmark = anchor; pizza = sticky
+  hook tied to the place.
 
 • ABSTRACT CONCEPTS: literalise into a vivid scene with a
   character emotion. "Patience" → a tiny gardener sitting
@@ -259,7 +265,8 @@ Output ONLY the scene description. No preamble, no quotes.`;
 
 async function buildVisualConcept(
   cardFront: string,
-  cardBack: string
+  cardBack: string,
+  tier: ImageTier
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return cardBack || cardFront;
@@ -273,7 +280,7 @@ async function buildVisualConcept(
       messages: [
         {
           role: "user",
-          content: buildPrompt(cardFront, cardBack),
+          content: buildPrompt(cardFront, cardBack, tier),
         },
       ],
     });
@@ -496,7 +503,7 @@ export async function generateAndUploadImage(
   back: string,
   tier: ImageTier = "quick"
 ): Promise<string> {
-  const concept = await buildVisualConcept(front, back);
+  const concept = await buildVisualConcept(front, back, tier);
   const prompt = wrapConceptInStyle(concept, tier);
 
   // First attempt.
