@@ -5,6 +5,7 @@ import "./globals.css";
 import { APP_NAME, APP_DESCRIPTION } from "@/lib/constants";
 import { Navbar } from "@/components/layout/navbar";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { Footer } from "@/components/layout/footer";
 import { FontSizeInit } from "@/components/layout/font-size-init";
 
 const geistSans = Geist({
@@ -68,6 +69,7 @@ export default function RootLayout({
           <main className="flex-1 pb-20 md:pb-0">
             <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
           </main>
+          <Footer />
           <MobileNav />
         </ThemeProvider>
       </body>

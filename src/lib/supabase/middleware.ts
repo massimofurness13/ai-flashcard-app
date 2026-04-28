@@ -31,7 +31,15 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Public routes that don't require auth
-  const publicRoutes = ["/auth/login", "/auth/signup", "/auth/callback", "/auth/confirm", "/pricing"];
+  const publicRoutes = [
+    "/auth/login",
+    "/auth/signup",
+    "/auth/callback",
+    "/auth/confirm",
+    "/pricing",
+    "/privacy",
+    "/terms",
+  ];
   // API routes that carry their own authentication (cron secret, webhook
   // signature, etc.) — they must not be routed through the user-auth
   // redirect below or they'd 307 to /auth/login instead of running.

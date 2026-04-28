@@ -280,3 +280,42 @@ body.font-xlarge { font-size: 20px; }
   box-shadow: 0 8px 24px -12px color-mix(in oklch, var(--primary) 28%, transparent);
   border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
 }
+
+/* Legal pages — privacy, terms. Lightweight prose-style block for
+ * long-form text without pulling in the full Tailwind typography
+ * plugin (overkill for two pages and adds 30KB to the bundle). */
+.legal-page h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-top: 2.25rem;
+  margin-bottom: 0.75rem;
+}
+.legal-page h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+.legal-page p {
+  margin-bottom: 1rem;
+  line-height: 1.7;
+}
+.legal-page ul, .legal-page ol {
+  margin: 0 0 1.25rem 1.5rem;
+  line-height: 1.7;
+}
+.legal-page ul { list-style: disc; }
+.legal-page ol { list-style: decimal; }
+.legal-page li { margin-bottom: 0.4rem; }
+.legal-page a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.legal-page a:hover { opacity: 0.8; }
+.legal-page hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2.5rem 0 1.5rem;
+}
+.legal-page strong { font-weight: 600; }
