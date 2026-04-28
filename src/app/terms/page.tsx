@@ -193,9 +193,9 @@ export default function TermsPage() {
 
       <h2>12. Governing law</h2>
       <p>
-        These terms are governed by the laws of England and Wales.
-        Any disputes that can&apos;t be resolved through normal
-        support go to the courts of England and Wales, except where
+        These terms are governed by the laws of Jersey, Channel
+        Islands. Any disputes that can&apos;t be resolved through
+        normal support go to the Royal Court of Jersey, except where
         local consumer-protection law gives you stronger rights.
       </p>
 
