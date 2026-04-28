@@ -132,8 +132,16 @@ export function ImageQuotaCard() {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Top up anytime</p>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Top up anytime</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Generating great AI images is genuinely expensive — each
+                  one is a real render — but once your pack is illustrated,
+                  those images are yours forever. And unlike the monthly
+                  Pro allowance, top-up credits never expire.
+                </p>
+              </div>
               <div className="grid gap-2 sm:grid-cols-3">
                 {CREDIT_BUNDLES.map((bundle) => (
                   <button
@@ -163,6 +171,9 @@ export function ImageQuotaCard() {
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       {bundle.perCredit} per credit
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                      {bundle.affords}
                     </p>
                   </button>
                 ))}

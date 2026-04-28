@@ -12,13 +12,43 @@ interface CreditBundle {
   priceCents: number;
   label: string;
   perCredit: string;
+  /** Plain-English "what you get" line. Premium images cost 5 credits
+   *  each; a typical illustrated pack is around 100 cards. So:
+   *    500   →  100 premium  ≈ one full pack
+   *    1500  →  300 premium  ≈ three full packs
+   *    5000  → 1000 premium  ≈ ten full packs
+   *  Helps users translate an abstract credit number into "what does
+   *  this actually buy me". */
+  affords: string;
   popular?: boolean;
 }
 
 export const CREDIT_BUNDLES: CreditBundle[] = [
-  { id: "500", amount: 500, priceCents: 499, label: "$4.99", perCredit: "1¢" },
-  { id: "1500", amount: 1500, priceCents: 1199, label: "$11.99", perCredit: "0.8¢", popular: true },
-  { id: "5000", amount: 5000, priceCents: 3499, label: "$34.99", perCredit: "0.7¢" },
+  {
+    id: "500",
+    amount: 500,
+    priceCents: 499,
+    label: "$4.99",
+    perCredit: "1¢",
+    affords: "≈ 100 premium images — one full pack of cards.",
+  },
+  {
+    id: "1500",
+    amount: 1500,
+    priceCents: 1199,
+    label: "$11.99",
+    perCredit: "0.8¢",
+    affords: "≈ 300 premium images — about three full packs.",
+    popular: true,
+  },
+  {
+    id: "5000",
+    amount: 5000,
+    priceCents: 3499,
+    label: "$34.99",
+    perCredit: "0.7¢",
+    affords: "≈ 1,000 premium images — about ten full packs.",
+  },
 ];
 
 interface QuotaExceededDialogProps {
