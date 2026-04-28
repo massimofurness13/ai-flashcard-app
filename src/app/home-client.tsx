@@ -7,6 +7,7 @@ import { FolderGroup } from "@/components/home/folder-group";
 import { DeckCard } from "@/components/deck/deck-card";
 import { Button } from "@/components/ui/button";
 import { GoalCelebrationDialog } from "@/components/home/goal-celebration-dialog";
+import { FirstTimeWelcome } from "@/components/home/first-time-welcome";
 
 interface Deck {
   id: string;
@@ -100,6 +101,19 @@ export function HomePage({
     setGreeting(getGreeting());
     setToday(getTodayLabel());
   }, []);
+
+  // Brand-new user → tutorial-style welcome. Bypasses the rest of
+  // the home page entirely; once they create their first pack they
+  // get the full experience on next load. Must come AFTER all hook
+  // calls so React's rules of hooks aren't violated by the early
+  // return path.
+  if (!hasDecks) {
+    return (
+      <div className="space-y-6 sm:space-y-8">
+        <FirstTimeWelcome userName={userName || "there"} />
+      </div>
+    );
+  }
 
   const goalHit = cardsReviewedToday >= dailyGoal;
   const progressPct = Math.min((cardsReviewedToday / dailyGoal) * 100, 100);
@@ -284,32 +298,6 @@ export function HomePage({
                     </span>
                   </div>
                 </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ── Empty state (no decks yet) ──────────────────────────── */}
-        {!hasDecks && (
-          <section
-            className="reveal"
-            style={{ "--delay": "80ms" } as React.CSSProperties}
-          >
-            <div className="relative overflow-hidden rounded-3xl border border-dashed border-border bg-card px-6 py-16 text-center sm:px-10">
-              <p className="label-caps">Your library</p>
-              <h2 className="font-editorial mt-3 text-3xl font-medium text-foreground sm:text-4xl">
-                An empty bookshelf,{" "}
-                <span className="italic text-[color:var(--primary)]">
-                  waiting.
-                </span>
-              </h2>
-              <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-                Paste any text, upload a PDF, or import an existing Anki deck.
-                FlashMind turns it into flashcards with an AI illustration on
-                every card.
-              </p>
-              <div className="mt-6 inline-flex items-center gap-3">
-                <CreateMenu />
               </div>
             </div>
           </section>
