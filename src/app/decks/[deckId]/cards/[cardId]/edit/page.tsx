@@ -40,6 +40,7 @@ export default async function EditCardPage({
           hint: card.hint,
           tags: card.tags,
           imageUrl: card.imageUrl,
+          imageTier: card.imageTier,
         }}
       />
     </div>

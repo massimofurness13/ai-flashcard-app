@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QuickPremiumComparison } from "@/components/subscription/quick-premium-comparison";
 import { APP_NAME } from "@/lib/constants";
 
 type Plan = "monthly" | "yearly";
@@ -226,6 +227,11 @@ export default function PricingPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Side-by-side proof that Premium earns its 5 credits. The
+       *  component renders nothing until we drop matched JPGs into
+       *  /public/comparison/, so this is a no-op until ready. */}
+      <QuickPremiumComparison />
 
       {/* Refund policy callout. Prevents Stripe chargeback weirdness
        * while staying user-fair: any unused purchase is refundable

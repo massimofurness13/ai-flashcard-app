@@ -54,6 +54,12 @@ export async function PATCH(
       ...(body.hint !== undefined && { hint: body.hint || null }),
       ...(body.tags !== undefined && { tags: body.tags || null }),
       ...(body.imageUrl !== undefined && { imageUrl: body.imageUrl || null }),
+      ...(body.imageTier !== undefined && {
+        imageTier:
+          body.imageTier === "quick" || body.imageTier === "premium"
+            ? body.imageTier
+            : null,
+      }),
       ...(body.position !== undefined && { position: body.position }),
     },
   });

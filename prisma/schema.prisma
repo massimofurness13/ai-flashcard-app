@@ -144,6 +144,14 @@ model Card {
   front    String
   back     String
   imageUrl String?
+  // Which AI tier produced the current imageUrl ("quick" or "premium").
+  // Used by the feedback-for-regen flow so we can regenerate at the
+  // same tier the user originally chose.
+  imageTier String?
+  // One free regen per card, granted in exchange for written feedback.
+  // Flips to true once used so feedback after that no longer triggers
+  // a paid generation cycle for free.
+  freeImageRegenUsed Boolean @default(false)
   hint     String?
   tags     String? // comma-separated
   position Int     @default(0)
@@ -154,7 +162,8 @@ model Card {
   deckId String
   deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
 
-  reviews ReviewLog[]
+  reviews        ReviewLog[]
+  imageFeedback  ImageFeedback[]
 
   // SM-2 spaced repetition state
   easeFactor   Float    @default(2.5)
@@ -164,6 +173,27 @@ model Card {
 
   @@index([deckId])
   @@index([nextReviewAt])
+}
+
+// User-submitted feedback on AI-generated card images. Snapshot the
+// front/back/url/tier at submission time so we have ground truth even
+// if the user later edits the card or regenerates again — the feedback
+// is about a specific render, not the current state.
+model ImageFeedback {
+  id        String @id @default(cuid())
+  userId    String
+  cardId    String
+  card      Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  cardFront String
+  cardBack  String
+  imageUrl  String
+  imageTier String   // "quick" or "premium"
+  feedback  String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([cardId])
+  @@index([createdAt])
 }
 
 model ReviewLog {

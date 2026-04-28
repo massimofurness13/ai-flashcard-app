@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AiImageGenerator } from "@/components/flashcard/ai-image-generator";
+import { ImageFeedbackButton } from "@/components/flashcard/image-feedback-button";
 import { TagChipInput } from "@/components/flashcard/tag-chip-input";
 
 interface FlashcardFormProps {
@@ -19,6 +20,7 @@ interface FlashcardFormProps {
     hint: string | null;
     tags: string | null;
     imageUrl?: string | null;
+    imageTier?: string | null;
   };
 }
 
@@ -30,6 +32,12 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
   const [hint, setHint] = useState(initialData?.hint || "");
   const [tags, setTags] = useState(initialData?.tags || "");
   const [imageUrl, setImageUrl] = useState(initialData?.imageUrl || "");
+  // Tracks which AI tier produced the current image. Persisted on
+  // save so the feedback-for-regen flow can regenerate at the same
+  // quality. Null when the image came from upload, not AI.
+  const [imageTier, setImageTier] = useState<string | null>(
+    initialData?.imageTier ?? null
+  );
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   // Visible save outcome — replaces the silent failure mode where a
@@ -54,6 +62,9 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
       const data = await res.json();
       if (res.ok && data.url) {
         setImageUrl(data.url);
+        // Uploaded images aren't AI-tier'd; clear so the feedback
+        // flow doesn't try to "regenerate" something the user uploaded.
+        setImageTier(null);
       } else {
         alert(data.error || "Upload failed");
       }
@@ -86,6 +97,7 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
           hint: hint.trim() || null,
           tags: tags.trim() || null,
           imageUrl: imageUrl || null,
+          imageTier: imageUrl ? imageTier : null,
         }),
       });
 
@@ -180,12 +192,27 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
               />
               <button
                 type="button"
-                onClick={() => setImageUrl("")}
+                onClick={() => {
+                  setImageUrl("");
+                  setImageTier(null);
+                }}
                 className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold hover:opacity-80"
                 aria-label="Remove image"
               >
                 X
               </button>
+              {/* Feedback button only when (a) the card has a saved
+               *  ID and (b) the current image came from AI. Uploads
+               *  have no tier and no concept to "regenerate" against. */}
+              {mode === "edit" && initialData?.id && imageTier && (
+                <ImageFeedbackButton
+                  cardId={initialData.id}
+                  onImageRegenerated={(url, tier) => {
+                    setImageUrl(url);
+                    setImageTier(tier);
+                  }}
+                />
+              )}
             </div>
             <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -198,7 +225,10 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
                 front={front}
                 back={back}
                 currentImageUrl={imageUrl}
-                onImageGenerated={(url) => setImageUrl(url)}
+                onImageGenerated={(url, tier) => {
+                  setImageUrl(url);
+                  setImageTier(tier);
+                }}
                 isPro={isPro}
               />
             </div>
@@ -226,7 +256,10 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
               <AiImageGenerator
                 front={front}
                 back={back}
-                onImageGenerated={(url) => setImageUrl(url)}
+                onImageGenerated={(url, tier) => {
+                  setImageUrl(url);
+                  setImageTier(tier);
+                }}
                 isPro={isPro}
               />
             </div>

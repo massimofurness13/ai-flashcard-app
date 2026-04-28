@@ -19,7 +19,11 @@ interface AiImageGeneratorProps {
    *  internally — the recommend-Premium copy reads the same on the
    *  empty + replace states. */
   currentImageUrl?: string;
-  onImageGenerated: (url: string) => void;
+  /** Fires when generation succeeds. Receives the new URL and the
+   *  tier that produced it so the parent can persist both — the tier
+   *  is what the feedback-for-regen flow reads to regenerate at the
+   *  same quality level. */
+  onImageGenerated: (url: string, tier: Tier) => void;
   /** Legacy prop — no longer used for gating */
   isPro?: boolean;
 }
@@ -64,7 +68,7 @@ export function AiImageGenerator({
       }
 
       if (data.imageUrl) {
-        onImageGenerated(data.imageUrl);
+        onImageGenerated(data.imageUrl, tier);
         // Tell every mounted CreditBalance the user just spent some
         // credits, so the visible balance updates without a refresh.
         emitCreditsChanged();
