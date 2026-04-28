@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuickPremiumComparison } from "@/components/subscription/quick-premium-comparison";
 import { APP_NAME } from "@/lib/constants";
+import { openStripeCheckout } from "@/lib/stripe-checkout";
 
 type Plan = "monthly" | "yearly";
 
@@ -28,16 +29,6 @@ const features = {
   ],
 };
 
-/** Open a Stripe checkout URL in an external browser tab. We never
- *  navigate the current window — that lets the app stay usable while
- *  the user pays, and sidesteps Apple/Google App Store IAP rules
- *  if the app is ever wrapped in a native shell. */
-function openCheckout(url: string) {
-  if (typeof window !== "undefined") {
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-}
-
 export default function PricingPage() {
   const router = useRouter();
   const [plan, setPlan] = useState<Plan>("monthly");
@@ -53,7 +44,7 @@ export default function PricingPage() {
       });
       const data = await res.json();
       if (data.url) {
-        openCheckout(data.url);
+        openStripeCheckout(data.url);
       } else {
         alert(data.error || "Could not start checkout. Please try again.");
       }
