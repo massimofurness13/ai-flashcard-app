@@ -32,7 +32,13 @@ export default async function Home() {
       where: { userId },
       include: {
         decks: {
-          where: { archivedAt: null },
+          // Empty packs are hidden from the library: a pack only counts
+          // as "real" once it has at least one card. Anyone landing on
+          // an empty pack via direct URL still sees it (the edit page
+          // works fine), but the home/library list is kept clean of
+          // orphan packs from failed bulk saves or abandoned creation
+          // flows.
+          where: { archivedAt: null, cards: { some: {} } },
           include: { _count: { select: { cards: true } } },
           orderBy: { updatedAt: "desc" },
         },
@@ -40,7 +46,12 @@ export default async function Home() {
       orderBy: { name: "asc" },
     }),
     prisma.deck.findMany({
-      where: { folderId: null, userId, archivedAt: null },
+      where: {
+        folderId: null,
+        userId,
+        archivedAt: null,
+        cards: { some: {} },
+      },
       include: { _count: { select: { cards: true } } },
       orderBy: { updatedAt: "desc" },
     }),

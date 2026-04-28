@@ -10,6 +10,21 @@ export const createDeckSchema = z.object({
   backVoice: z.string().max(200).optional().nullable(),
   frontLanguageCode: z.string().max(16).optional().nullable(),
   backLanguageCode: z.string().max(16).optional().nullable(),
+  // Optional inline cards array. When provided, deck + cards are
+  // created atomically in one transaction — no orphan deck if the
+  // card insert errors out.
+  cards: z
+    .array(
+      z.object({
+        front: z.string().min(1).max(5000),
+        back: z.string().min(1).max(5000),
+        hint: z.string().max(1000).optional().nullable(),
+        imageUrl: z.string().url().max(2000).optional().nullable(),
+        imageTier: z.enum(["quick", "premium"]).optional().nullable(),
+      })
+    )
+    .max(500)
+    .optional(),
 });
 
 export const updateDeckSchema = createDeckSchema.partial();

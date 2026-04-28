@@ -10,24 +10,30 @@ export type ImageTier = "quick" | "premium";
  * Use Claude Haiku to translate a flashcard into a visual scene description.
  * Shared by both Quick and Premium tiers — the concept step is identical,
  * only the image model differs.
+ *
+ * ── Prompt versioning ─────────────────────────────────────────────
+ * V1: the first "memorable, character-led" rewrite shipped in c19daab.
+ *     Adds the memorable-hook requirement (emotion / motion / surprise /
+ *     sensory) and biases toward characters over static objects.
+ *
+ * V2: pushes harder on caricature, outrageous-in-service-of-meaning,
+ *     and stylistic anchors. Designed to test whether more aggressive
+ *     exaggeration produces more memorable results without breaking
+ *     FLUX's anatomy (single-subject discipline preserved).
+ *
+ * Pick via env: IMAGE_PROMPT_VERSION=v1|v2. Default v2. Both kept in
+ * the codebase so we can flip back instantly without a code deploy
+ * if v2 underperforms in user testing.
  */
-async function buildVisualConcept(
-  cardFront: string,
-  cardBack: string
-): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return cardBack || cardFront;
+function buildPrompt(cardFront: string, cardBack: string): string {
+  const version = process.env.IMAGE_PROMPT_VERSION === "v1" ? "v1" : "v2";
+  return version === "v1"
+    ? buildPromptV1(cardFront, cardBack)
+    : buildPromptV2(cardFront, cardBack);
+}
 
-  const client = new Anthropic({ apiKey });
-
-  try {
-    const message = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 200,
-      messages: [
-        {
-          role: "user",
-          content: `You write visual scene descriptions for educational flashcard illustrations. The goal is MEMORABILITY — images that stick in the user's mind so the card sticks too. Bland-but-correct illustrations are useless; we need scenes the brain can't help but encode.
+function buildPromptV1(cardFront: string, cardBack: string): string {
+  return `You write visual scene descriptions for educational flashcard illustrations. The goal is MEMORABILITY — images that stick in the user's mind so the card sticks too. Bland-but-correct illustrations are useless; we need scenes the brain can't help but encode.
 
 Card front: "${cardFront}"
 Card back: "${cardBack}"
@@ -127,7 +133,147 @@ CONTENT-TYPE GUIDANCE:
   in front of a single sapling pushing through a crack in stone,
   expression rapt).
 
-Output ONLY the scene description. No preamble, no quotes.`,
+Output ONLY the scene description. No preamble, no quotes.`;
+}
+
+function buildPromptV2(cardFront: string, cardBack: string): string {
+  return `You write visual scene descriptions for flashcard illustrations. The job is to make images so VIVID and so EXAGGERATED that the brain can't help but encode them — and through them, the card content too.
+
+Card front: "${cardFront}"
+Card back: "${cardBack}"
+
+Write a SHORT visual scene (1-2 sentences, max 45 words).
+
+──────────────────────────────────────────────────────────
+THE MEMORABILITY TEST (the only test that matters):
+
+Imagine a stranger glances at the finished image for two seconds,
+then is asked to describe it in detail ten minutes later. Could
+they? If your scene wouldn't pass that test, push it further. The
+brain remembers the WEIRD, the EMOTIONAL, the OVER-THE-TOP — not
+the tasteful and tidy.
+
+If the scene wouldn't make a kid point and ask "what's THAT?",
+push it further.
+──────────────────────────────────────────────────────────
+
+REQUIRED INGREDIENTS — a memorable scene needs at least TWO of
+these, ideally three. Stack them:
+
+  1. A character mid-action with a HUGE emotion. Not "happy" —
+     mouth-open belly-laughing, head tipped back, knees buckling.
+     Not "scared" — eyes saucer-wide, hair on end, body backflipping
+     mid-air. Caricature-level. Spell out face AND body.
+
+  2. ONE outrageous element in service of meaning. Not "weird for
+     weird's sake" — weird BECAUSE it makes the meaning unforgettable:
+       • impossible scale (a doctor riding a thermometer like a
+         seesaw to mean "fever")
+       • physical literalisation of the metaphor (a man shovelling
+         stars from a cupboard, for "stargazing")
+       • absurd prop (a chef wearing a colander like a crown,
+         spaghetti spilling from the holes, for "Italian dinner")
+     The reader should immediately get WHY the absurdity matches
+     the meaning.
+
+  3. A loud sensory anchor. Steam billowing thick, sparks
+     showering, water exploding sideways, paint splattered, ONE
+     screaming-bright colour against a muted scene. Things that
+     make eyes lock on.
+
+  4. Tactile, kinetic specificity. "A cat mid-pounce, every claw
+     extended, fur puffed double-size" beats "a jumping cat".
+
+──────────────────────────────────────────────────────────
+
+STYLE TARGET (informs the downstream image model):
+
+Picture-book illustration cranked to maximum — Quentin Blake
+energy meets Pixar emotional clarity meets editorial-cartoon
+exaggeration. Hand-drawn feel, bold outlines, bright but
+intentional palette, dynamic composition. NEVER photoreal,
+NEVER abstract, NEVER tasteful greyscale. Loud, warm,
+character-led.
+
+──────────────────────────────────────────────────────────
+HARD RULES (these protect against failure modes — non-negotiable):
+
+A. ONE focal subject. ONE person, ONE animal, or ONE object.
+   Multi-subject scenes destroy FLUX's anatomy. If the card
+   describes interaction ("telling a story", "having a chat"),
+   one person doing it. The exaggeration goes into THAT one
+   character, not into a second one.
+
+B. Anatomically coherent under the cartoon stylisation.
+   Exaggerated proportions are great. Two left feet, fused
+   hands, six fingers, melted faces are not. The exaggeration
+   should be deliberate, not glitchy.
+
+C. NO TEXT. No letters, numbers, signs, labels, words, books
+   showing pages of writing. The model hallucinates text
+   constantly; never describe surfaces it could think need
+   words.
+
+D. Specific anchors, not generic labels. "A baseball diamond
+   from behind home plate, pitcher's mound centred" — not "a
+   baseball field". Wrong-sport mistakes are common; never
+   leave room for them.
+
+E. Concrete objects, not abstract words. Name physical things —
+   "a clay teapot", "a wool scarf knit in red and grey", "a
+   rusted brass key on a green velvet cushion". Skip
+   "freedom", "loneliness", "creativity" — pick a metaphor.
+
+──────────────────────────────────────────────────────────
+
+CONTENT-TYPE GUIDANCE:
+
+• IDIOMS / FIGURATIVE PHRASES:
+  - Shared English visual ("take the bull by the horns") →
+    depict the LITERAL imagery, dialled up. A grinning cowboy
+    grappling a bull twice his size, dust flying everywhere.
+  - No English equivalent ("Se me fue el santo al cielo" =
+    Spanish "I lost my train of thought") → depict the
+    FIGURATIVE meaning, dramatically.
+
+• VOCABULARY WORDS: a character USING the referent with huge
+  reaction. "Cup" → a wide-eyed child both-hands-clutching a
+  mug as wide as their head, steam curling like a cartoon
+  cloud above. NOT a still-life of a cup.
+
+• FACTUAL QUESTIONS: depict the answer's subject with one
+  unmistakable anchor + one outrageous touch. "Capital of Italy"
+  → the Colosseum with a tiny gladiator on top dropping a
+  pizza into the arena like a frisbee. Specific landmark =
+  anchor; pizza = absurd hook = sticky.
+
+• ABSTRACT CONCEPTS: literalise into a vivid scene with a
+  character emotion. "Patience" → a tiny gardener sitting
+  cross-legged with a stopwatch, staring intently at a single
+  shoot of grass pushing through cracked stone.
+
+──────────────────────────────────────────────────────────
+
+Output ONLY the scene description. No preamble, no quotes.`;
+}
+
+async function buildVisualConcept(
+  cardFront: string,
+  cardBack: string
+): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return cardBack || cardFront;
+
+  const client = new Anthropic({ apiKey });
+
+  try {
+    const message = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 220,
+      messages: [
+        {
+          role: "user",
+          content: buildPrompt(cardFront, cardBack),
         },
       ],
     });

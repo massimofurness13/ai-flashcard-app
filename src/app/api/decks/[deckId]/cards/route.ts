@@ -68,6 +68,10 @@ export async function POST(
           hint: cardData.hint || null,
           tags: cardData.tags || null,
           imageUrl: cardData.imageUrl || null,
+          imageTier:
+            cardData.imageTier === "quick" || cardData.imageTier === "premium"
+              ? cardData.imageTier
+              : null,
           position: nextPosition++,
           deckId,
         },

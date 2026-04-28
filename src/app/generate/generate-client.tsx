@@ -366,9 +366,22 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
 
     let deckId = targetDeckId;
 
-    // No deck pre-selected → create a new one with the metadata the
-    // user picked at the top (name, emoji) and the language pickers
-    // they set on the review screen.
+    // Snapshot the current card list (with whatever images landed
+    // before the abort). We need this both to write the cards AND to
+    // figure out how many premium slots are still owed to the
+    // background route.
+    const snapshot = cards;
+    const cardsPayload = snapshot.map((c) => ({
+      front: c.front,
+      back: c.back,
+      hint: c.hint || null,
+      imageUrl: c.imageUrl || null,
+    }));
+
+    // No deck pre-selected → create the deck AND its cards atomically
+    // in one transaction. Previously we did two sequential POSTs and
+    // a card-save failure would leave an orphan empty deck in the
+    // library.
     if (!deckId) {
       const trimmedName = packName.trim() || "Untitled Pack";
       const res = await fetch("/api/decks", {
@@ -379,6 +392,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
           emoji,
           frontLanguageCode: frontLanguageCode || null,
           backLanguageCode: backLanguageCode || null,
+          cards: cardsPayload,
         }),
       });
       if (!res.ok) {
@@ -388,48 +402,36 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       }
       const deck = await res.json();
       deckId = deck.id;
-    } else if (frontLanguageCode || backLanguageCode) {
-      // User picked an existing deck — patch its language settings if
-      // they've configured the review-screen pickers, so the voice
-      // they chose actually sticks.
-      await fetch(`/api/decks/${deckId}`, {
-        method: "PATCH",
+    } else {
+      // Existing deck path: patch language settings if changed, then
+      // POST cards to the existing deck.
+      if (frontLanguageCode || backLanguageCode) {
+        await fetch(`/api/decks/${deckId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            frontLanguageCode: frontLanguageCode || null,
+            backLanguageCode: backLanguageCode || null,
+          }),
+        }).catch(() => {
+          // Non-fatal — cards still save below
+        });
+      }
+
+      const cardsRes = await fetch(`/api/decks/${deckId}/cards`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          frontLanguageCode: frontLanguageCode || null,
-          backLanguageCode: backLanguageCode || null,
-        }),
-      }).catch(() => {
-        // Non-fatal — cards still save below
+        body: JSON.stringify(cardsPayload),
       });
+      if (!cardsRes.ok) {
+        setError("Couldn't save cards. Please try again.");
+        setSaving(false);
+        return;
+      }
     }
 
     if (!deckId) {
       setError("Couldn't determine which pack to save into.");
-      setSaving(false);
-      return;
-    }
-
-    // Snapshot the current card list (with whatever images landed
-    // before the abort). We need this both to write the cards AND to
-    // figure out how many premium slots are still owed to the
-    // background route.
-    const snapshot = cards;
-    const cardsRes = await fetch(`/api/decks/${deckId}/cards`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        snapshot.map((c) => ({
-          front: c.front,
-          back: c.back,
-          hint: c.hint || null,
-          imageUrl: c.imageUrl || null,
-        }))
-      ),
-    });
-
-    if (!cardsRes.ok) {
-      setError("Couldn't save cards. Please try again.");
       setSaving(false);
       return;
     }
