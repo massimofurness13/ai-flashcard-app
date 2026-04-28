@@ -158,6 +158,79 @@ export async function POST(request: Request) {
       break;
     }
 
+    case "charge.refunded": {
+      // Stripe fires this when a charge is refunded — partially or
+      // fully. For credit-pack purchases we claw the credits back
+      // from the user's balance so a refund leaves them with no
+      // unpaid-for credits. Subscription refunds are handled
+      // separately via customer.subscription.* events.
+      //
+      // Idempotent via CreditPurchase.refundedAt: if we've already
+      // processed a refund for this paymentIntent, repeated webhook
+      // deliveries no-op. We only act on full refunds — partial
+      // refunds get logged but leave credits alone, since cleanly
+      // handling "give back 60% of credits" is more complexity than
+      // it's worth for a manual support action.
+      const charge = event.data.object as Stripe.Charge;
+      const paymentIntentId =
+        typeof charge.payment_intent === "string"
+          ? charge.payment_intent
+          : charge.payment_intent?.id;
+
+      if (!paymentIntentId) break;
+
+      const purchase = await prisma.creditPurchase.findUnique({
+        where: { stripePaymentIntentId: paymentIntentId },
+      });
+
+      // Not a credit-pack purchase (could be a subscription invoice
+      // payment refund) — nothing to claw back here.
+      if (!purchase) break;
+
+      // Already processed — webhook retry, no action needed.
+      if (purchase.refundedAt) break;
+
+      const fullyRefunded =
+        charge.amount_refunded >= charge.amount && charge.amount_refunded > 0;
+
+      if (!fullyRefunded) {
+        console.warn(
+          `[stripe/webhook] partial refund on credit purchase ${purchase.id} ` +
+            `(refunded ${charge.amount_refunded} of ${charge.amount}) — credits left untouched`
+        );
+        break;
+      }
+
+      // Full refund: decrement the user's credit balance and mark
+      // the purchase as refunded. Use a transaction so a partial
+      // failure doesn't leave the bookkeeping inconsistent. Clamp
+      // the decrement at zero to avoid negative balances if the
+      // user has already spent the credits we're now reversing —
+      // a negative balance would block them from earning fresh
+      // monthly credits in the next cycle.
+      await prisma.$transaction(async (tx) => {
+        await tx.creditPurchase.update({
+          where: { id: purchase.id },
+          data: { refundedAt: new Date() },
+        });
+        const user = await tx.user.findUnique({
+          where: { id: purchase.userId },
+          select: { imageCredits: true },
+        });
+        if (user) {
+          const newBalance = Math.max(
+            user.imageCredits - purchase.creditsAdded,
+            0
+          );
+          await tx.user.update({
+            where: { id: purchase.userId },
+            data: { imageCredits: newBalance },
+          });
+        }
+      });
+      break;
+    }
+
     case "invoice.payment_failed": {
       const invoice = event.data.object as Stripe.Invoice;
       // In Stripe v22+, subscription is under parent.subscription_details

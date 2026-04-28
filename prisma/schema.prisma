@@ -68,6 +68,10 @@ model CreditPurchase {
   creditsAdded           Int
   amountCents            Int
   createdAt              DateTime @default(now())
+  // Set when Stripe's charge.refunded webhook fires for this
+  // purchase. Used as the idempotency key — repeated refund events
+  // for the same paymentIntent are ignored once this is set.
+  refundedAt             DateTime?
 
   @@index([userId])
 }
