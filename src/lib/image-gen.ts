@@ -27,44 +27,78 @@ async function buildVisualConcept(
       messages: [
         {
           role: "user",
-          content: `You write visual scene descriptions for educational flashcard illustrations.
+          content: `You write visual scene descriptions for educational flashcard illustrations. The goal is MEMORABILITY — images that stick in the user's mind so the card sticks too. Bland-but-correct illustrations are useless; we need scenes the brain can't help but encode.
 
 Card front: "${cardFront}"
 Card back: "${cardBack}"
 
-Write a SHORT visual scene description (1-2 sentences, max 35 words) that captures the card.
+Write a SHORT visual scene description (1-2 sentences, max 40 words) that captures the card.
 
 ──────────────────────────────────────────────────────────
 HARD RULES — these prevent the most common AI image errors:
 
 1. SINGLE SUBJECT.
-   Default to ONE person, ONE animal, or ONE object as the focal
-   element. Multi-subject scenes produce extra limbs, merged faces,
-   warped anatomy. Even if the card describes interaction between
-   two parties (e.g. "telling a story", "having a conversation"),
-   depict ONE person performing the action, not two.
+   ONE person, ONE animal, or ONE object as the focal element.
+   Multi-subject scenes produce extra limbs, merged faces, warped
+   anatomy. Even if the card describes interaction between two
+   parties ("telling a story", "having a conversation"), depict
+   ONE person performing the action, not two.
 
-2. ICONIC, NOT REALISTIC.
-   Pictogram-style. "A coffee cup steaming on a wooden table" not
-   "a busy cafe with people drinking coffee". The image should
-   feel like a hand-illustrated symbol, not a photograph.
+2. PREFER A CHARACTER OVER A STATIC OBJECT.
+   Faces and emotional expressions are what humans remember best.
+   When the card can be embodied by a person or animal, choose
+   that path — a person USING / FEELING / REACTING TO the concept,
+   not a still-life of the concept alone. Reserve "object only"
+   for cases where no human/animal is plausible (e.g. "what is the
+   capital of France" → Eiffel Tower; "molecule" → molecule diagram).
 
-3. SPECIFIC VISUAL ANCHORS, NOT GENERIC LABELS.
+3. ICONIC, NOT REALISTIC.
+   Storybook-illustration sensibility, not photography. The image
+   should feel like an arresting single frame from a story.
+
+4. SPECIFIC VISUAL ANCHORS, NOT GENERIC LABELS.
    Bad: "a baseball field" — model can confuse with football,
    cricket, soccer pitches.
    Good: "a baseball diamond viewed from behind home plate, with
    the pitcher's mound visible in the centre".
-   Always give the model 2-3 unmistakable anchor details for the
-   specific subject category.
+   Always give the model 2-3 unmistakable anchor details.
 
-4. NO TEXT, NO LETTERS, NO NUMBERS, NO SIGNS, NO LABELS.
-   Image generators routinely hallucinate text. Pre-empt this by
-   never describing scenes with text, signage, or readable surfaces.
+5. NO TEXT, NO LETTERS, NO NUMBERS, NO SIGNS, NO LABELS.
+   Image generators routinely hallucinate text. Never describe
+   scenes containing readable surfaces.
 
-5. CONCRETE PHYSICAL DETAILS.
+6. CONCRETE PHYSICAL DETAILS.
    Name actual objects (a brass key, a clay teapot, a wool scarf
-   knitted in red and grey). Avoid abstract concepts that the model
-   has no visual vocabulary for ("freedom", "thoughtfulness").
+   knitted in red and grey). Avoid abstract words the model has no
+   visual vocabulary for ("freedom", "thoughtfulness").
+──────────────────────────────────────────────────────────
+
+THE MEMORABLE-HOOK REQUIREMENT:
+
+Every scene must include AT LEAST ONE of these (more is better,
+but not at the cost of breaking rule #1):
+
+  (a) A vivid emotional state — name a specific facial expression
+      and body language. "Wide-eyed and mid-laugh, shoulders
+      thrown back" beats "looking happy". "Brows knit, jaw
+      clenched, fists tight at sides" beats "frustrated".
+
+  (b) Mid-motion action — caught in the act, not posed. "Spaghetti
+      flying off a fork mid-twirl" beats "eating spaghetti".
+
+  (c) ONE small surprising/exaggerated element that reinforces the
+      meaning — impossible scale, a comedic prop, a vivid sensory
+      anchor. "An old woman blowing on a soup bowl big enough to
+      bathe in" for a card about steam/heat. "A tiny librarian
+      atop a teetering stack of books" for a card about
+      organisation. Bizarre BUT in service of meaning, never
+      random surrealism. NEVER add a second character or warped
+      anatomy in pursuit of bizarreness.
+
+  (d) A strong sensory cue — steam curling, sparks flying, water
+      splashing, sharp colour contrast (a bright red object
+      against a muted background). Things that make the eye stop.
+
 ──────────────────────────────────────────────────────────
 
 CONTENT-TYPE GUIDANCE:
@@ -78,16 +112,20 @@ CONTENT-TYPE GUIDANCE:
     literally "the saint went to the sky", figuratively "I lost
     my train of thought"), depict the FIGURATIVE meaning instead.
 
-- VOCABULARY WORDS: depict the single most iconic referent.
+- VOCABULARY WORDS: depict a person USING or REACTING TO the word's
+  referent rather than the referent alone, when plausible.
+  "Cup" → a child gleefully holding an oversized mug with both
+  hands, steam curling up.
 
-- FACTUAL QUESTIONS: depict the answer's subject as a single object
-  or scene. For sports/games, anchor with category-specific details
-  (baseball: diamond + bat + ball; tennis: net + green court;
-  basketball: orange ball + hoop + arc).
+- FACTUAL QUESTIONS: depict the answer's subject as a single
+  object or scene. For sports/games, anchor with category-specific
+  details (baseball: diamond + bat + ball; tennis: net + green
+  court; basketball: orange ball + hoop + arc).
 
-- ABSTRACT CONCEPTS: pick a single concrete metaphor (e.g. "patience"
-  → a single sapling growing through a rock crack, not "people
-  waiting").
+- ABSTRACT CONCEPTS: pick a single concrete metaphor with a
+  character if possible ("patience" → a child sitting cross-legged
+  in front of a single sapling pushing through a crack in stone,
+  expression rapt).
 
 Output ONLY the scene description. No preamble, no quotes.`,
         },
@@ -160,19 +198,32 @@ async function validateImage(
 Front: "${cardFront}"
 Back: "${cardBack}"
 
-Look for OBVIOUS errors that would make the image embarrassing to ship:
-- Extra limbs, merged bodies, warped anatomy, malformed hands or faces
-- Wrong sport / wrong equipment / wrong context (e.g. football goals on a baseball field)
-- Visible text, letters, numbers, or signs (image gen often hallucinates these)
-- Multiple subjects when one was implied
-- Subject completely unrelated to the card concept
+Our generator deliberately produces vivid, character-led, slightly
+exaggerated illustrations to maximise memorability. So:
+
+  • Stylised proportions, expressive faces, big emotions, surreal
+    juxtapositions, comedic scale — these are FEATURES, not bugs.
+    Do NOT flag them.
+  • What we DO want flagged: things the user would see and find
+    plainly wrong or off-putting.
+
+Flag (reply BAD) only for:
+- Broken anatomy (extra limbs, merged bodies, fused hands, missing
+  fingers shown clearly, warped or melted faces, eyes in wrong
+  positions). Stylised cartoon hands with simplified fingers are
+  FINE — only flag actual deformity.
+- Wrong sport / wrong equipment / wrong context (e.g. football
+  goals on a baseball field).
+- Visible text, letters, numbers, or signs (image gen often
+  hallucinates these).
+- Multiple distinct human/animal subjects when one was implied,
+  causing visual confusion.
+- Subject completely unrelated to the card concept.
 
 Reply on a SINGLE LINE in one of these two formats:
 OK
 or
-BAD: <one short phrase describing the specific problem>
-
-Be strict but not pedantic. Minor stylistic quirks are fine. Only flag things a user would notice and find wrong.`,
+BAD: <one short phrase describing the specific problem>`,
             },
           ],
         },
@@ -198,13 +249,20 @@ Be strict but not pedantic. Minor stylistic quirks are fine. Only flag things a 
 /**
  * Style preset differs per tier so Premium looks visibly more elaborate
  * than Quick, giving users a real reason to spend 5 credits instead of 1.
+ *
+ * Premium leans into character-led storybook illustration — expressive
+ * faces, exaggerated proportions, dramatic lighting. The point is
+ * MEMORABILITY: a vivid frame the brain wants to encode. Quick stays
+ * deliberately plain (flat vector) so the upgrade is obvious.
  */
 function wrapConceptInStyle(concept: string, tier: ImageTier): string {
   if (tier === "premium") {
     return [
       concept,
-      "Rich painterly illustration with vivid colours, detailed background, soft lighting, atmospheric depth.",
-      "Polished artwork with refined composition and subtle textures.",
+      "Storybook-illustration style with expressive characters and slightly exaggerated proportions for emotional clarity.",
+      "Bold colour palette, dramatic lighting, one striking focal moment — like an arresting single frame from a story.",
+      "Editorial-cartoon-meets-Pixar sensibility: warm, character-led, emotionally legible at a glance. Not photoreal, not abstract.",
+      "Anatomically clean — proportions can be stylised but bodies, hands, and faces must be coherent and free of extra limbs.",
       "No text, no letters, no numbers, no writing, no signs, no labels, no words anywhere in the image.",
     ].join(" ");
   }
