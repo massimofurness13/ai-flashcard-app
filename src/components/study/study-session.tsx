@@ -177,20 +177,19 @@ export function StudySession({
   // is the user's requested ordering: flip → audio → countdown →
   // advance, with no overlap.
   //
-  // Every advance fires a POST /api/review with quality=3 ("Good")
-  // — fire-and-forget, doesn't block the UI. Without this, passive
-  // study sessions in auto-advance mode never recorded anything:
-  // no daily count, no streak update, no SM-2 progression. Treating
-  // each viewed card as a passing recall is the right default
-  // because the user sat through the audio, saw both sides, and
-  // didn't actively rate it as "Again". Manual mode still uses the
-  // user's explicit Again/Good/Easy rating in handleRate.
+  // Every advance fires a POST /api/review with quality=0 — a
+  // "passive view". Server logs the row so daily count, streak,
+  // and pack-studied status all update, but does NOT touch the
+  // card's SM-2 fields: we don't know if the user actually
+  // recalled the card, so guessing "Good" would corrupt the
+  // schedule. Manual mode still uses the user's explicit
+  // Again/Good/Easy rating via handleRate, which DOES drive SM-2.
   const handleCountdownComplete = useCallback(() => {
     if (!isAutoAdvance || !isFlipped || dealingOut) return;
     void fetch("/api/review", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cardId: currentCard.id, quality: 3 }),
+      body: JSON.stringify({ cardId: currentCard.id, quality: 0 }),
     }).catch(() => {
       // Network blip — non-fatal. Daily count may be off by one,
       // but nothing crashes and the next review will reconcile.
@@ -198,10 +197,6 @@ export function StudySession({
     const newStats = {
       ...stats,
       cardsReviewed: stats.cardsReviewed + 1,
-      ratings: {
-        ...stats.ratings,
-        3: (stats.ratings[3] || 0) + 1,
-      },
     };
     setStats(newStats);
     dealAndAdvance(newStats);

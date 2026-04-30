@@ -155,6 +155,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Card not found" }, { status: 404 });
   }
 
+  // Passive view (quality === 0): the user saw the card in
+  // auto-advance mode but didn't actively rate it. Log the view so
+  // daily count, streak, and "pack studied" status all reflect it,
+  // but DON'T touch SM-2 fields — guessing "Good" on a card the
+  // user might not actually know would corrupt the schedule. The
+  // log row preserves the current ease/interval as a snapshot for
+  // history, even though they didn't change.
+  if (quality === 0) {
+    await prisma.reviewLog.create({
+      data: {
+        cardId,
+        quality: 0,
+        easeFactor: card.easeFactor,
+        interval: card.interval,
+      },
+    });
+    return NextResponse.json({ recorded: true, passive: true });
+  }
+
   const result = sm2(quality, {
     easeFactor: card.easeFactor,
     interval: card.interval,
