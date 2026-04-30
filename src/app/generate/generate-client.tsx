@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,11 @@ interface GeneratedCard {
   back: string;
   hint?: string;
   imageUrl?: string;
+  /** Server-side card ID after auto-save. Set once /api/decks
+   *  completes; used to PATCH each card with its imageUrl as the
+   *  illustration loop runs, so closing the tab mid-generation no
+   *  longer loses the work. */
+  id?: string;
 }
 
 interface Deck {
@@ -86,6 +91,14 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const [imageTotalNeeded, setImageTotalNeeded] = useState(0);
   const [pendingImageIndices, setPendingImageIndices] = useState<Set<number>>(new Set());
 
+  // Auto-save bookkeeping. When the AI text-generation step finishes
+  // we immediately POST /api/decks so the cards land in the user's
+  // library — even if they close the tab. autoSavedDeckId remembers
+  // the new deck so the image loop can PATCH cards on the server
+  // and so the final "Save" navigates to the existing deck instead
+  // of trying to create a duplicate.
+  const [autoSavedDeckId, setAutoSavedDeckId] = useState<string | null>(null);
+
   // Language pickers live on the review screen now, so they're set
   // alongside the cards rather than buried in a separate flow.
   const [frontLanguageCode, setFrontLanguageCode] = useState("");
@@ -98,6 +111,14 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const [ankiResult, setAnkiResult] = useState<AnkiResult | null>(null);
 
   const abortRef = useRef(false);
+  // Live snapshot of `cards` for the image loop's PATCH-on-success
+  // path. The loop's useCallback intentionally has no deps so it
+  // doesn't re-create on every card update; the ref lets it still
+  // read the current ID for whichever card index just landed.
+  const cardsRef = useRef<GeneratedCard[]>([]);
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
   // Holds the in-flight image-generation promise so handleSave can
   // await whatever's currently being generated before navigating.
   // Without this, the last in-flight card's imageUrl would be set on
@@ -270,6 +291,24 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
             });
             const data = await res.json();
             if (res.ok && data.imageUrl) {
+              // Sync the new imageUrl back to the server card row if
+              // we auto-saved earlier. This is what makes "close the
+              // tab any time" actually safe — every illustration is
+              // persisted the moment it finishes, not held in client
+              // state until Save. Fire-and-forget; if the patch
+              // fails the card still has its image client-side and
+              // a manual Save will reconcile.
+              const targetCard = cardsRef.current[card.index];
+              if (targetCard?.id) {
+                void fetch(`/api/cards/${targetCard.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    imageUrl: data.imageUrl,
+                    imageTier: data.tier ?? tier,
+                  }),
+                }).catch(() => {});
+              }
               setCards((prev) =>
                 prev.map((c, idx) =>
                   idx === card.index ? { ...c, imageUrl: data.imageUrl } : c
@@ -330,10 +369,62 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
         setGeneratedCount(i + 1);
       }
 
+      // ── Auto-save the deck + cards immediately ────────────────
+      // The user explicitly asked for this: as soon as the AI has
+      // produced cards they should be persisted, even if no images
+      // have been generated yet. Closing the tab mid-flow no longer
+      // loses any work. Only auto-save when the user is creating a
+      // NEW deck (no preselected deckId) — when they're adding to
+      // an existing deck, the existing handleSave path will append
+      // when they confirm.
+      if (!targetDeckId) {
+        try {
+          const trimmedName = packName.trim() || "Untitled Pack";
+          const deckRes = await fetch("/api/decks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: trimmedName,
+              frontLanguageCode: frontLanguageCode || null,
+              backLanguageCode: backLanguageCode || null,
+              cards: generated.map((c) => ({
+                front: c.front,
+                back: c.back,
+                hint: c.hint || null,
+              })),
+            }),
+          });
+          if (deckRes.ok) {
+            const deck = await deckRes.json();
+            setAutoSavedDeckId(deck.id);
+            // Pull back the cards we just saved so we know their
+            // server-side IDs. Needed by the image loop to PATCH
+            // each card individually as illustrations land.
+            const cardsRes = await fetch(`/api/decks/${deck.id}/cards`);
+            if (cardsRes.ok) {
+              const savedCards = (await cardsRes.json()) as Array<{
+                id: string;
+                front: string;
+                back: string;
+                imageUrl: string | null;
+              }>;
+              // Match by position — server returns by position asc,
+              // and we POSTed in array order.
+              setCards(
+                generated.map((c, i) => ({ ...c, id: savedCards[i]?.id }))
+              );
+              return;
+            }
+          }
+        } catch {
+          // Auto-save failed — fall through to client-only flow.
+          // The user's text cards are still in local state and the
+          // existing handleSave path will create the deck when they
+          // hit Save. We've degraded gracefully.
+        }
+      }
+
       setCards(generated);
-      // No auto-trigger — image generation is now an explicit step on
-      // the review screen via the silver/gold tier slider, after the
-      // user can see how many cards they have and pick the mix.
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -364,7 +455,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     // the just-finished card's imageUrl a chance to land in cards.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    let deckId = targetDeckId;
+    let deckId = autoSavedDeckId ?? targetDeckId;
 
     // Snapshot the current card list (with whatever images landed
     // before the abort). We need this both to write the cards AND to
@@ -378,11 +469,24 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       imageUrl: c.imageUrl || null,
     }));
 
-    // No deck pre-selected → create the deck AND its cards atomically
-    // in one transaction. Previously we did two sequential POSTs and
-    // a card-save failure would leave an orphan empty deck in the
-    // library.
-    if (!deckId) {
+    // Auto-saved earlier → cards already exist on the server with
+    // their images PATCHed in by the image loop. Skip both the deck
+    // creation AND the cards POST; just sync any final language
+    // settings that may have changed since auto-save and navigate.
+    if (autoSavedDeckId) {
+      if (frontLanguageCode || backLanguageCode) {
+        await fetch(`/api/decks/${autoSavedDeckId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            frontLanguageCode: frontLanguageCode || null,
+            backLanguageCode: backLanguageCode || null,
+          }),
+        }).catch(() => {
+          // Non-fatal
+        });
+      }
+    } else if (!deckId) {
       const trimmedName = packName.trim() || "Untitled Pack";
       const res = await fetch("/api/decks", {
         method: "POST",

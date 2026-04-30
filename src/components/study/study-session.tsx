@@ -176,12 +176,36 @@ export function StudySession({
   // means the back-side audio has already played to completion. This
   // is the user's requested ordering: flip → audio → countdown →
   // advance, with no overlap.
+  //
+  // Every advance fires a POST /api/review with quality=3 ("Good")
+  // — fire-and-forget, doesn't block the UI. Without this, passive
+  // study sessions in auto-advance mode never recorded anything:
+  // no daily count, no streak update, no SM-2 progression. Treating
+  // each viewed card as a passing recall is the right default
+  // because the user sat through the audio, saw both sides, and
+  // didn't actively rate it as "Again". Manual mode still uses the
+  // user's explicit Again/Good/Easy rating in handleRate.
   const handleCountdownComplete = useCallback(() => {
     if (!isAutoAdvance || !isFlipped || dealingOut) return;
-    const newStats = { ...stats, cardsReviewed: stats.cardsReviewed + 1 };
+    void fetch("/api/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cardId: currentCard.id, quality: 3 }),
+    }).catch(() => {
+      // Network blip — non-fatal. Daily count may be off by one,
+      // but nothing crashes and the next review will reconcile.
+    });
+    const newStats = {
+      ...stats,
+      cardsReviewed: stats.cardsReviewed + 1,
+      ratings: {
+        ...stats.ratings,
+        3: (stats.ratings[3] || 0) + 1,
+      },
+    };
     setStats(newStats);
     dealAndAdvance(newStats);
-  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance]);
+  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance, currentCard]);
 
   const handleFlip = useCallback(() => {
     if (dealingOut) return;
