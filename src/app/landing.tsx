@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LandingDemo, DEMO_CARDS } from "@/components/landing/landing-demo";
 import { SwoopController } from "@/components/landing/swoop-controller";
+import { StatsScreenshot } from "@/components/landing/stats-screenshot";
 
 // ─────────────────────────────────────────────────────────────────────
 // Landing page — public-facing marketing surface for unauthenticated
@@ -382,35 +383,13 @@ export function LandingPage() {
                 heatmap. Built to motivate, not to manipulate.
               </p>
             </div>
-            {/* Drop /public/landing/stats.png to activate. Image
-             *  onError swaps to the styled placeholder. */}
+            {/* Drop /public/landing/stats.png to activate the
+             *  screenshot. Until then the placeholder shows.
+             *  StatsScreenshot is a client component so the onError
+             *  swap can run — landing.tsx itself stays on the
+             *  server. */}
             <div className="swoop-right relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/landing/stats.png"
-                alt="FlashMind stats page"
-                className="w-full rounded-2xl border border-border shadow-xl"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                  const sib = (e.target as HTMLImageElement)
-                    .nextElementSibling as HTMLElement | null;
-                  if (sib) sib.style.display = "flex";
-                }}
-              />
-              <div
-                className="hidden aspect-[4/3] w-full rounded-2xl border border-dashed border-border bg-card/50 items-center justify-center text-center p-8"
-                style={{ display: "none" }}
-              >
-                <div>
-                  <div className="text-3xl mb-2" aria-hidden>📊</div>
-                  <p className="text-sm text-muted-foreground">
-                    Stats screenshot
-                  </p>
-                  <p className="text-xs text-muted-foreground/70 mt-1">
-                    /public/landing/stats.png
-                  </p>
-                </div>
-              </div>
+              <StatsScreenshot />
             </div>
           </div>
         </div>
