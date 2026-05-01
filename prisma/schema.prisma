@@ -39,6 +39,14 @@ model User {
   reminderTimezone    String?
   lastReminderSentAt  DateTime?
 
+  // Onboarding answers — captured on first sign-in, used to drop a
+  // starter pack into the user's library and to slice analytics
+  // ("X% of our users learn Spanish at A1"). Nullable so existing
+  // users who pre-date onboarding aren't broken.
+  learningLanguage      String?   // ISO 639-1: "es", "fr", "de", ...
+  learningLevel         String?   // "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | "unsure"
+  onboardingCompletedAt DateTime?
+
   folders           Folder[]
   decks             Deck[]
   subscription      Subscription?
@@ -212,4 +220,37 @@ model ReviewLog {
 
   @@index([cardId])
   @@index([reviewedAt])
+}
+
+// Pre-built starter packs offered to new users during onboarding.
+// One pack per (language, level) combination. The first user to ask
+// for a combo we don't have can trigger AI generation, and the
+// resulting pack is saved here permanently — every subsequent user
+// of that combo gets the cached version cloned into their library.
+model StarterPack {
+  id          String   @id @default(cuid())
+  language    String   // ISO 639-1: "es", "fr", "de", ...
+  level       String   // "A1" | ... | "C2"
+  name        String
+  description String?
+  emoji       String?  @default("✨")
+  cards       StarterCard[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([language, level])
+}
+
+model StarterCard {
+  id            String      @id @default(cuid())
+  starterPackId String
+  starterPack   StarterPack @relation(fields: [starterPackId], references: [id], onDelete: Cascade)
+  front         String
+  back          String
+  hint          String?
+  imageUrl      String?
+  imageTier     String?
+  position      Int         @default(0)
+
+  @@index([starterPackId])
 }
