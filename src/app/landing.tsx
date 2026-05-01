@@ -263,18 +263,20 @@ export function LandingPage() {
               <LandingDemo cardKey="fr" />
             </div>
             <div className="swoop-right order-1 lg:order-2">
-              <p className="label-caps">Idioms become memorable</p>
+              <p className="label-caps">Memorable by design</p>
               <h2 className="font-editorial mt-4 text-3xl font-medium leading-tight text-foreground sm:text-4xl lg:text-5xl">
-                The cat in the throat.{" "}
+                Try forgetting{" "}
                 <span className="italic text-[color:var(--primary)]">
-                  You won&apos;t forget that.
+                  this tomorrow.
                 </span>
               </h2>
               <p className="mt-5 text-base leading-relaxed text-muted-foreground">
-                French idioms are weirder than their English equivalents —
-                which is exactly what makes them stick when you can see them.
-                Tap the card. Hear it in a native French voice. Try forgetting
-                that image tomorrow.
+                Our image engine isn&apos;t a generic illustrator — it&apos;s
+                tuned specifically for memorability. Every card gets a vivid,
+                character-led scene that pins the meaning into your visual
+                memory. Tap the card. Hear it in a native voice. Whether
+                you&apos;re studying French, Japanese, or anything else,
+                that&apos;s the picture you&apos;ll remember.
               </p>
             </div>
           </div>

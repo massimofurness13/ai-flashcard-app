@@ -79,6 +79,40 @@ For the landing page, blog posts, "about" sections, founder posts:
 
 ---
 
+## French demo section — copy variants for A/B testing
+
+Currently shipping (variant A):
+
+> **Memorable by design**
+> Try forgetting **this tomorrow.**
+>
+> Our image engine isn't a generic illustrator — it's tuned specifically for memorability. Every card gets a vivid, character-led scene that pins the meaning into your visual memory. Tap the card. Hear it in a native voice. Whether you're studying French, Japanese, or anything else, that's the picture you'll remember.
+
+Variant B — algorithm-led:
+
+> **AI tuned for memory**
+> Made to stick. **Built for your brain.**
+>
+> Most AI illustrators paint pretty pictures. Ours generates scenes the brain wants to encode — vivid, character-led, slightly exaggerated, anchored to the meaning of the word. The picture does the work. You just tap and listen.
+
+Variant C — promise-led:
+
+> **Every image, generated to last**
+> The picture stays. **Even if the word doesn't.**
+>
+> Our image engine produces scenes specifically tuned for memorability — vivid, expressive, dialled up just enough to lock the meaning in. Tap the card. Hear it in a native voice. The image will still be there in the morning.
+
+Variant D — challenge-led:
+
+> **A simple test**
+> Glance at this card. **Look away. Describe it.**
+>
+> If you can describe what you just saw, you've experienced the Pictorial Superiority Effect — the same principle every flashcard in FlashMind is built around. Our image engine is tuned to make that experience reliable: every card, every word, every language.
+
+Hard rule for this section: **don't single out any language as "weird"**. The point of the demo isn't that French (or Japanese, or whatever) is unusual — it's that our generator makes any language stick. Keep the focus on the algorithm; let the example be incidental.
+
+---
+
 ## Differentiator one-liners
 
 Drop into ads, social posts, or as section headlines:

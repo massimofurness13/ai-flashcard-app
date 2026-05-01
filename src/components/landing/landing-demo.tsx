@@ -156,13 +156,11 @@ export function LandingDemo({ cardKey, className }: LandingDemoProps) {
         >
           <Face
             text={card.front}
-            caption={card.frontCaption}
             imageUrl={card.imageUrl}
             side="front"
           />
           <Face
             text={card.back}
-            caption={card.backCaption}
             imageUrl={card.imageUrl}
             side="back"
             accent
@@ -207,13 +205,12 @@ export function LandingDemo({ cardKey, className }: LandingDemoProps) {
 
 interface FaceProps {
   text: string;
-  caption?: string;
   imageUrl: string;
   side: "front" | "back";
   accent?: boolean;
 }
 
-function Face({ text, caption, imageUrl, side, accent }: FaceProps) {
+function Face({ text, imageUrl, side, accent }: FaceProps) {
   return (
     <div
       className={`absolute inset-0 rounded-3xl border bg-card p-6 sm:p-7 flex flex-col shadow-xl ${
@@ -225,9 +222,8 @@ function Face({ text, caption, imageUrl, side, accent }: FaceProps) {
         transform: side === "back" ? "rotateY(180deg)" : undefined,
       }}
     >
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
         <span>{side === "front" ? "Front" : "Back"}</span>
-        {caption && <span className="text-foreground/70">{caption}</span>}
       </div>
 
       <div className="mt-4 flex justify-center">
