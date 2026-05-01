@@ -319,3 +319,52 @@ body.font-xlarge { font-size: 20px; }
   margin: 2.5rem 0 1.5rem;
 }
 .legal-page strong { font-weight: 600; }
+
+/* Landing demo — scroll-driven float animation. The flashcard
+ * gently lifts and tilts as the user scrolls down the hero,
+ * adding a sense of motion without being annoying. Native CSS
+ * scroll-driven animations work in modern Chromium / Safari Tech
+ * Preview / Edge; older browsers see the static demo, which is
+ * still fine. We also layer a quiet idle hover so the card
+ * feels alive even when nothing's scrolling. */
+
+@keyframes landing-demo-idle {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(-0.4deg); }
+}
+
+@keyframes landing-demo-scroll {
+  0% { transform: translateY(0px) rotate(-1deg) scale(1); }
+  100% { transform: translateY(-60px) rotate(2deg) scale(0.96); }
+}
+
+.landing-demo-float {
+  animation: landing-demo-idle 6s ease-in-out infinite;
+  will-change: transform;
+}
+
+@supports (animation-timeline: scroll()) {
+  .landing-demo-float {
+    /* Scroll-linked motion overrides the idle hover when the user
+     * actually scrolls. animation-range narrows the active band
+     * so the effect stays inside the hero — once the user scrolls
+     * past, the card stops moving. */
+    animation:
+      landing-demo-scroll linear,
+      landing-demo-idle 6s ease-in-out infinite;
+    animation-timeline:
+      scroll(),
+      auto;
+    animation-range:
+      0 600px,
+      auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Honour the OS-level "reduce motion" preference. Some users get
+   * motion sickness from scroll-linked animation; turn it all off. */
+  .landing-demo-float {
+    animation: none !important;
+  }
+}

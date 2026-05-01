@@ -1,68 +1,107 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 /**
  * Interactive flashcard demo embedded on the landing page. Click to
- * flip, click the speaker to hear the word — exactly the in-app
- * experience, distilled to a single component that doesn't require
- * the rest of the app's auth/TTS plumbing.
+ * flip; click the speaker to hear the phrase in the native voice;
+ * carousel between two examples (Spanish + French).
  *
- * Audio uses Web Speech API directly. The polished cloud voice path
- * needs an authenticated /api/tts call, which we don't run for
- * unauthenticated landing visitors. Web Speech sounds fine for a
- * "this works" demo; we can upgrade to pre-generated MP3s later if
- * we want the demo voice to sound like the product voice.
+ * Audio uses the public /api/landing/tts route — same Google Cloud
+ * voices the authenticated app uses, scoped to a small phrase
+ * whitelist so the route can serve anonymous landing visitors
+ * without opening the main TTS endpoint up to abuse.
  *
- * The DEMO_CARDS array is intentionally hard-coded — these are the
- * marketing demo, not real user data. Drop in matching image URLs
- * from a Supabase bucket once you've picked the pair.
+ * The two demo cards are pulled from the founder's real Spanish and
+ * French decks — premium-tier illustrations that show the AI image
+ * engine at its strongest. If you ever want to swap them for
+ * different examples, update the DEMO_CARDS constant AND the
+ * whitelist in src/app/api/landing/tts/route.ts.
+ *
+ * Scroll behaviour: a subtle scroll-driven animation lets the card
+ * float and rotate as the user moves down the hero. Implemented
+ * with native CSS scroll-driven animations where supported (fallback
+ * is just no animation — the static demo still works fine).
  */
 
 interface DemoCard {
   front: string;
   back: string;
   imageUrl: string;
-  /** BCP-47 hint for the browser's speech synthesis voice picker. */
-  frontLang?: string;
-  backLang?: string;
-  /** Caption shown under each side ("Spanish · El gato"). */
-  frontCaption?: string;
-  backCaption?: string;
+  frontLang: "es-MX" | "en-GB" | "fr-FR";
+  backLang: "es-MX" | "en-GB" | "fr-FR";
+  frontCaption: string;
+  backCaption: string;
 }
 
-// REPLACE: drop in image URLs from your existing Spanish pack so the
-// demo shows your real generated artwork. Until then the placeholder
-// images render as a soft gradient — the structure works either way.
 const DEMO_CARDS: DemoCard[] = [
   {
-    front: "el atardecer",
-    back: "the sunset",
-    imageUrl: "",
-    frontLang: "es-ES",
+    front: "Aunque sea duro, hay que seguir.",
+    back: "Even if it's hard, we have to continue.",
+    imageUrl:
+      "https://fghxwycixcawwtctknmp.supabase.co/storage/v1/object/public/card-images/d028213f-ceb3-4565-a1a3-384603bc136e/ai-1777423647747-3qcx1v.png",
+    frontLang: "es-MX",
     backLang: "en-GB",
-    frontCaption: "Spanish",
+    frontCaption: "Spanish (Mexico)",
     backCaption: "English",
   },
   {
-    front: "la tormenta",
-    back: "the storm",
-    imageUrl: "",
-    frontLang: "es-ES",
+    front: "Avoir un chat dans la gorge",
+    back: "To have a frog in one's throat",
+    imageUrl:
+      "https://fghxwycixcawwtctknmp.supabase.co/storage/v1/object/public/card-images/d028213f-ceb3-4565-a1a3-384603bc136e/ai-1777395034069-otszxd.png",
+    frontLang: "fr-FR",
     backLang: "en-GB",
-    frontCaption: "Spanish",
+    frontCaption: "French",
     backCaption: "English",
   },
 ];
+
+// In-memory cache so the second click on the same phrase plays
+// instantly — first click hits the API, every click after reuses
+// the Supabase URL.
+const audioCache = new Map<string, string>();
+
+async function fetchAudioUrl(
+  text: string,
+  languageCode: string
+): Promise<string | null> {
+  const key = `${languageCode}|${text}`;
+  if (audioCache.has(key)) return audioCache.get(key)!;
+  try {
+    const res = await fetch("/api/landing/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, languageCode }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { audioUrl?: string };
+    if (data.audioUrl) audioCache.set(key, data.audioUrl);
+    return data.audioUrl ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function LandingDemo() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(t);
+  }, []);
+
+  // Stop any in-flight audio when the carousel switches cards or
+  // the component unmounts.
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      audioRef.current = null;
+    };
   }, []);
 
   const card = DEMO_CARDS[activeIdx];
@@ -70,21 +109,24 @@ export function LandingDemo() {
   const visibleLang = flipped ? card.backLang : card.frontLang;
   const visibleCaption = flipped ? card.backCaption : card.frontCaption;
 
-  const speak = useCallback(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(visibleText);
-    if (visibleLang) utter.lang = visibleLang;
-    utter.rate = 0.95;
-    window.speechSynthesis.speak(utter);
+  const speak = useCallback(async () => {
+    audioRef.current?.pause();
+    setSpeaking(true);
+    const url = await fetchAudioUrl(visibleText, visibleLang);
+    if (!url) {
+      setSpeaking(false);
+      return;
+    }
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.addEventListener("ended", () => setSpeaking(false));
+    audio.addEventListener("error", () => setSpeaking(false));
+    void audio.play().catch(() => setSpeaking(false));
   }, [visibleText, visibleLang]);
 
   return (
-    <div className="mx-auto max-w-md w-full">
-      <div
-        className="relative"
-        style={{ perspective: "1200px" }}
-      >
+    <div className="mx-auto max-w-md w-full landing-demo-float">
+      <div className="relative" style={{ perspective: "1200px" }}>
         <div
           className={`relative w-full transition-transform duration-700 ease-out cursor-pointer ${
             mounted ? "opacity-100" : "opacity-0"
@@ -126,13 +168,17 @@ export function LandingDemo() {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            speak();
+            void speak();
           }}
-          aria-label={`Hear "${visibleText}" spoken aloud`}
-          className="absolute top-3 right-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-card/80 backdrop-blur-sm border border-border text-foreground hover:border-primary/50 transition-colors"
+          aria-label={`Hear "${visibleText}" spoken aloud in ${visibleCaption}`}
+          className={`absolute top-3 right-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-card/85 backdrop-blur-sm border border-border text-foreground transition-colors ${
+            speaking
+              ? "border-primary text-primary"
+              : "hover:border-primary/50"
+          }`}
         >
           <svg
-            className="h-4 w-4"
+            className={`h-4 w-4 ${speaking ? "animate-pulse" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -161,6 +207,8 @@ export function LandingDemo() {
                 onClick={() => {
                   setActiveIdx(idx);
                   setFlipped(false);
+                  audioRef.current?.pause();
+                  setSpeaking(false);
                 }}
                 aria-label={`Show example ${idx + 1}`}
                 className={`h-1.5 rounded-full transition-all ${
@@ -203,31 +251,16 @@ function Face({ text, caption, imageUrl, side, accent }: FaceProps) {
       </div>
 
       <div className="mt-4 flex justify-center">
-        {imageUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={imageUrl}
-            alt=""
-            className="w-44 h-44 sm:w-52 sm:h-52 rounded-2xl object-cover border border-border"
-          />
-        ) : (
-          /* Placeholder gradient — until you drop in real demo image
-           *  URLs the demo still feels intentional, not broken. */
-          <div
-            className="w-44 h-44 sm:w-52 sm:h-52 rounded-2xl border border-border flex items-center justify-center text-4xl"
-            style={{
-              background:
-                "radial-gradient(circle at 30% 30%, color-mix(in oklch, var(--primary) 30%, transparent), color-mix(in oklch, var(--glow) 18%, transparent))",
-            }}
-            aria-hidden
-          >
-            ✨
-          </div>
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt=""
+          className="w-44 h-44 sm:w-52 sm:h-52 rounded-2xl object-cover border border-border"
+        />
       </div>
 
-      <div className="flex-1 flex items-center justify-center">
-        <p className="font-editorial text-3xl sm:text-4xl font-medium text-center text-foreground leading-tight">
+      <div className="flex-1 flex items-center justify-center px-2">
+        <p className="font-editorial text-2xl sm:text-3xl font-medium text-center text-foreground leading-tight">
           {text}
         </p>
       </div>

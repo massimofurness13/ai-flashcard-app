@@ -46,6 +46,10 @@ export async function updateSession(request: NextRequest) {
   const selfAuthenticatedApiRoutes = [
     "/api/cron/",
     "/api/stripe/webhook",
+    // Landing-page demo TTS — phrase whitelist enforces its own
+    // tight scoping; serves anonymous marketing visitors so the
+    // demo speaker button works pre-signup.
+    "/api/landing/",
   ];
   // Static-file paths the browser fetches on every page load (PWA manifest,
   // service worker, icons). Redirecting these to /auth/login would make the
