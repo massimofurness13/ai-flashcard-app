@@ -27,6 +27,14 @@ interface FlashcardImageProps {
    * site needing to thread isPro through props.
    */
   isPro?: boolean;
+  /**
+   * Which AI tier produced the image — drives a small corner badge
+   * so the user can see the difference between Quick (1 credit, flat
+   * vector) and Premium (5 credits, character-led illustration). Only
+   * shown when an imageUrl is present and the tier is set; absent on
+   * uploads, placeholders, and Pro-gated views.
+   */
+  imageTier?: "quick" | "premium" | null;
 }
 
 export function FlashcardImage({
@@ -34,6 +42,7 @@ export function FlashcardImage({
   cardText,
   className,
   isPro = true,
+  imageTier,
 }: FlashcardImageProps) {
   if (imageUrl) {
     if (!isPro) {
@@ -73,12 +82,31 @@ export function FlashcardImage({
     }
 
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={imageUrl}
-        alt="Card illustration"
-        className={cn("w-full max-h-48 object-contain rounded-lg", className)}
-      />
+      <div className={cn("relative inline-block w-full", className)}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt="Card illustration"
+          className="w-full max-h-48 object-contain rounded-lg"
+        />
+        {imageTier && (
+          <span
+            className={`absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide backdrop-blur-sm shadow-sm ${
+              imageTier === "premium"
+                ? "bg-primary/85 text-primary-foreground"
+                : "bg-card/85 text-foreground border border-border"
+            }`}
+            title={
+              imageTier === "premium"
+                ? "Premium illustration · 5 credits"
+                : "Quick illustration · 1 credit"
+            }
+          >
+            <span aria-hidden>{imageTier === "premium" ? "🎨" : "✨"}</span>
+            <span>{imageTier === "premium" ? "Premium" : "Quick"}</span>
+          </span>
+        )}
+      </div>
     );
   }
 

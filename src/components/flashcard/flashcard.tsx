@@ -9,6 +9,10 @@ interface FlashcardProps {
   front: string;
   back: string;
   imageUrl?: string | null;
+  /** "quick" | "premium" — drives the small tier badge on the
+   *  card image so the user can see the difference between the
+   *  two AI tiers at a glance. */
+  imageTier?: "quick" | "premium" | null;
   hint?: string | null;
   isFlipped: boolean;
   onFlip: () => void;
@@ -42,6 +46,7 @@ export function Flashcard({
   front,
   back,
   imageUrl,
+  imageTier,
   hint,
   isFlipped,
   onFlip,
@@ -133,7 +138,12 @@ export function Flashcard({
         <div className="flashcard-front rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
           {showImage && (
             <div className="mb-4 flex justify-center">
-              <FlashcardImage imageUrl={imageUrl} cardText={front} isPro={isPro} />
+              <FlashcardImage
+                imageUrl={imageUrl}
+                cardText={front}
+                isPro={isPro}
+                imageTier={imageTier}
+              />
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
@@ -152,7 +162,12 @@ export function Flashcard({
         <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
           {showImage && (
             <div className="mb-4 flex justify-center">
-              <FlashcardImage imageUrl={imageUrl} cardText={front} isPro={isPro} />
+              <FlashcardImage
+                imageUrl={imageUrl}
+                cardText={front}
+                isPro={isPro}
+                imageTier={imageTier}
+              />
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">

@@ -11,6 +11,7 @@ interface StudyCard {
   front: string;
   back: string;
   imageUrl: string | null;
+  imageTier: string | null;
   hint: string | null;
   deck: { id: string; name: string; emoji: string | null };
 }

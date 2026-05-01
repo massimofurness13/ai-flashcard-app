@@ -39,7 +39,32 @@ const LANGUAGES: Array<{ code: string; name: string; flag: string }> = [
   { code: "ko", name: "Korean", flag: "🇰🇷" },
   { code: "zh", name: "Mandarin", flag: "🇨🇳" },
   { code: "en", name: "English", flag: "🇬🇧" },
-  { code: "other", name: "Other", flag: "🌍" },
+];
+
+// Extended list shown when the user clicks "Other". No starter
+// packs for these yet — we still record the choice for analytics
+// and gracefully pivot to the manual-create flow on the next step.
+const MORE_LANGUAGES: Array<{ code: string; name: string; flag: string }> = [
+  { code: "ru", name: "Russian", flag: "🇷🇺" },
+  { code: "ar", name: "Arabic", flag: "🇸🇦" },
+  { code: "hi", name: "Hindi", flag: "🇮🇳" },
+  { code: "pl", name: "Polish", flag: "🇵🇱" },
+  { code: "nl", name: "Dutch", flag: "🇳🇱" },
+  { code: "sv", name: "Swedish", flag: "🇸🇪" },
+  { code: "vi", name: "Vietnamese", flag: "🇻🇳" },
+  { code: "th", name: "Thai", flag: "🇹🇭" },
+  { code: "he", name: "Hebrew", flag: "🇮🇱" },
+  { code: "el", name: "Greek", flag: "🇬🇷" },
+  { code: "tr", name: "Turkish", flag: "🇹🇷" },
+  { code: "id", name: "Indonesian", flag: "🇮🇩" },
+  { code: "fi", name: "Finnish", flag: "🇫🇮" },
+  { code: "da", name: "Danish", flag: "🇩🇰" },
+  { code: "no", name: "Norwegian", flag: "🇳🇴" },
+  { code: "cs", name: "Czech", flag: "🇨🇿" },
+  { code: "ro", name: "Romanian", flag: "🇷🇴" },
+  { code: "hu", name: "Hungarian", flag: "🇭🇺" },
+  { code: "uk", name: "Ukrainian", flag: "🇺🇦" },
+  { code: "ms", name: "Malay", flag: "🇲🇾" },
 ];
 
 const LEVELS: Array<{ code: string; label: string; sub: string }> = [
@@ -270,6 +295,21 @@ function PickerStep({
   onBack,
   onContinue,
 }: PickerStepProps) {
+  // "Other" expands an extended language list + a free-text input
+  // for whatever isn't in the list. Once they pick anything from the
+  // expanded list (or type a custom name), `language` is set and the
+  // continue button enables. The first-tier list (LANGUAGES) is kept
+  // visually selectable; selecting any of those collapses the
+  // "other" panel back down so the UI doesn't get crowded.
+  const isCommonLanguage = LANGUAGES.some((l) => l.code === language);
+  const [showOther, setShowOther] = useState(
+    !!language && !isCommonLanguage
+  );
+  const [customLang, setCustomLang] = useState(
+    !isCommonLanguage && language && !MORE_LANGUAGES.some((l) => l.code === language)
+      ? language
+      : ""
+  );
   const ready = !!language && !!level;
   return (
     <section className="reveal max-w-3xl mx-auto" style={{ "--delay": "0ms" } as React.CSSProperties}>
@@ -290,7 +330,11 @@ function PickerStep({
             <button
               key={l.code}
               type="button"
-              onClick={() => onLanguage(l.code)}
+              onClick={() => {
+                onLanguage(l.code);
+                setShowOther(false);
+                setCustomLang("");
+              }}
               className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors ${
                 language === l.code
                   ? "border-primary bg-primary/10 text-foreground"
@@ -301,7 +345,86 @@ function PickerStep({
               <span>{l.name}</span>
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              setShowOther((v) => !v);
+              if (!showOther) {
+                // Opening the panel — clear any selected common
+                // language so the user knows they're now in
+                // "other" mode.
+                onLanguage("");
+              }
+            }}
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors ${
+              !isCommonLanguage && (showOther || !!language)
+                ? "border-primary bg-primary/10 text-foreground"
+                : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            }`}
+          >
+            <span aria-hidden>🌍</span>
+            <span>Other…</span>
+          </button>
         </div>
+
+        {showOther && (
+          <div className="mt-3 rounded-2xl border border-border bg-card p-4 sm:p-5 space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                Pick from more languages
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {MORE_LANGUAGES.map((l) => (
+                  <button
+                    key={l.code}
+                    type="button"
+                    onClick={() => {
+                      onLanguage(l.code);
+                      setCustomLang("");
+                    }}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      language === l.code
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    <span aria-hidden>{l.flag}</span>
+                    <span>{l.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                Or type your own
+              </p>
+              <input
+                type="text"
+                value={customLang}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCustomLang(v);
+                  // Use the typed value as the language code (kept
+                  // as-is for analytics — we don't try to ISO-match
+                  // because someone might write "Old English" or
+                  // "Klingon" and that's fine for our purposes).
+                  if (v.trim()) {
+                    onLanguage(v.trim().toLowerCase());
+                  } else {
+                    onLanguage("");
+                  }
+                }}
+                placeholder="e.g. Welsh, Tagalog, Swahili…"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              />
+              <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                We don&apos;t have a starter pack for niche languages yet, but
+                you can build your own in the next step.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-8 space-y-2">
@@ -427,6 +550,16 @@ function OfferStep({
               </div>
             </div>
           )}
+
+          <p className="mt-5 text-[11px] text-muted-foreground leading-relaxed">
+            We&apos;ve mixed{" "}
+            <span className="text-foreground font-medium">Quick ✨</span>{" "}
+            and{" "}
+            <span className="text-foreground font-medium">Premium 🎨</span>{" "}
+            illustrations in this pack so you can see the difference between
+            the two AI tiers as you study. Premium is what we&apos;d
+            recommend for the cards you really want to remember.
+          </p>
         </div>
 
         {error && <p className="mt-4 text-sm text-destructive">{error}</p>}

@@ -24,6 +24,7 @@ interface Card {
   front: string;
   back: string;
   imageUrl: string | null;
+  imageTier: string | null;
   hint: string | null;
   deck: {
     id: string;
@@ -299,6 +300,11 @@ export function StudySession({
           front={frontText}
           back={backText}
           imageUrl={currentCard.imageUrl}
+          imageTier={
+            currentCard.imageTier === "quick" || currentCard.imageTier === "premium"
+              ? currentCard.imageTier
+              : null
+          }
           hint={currentCard.hint}
           isFlipped={isFlipped}
           onFlip={handleFlip}
