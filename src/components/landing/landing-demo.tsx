@@ -30,7 +30,14 @@ interface DemoCard {
   backCaption: string;
 }
 
-export const DEMO_CARDS = {
+// Internal card data — kept inside this client module so it
+// never has to cross the server→client boundary as a serialized
+// prop. Callers reference cards by string key (DemoCardKey)
+// instead of passing the object directly. Avoids a known
+// Next/Turbopack quirk where exported objects from "use client"
+// files don't always survive being passed back across the
+// boundary as Server Component props.
+const DEMO_CARDS_INTERNAL: Record<string, DemoCard> = {
   es: {
     front: "Aunque sea duro, hay que seguir.",
     back: "Even if it's hard, we have to continue.",
@@ -51,7 +58,9 @@ export const DEMO_CARDS = {
     frontCaption: "French",
     backCaption: "English",
   },
-} satisfies Record<string, DemoCard>;
+};
+
+export type DemoCardKey = "es" | "fr";
 
 // In-memory cache so the second click on the same phrase plays
 // instantly. First click hits the API, every click after reuses
@@ -80,11 +89,12 @@ async function fetchAudioUrl(
 }
 
 interface LandingDemoProps {
-  card: DemoCard;
+  cardKey: DemoCardKey;
   className?: string;
 }
 
-export function LandingDemo({ card, className }: LandingDemoProps) {
+export function LandingDemo({ cardKey, className }: LandingDemoProps) {
+  const card = DEMO_CARDS_INTERNAL[cardKey];
   const [flipped, setFlipped] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [speaking, setSpeaking] = useState(false);

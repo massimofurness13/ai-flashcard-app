@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LandingDemo, DEMO_CARDS } from "@/components/landing/landing-demo";
+import { LandingDemo } from "@/components/landing/landing-demo";
 import { SwoopController } from "@/components/landing/swoop-controller";
 import { StatsScreenshot } from "@/components/landing/stats-screenshot";
 
@@ -206,7 +206,7 @@ export function LandingPage() {
             </div>
 
             <div id="demo" className="swoop-right">
-              <LandingDemo card={DEMO_CARDS.es} />
+              <LandingDemo cardKey="es" />
             </div>
           </div>
         </div>
@@ -260,7 +260,7 @@ export function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-center lg:gap-16">
             <div className="swoop-left order-2 lg:order-1">
-              <LandingDemo card={DEMO_CARDS.fr} />
+              <LandingDemo cardKey="fr" />
             </div>
             <div className="swoop-right order-1 lg:order-2">
               <p className="label-caps">Idioms become memorable</p>
