@@ -25,28 +25,28 @@ import { LandingDemo } from "@/components/landing/landing-demo";
 
 const features = [
   {
-    eyebrow: "Generate",
-    title: "Cards in seconds, from anything",
-    body:
-      "Paste notes, drop a PDF, type a topic. The AI drafts a complete deck — front, back, and a unique illustration on every card.",
-  },
-  {
     eyebrow: "See",
-    title: "An image for every card",
+    title: "A picture for every card",
     body:
-      "Pictures are recalled at 65% after three days; plain text at 10%. Every card gets its own AI illustration so the meaning sticks.",
+      "Pictures get remembered roughly 6× more often than words alone. Every card here gets its own AI illustration so the meaning sticks the first time, not the twentieth.",
   },
   {
     eyebrow: "Hear",
-    title: "Native-speaker voices, 30+ languages",
+    title: "Native voice engine, 30+ languages",
     body:
-      "Mexican Spanish in a Mexican accent. Castilian in a Madrid accent. Real native voices per locale, not a generic robot for everyone.",
+      "Mexican Spanish in a Mexican accent. Castilian in a Madrid accent. Real native voices per locale, automatically — not a generic robot for everyone.",
+  },
+  {
+    eyebrow: "Generate",
+    title: "Cards in seconds, from anything",
+    body:
+      "Paste notes, drop a PDF, type a topic. The AI drafts a complete deck — front, back, and an illustration on every card.",
   },
   {
     eyebrow: "Remember",
     title: "Spaced repetition that stays out of the way",
     body:
-      "Proven SM-2 scheduling under the hood. Just rate how well you knew the card; the app handles the rest.",
+      "Proven SM-2 scheduling under the hood. Just rate how well you knew the card; the app handles when to show it next.",
   },
   {
     eyebrow: "Track",
@@ -58,7 +58,7 @@ const features = [
     eyebrow: "Switch",
     title: "Anki imports without losing a thing",
     body:
-      "Bring your existing .apkg collection in one click. Cards, review history, and media all carry over. Export back any time.",
+      "Bring your existing .apkg collection in one click. Cards, review history, and media all carry over. Export back any time — no lock-in.",
   },
 ];
 
@@ -171,7 +171,7 @@ export function LandingPage() {
             <div>
               <p className="label-caps">FlashMind — for language learners</p>
               <h1 className="font-editorial mt-4 text-4xl font-medium leading-[1.05] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-                Memorize words{" "}
+                Memorize vocabulary{" "}
                 <span className="italic text-[color:var(--primary)]">
                   6× faster
                 </span>
@@ -182,6 +182,10 @@ export function LandingPage() {
                 FlashMind gives every flashcard an AI illustration and a
                 native-speaker voice — so the meaning lands the first time
                 instead of the twentieth.
+              </p>
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground/80">
+                A tiny investment that saves you hundreds of hours of wasted
+                learning time.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <Link
@@ -203,41 +207,47 @@ export function LandingPage() {
             </div>
 
             {/* Live demo — interactive flashcard preview. */}
-            <div id="demo" className="relative">
+            <div id="demo" className="relative space-y-3">
               <LandingDemo />
+              <p className="text-center text-xs text-muted-foreground/90 max-w-md mx-auto leading-relaxed">
+                Pictures get remembered roughly{" "}
+                <span className="text-foreground font-medium">
+                  6× more often
+                </span>{" "}
+                than words alone. We just made it the default for every card.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Hook stat ──────────────────────────────────────────── */}
-      <section className="relative border-t border-border px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-4xl">
-          <p className="label-caps">The reason FlashMind exists</p>
-          <h2 className="font-editorial mt-4 text-3xl font-medium leading-tight text-foreground sm:text-5xl">
-            After three days, you forget{" "}
-            <span className="italic text-[color:var(--primary)]">
-              90%
-            </span>{" "}
-            of plain text.
-            <br />
-            With memorable pictures, you remember{" "}
-            <span className="italic text-[color:var(--primary)]">
-              65%
-            </span>
-            .
-          </h2>
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground">
-            The Pictorial Superiority Effect is one of the most replicated
-            findings in cognitive psychology. Pictures are encoded into both
-            visual <em>and</em> semantic memory pathways automatically;
-            words alone trigger only one. More pathways means more hooks
-            for retrieval.
-          </p>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Source: Lester (2006), Pictorial Superiority Effect; Paivio
-            (1971), Dual Coding Theory.
-          </p>
+      {/* ── Hook stat — supporting science block, not headline-sized ── */}
+      <section className="relative border-t border-border px-4 py-16 sm:py-20">
+        <div className="mx-auto max-w-3xl">
+          <div className="grid gap-6 sm:grid-cols-[1fr_2fr] sm:items-center">
+            <div className="space-y-1">
+              <p className="font-editorial text-4xl font-medium text-foreground sm:text-5xl">
+                <span className="italic text-[color:var(--primary)]">10%</span>
+                {" → "}
+                <span className="italic text-[color:var(--primary)]">65%</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Recall after 72 hours
+              </p>
+            </div>
+            <div className="space-y-3">
+              <p className="text-base leading-relaxed text-muted-foreground">
+                After three days, you forget about 90% of plain text. With
+                memorable pictures, recall stays around 65% — the most
+                replicated finding in memory science. We just removed the
+                friction of having to draw your own.
+              </p>
+              <p className="text-xs text-muted-foreground/80">
+                Source: Lester (2006), Pictorial Superiority Effect; Paivio
+                (1971), Dual Coding Theory.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -264,6 +274,27 @@ export function LandingPage() {
             Once you&apos;ve learned a word with a vivid image and a real
             voice in your ear, you don&apos;t want to go back to plain text
             cards. That&apos;s the entire pitch.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Differentiator block ────────────────────────────────── */}
+      <section className="relative border-t border-border px-4 py-20 sm:py-28">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="label-caps">If you&apos;ve used a flashcard app before</p>
+          <h2 className="font-editorial mt-4 text-4xl font-medium leading-tight text-foreground sm:text-6xl">
+            Everything your flashcard app does.
+            <br />
+            <span className="italic text-[color:var(--primary)]">But better.</span>
+          </h2>
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground">
+            Same proven spaced-repetition engine. Same import/export.
+            Same gradings. Different cards, different rhythm, different
+            outcome — because every card here gets a picture, a voice, and
+            a system that actually wants you to come back tomorrow.
+          </p>
+          <p className="mx-auto mt-4 max-w-2xl font-editorial text-xl italic text-foreground/80 sm:text-2xl">
+            Make flashcard learning enjoyable.
           </p>
         </div>
       </section>
@@ -329,6 +360,33 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ── Stanford / Horn quote ──────────────────────────────── */}
+      <section className="relative border-t border-border px-4 py-20 sm:py-28">
+        <div className="mx-auto max-w-3xl">
+          <p className="label-caps">The science, in plainer English</p>
+          <blockquote className="mt-6 border-l-2 border-[color:var(--primary)] pl-6">
+            <p className="font-editorial text-2xl font-medium leading-snug text-foreground sm:text-3xl">
+              &ldquo;When words and visual elements are closely entwined, we
+              create something new and we augment our communal intelligence …
+              visual language has the potential for{" "}
+              <span className="italic text-[color:var(--primary)]">
+                increasing &lsquo;human bandwidth&rsquo;
+              </span>{" "}
+              — the capacity to take in, comprehend, and more efficiently
+              synthesize large amounts of new information.&rdquo;
+            </p>
+            <footer className="mt-5 text-sm text-muted-foreground">
+              — Robert E. Horn, Stanford University
+            </footer>
+          </blockquote>
+          <p className="mt-8 text-base leading-relaxed text-muted-foreground">
+            That&apos;s the bandwidth FlashMind is using. Words pair into
+            memory through one channel; pictures pair into two. We just
+            removed the friction of having to draw your own.
+          </p>
+        </div>
+      </section>
+
       {/* ── Anki migration callout ─────────────────────────────── */}
       <section className="relative border-t border-border px-4 py-20 sm:py-28">
         <div className="mx-auto max-w-3xl">
@@ -368,9 +426,9 @@ export function LandingPage() {
               </span>
             </h2>
             <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-              Start with the free tier — it has everything most learners need.
-              Upgrade if you want unlimited AI illustrations, bulk generation,
-              and Anki import/export.
+              A tiny investment that saves you hundreds of hours of wasted
+              learning time. Start free — upgrade if you want unlimited AI
+              illustrations, bulk generation, and Anki import/export.
             </p>
           </div>
 
@@ -464,6 +522,24 @@ export function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Promise / pull-quote ────────────────────────────────── */}
+      <section className="relative border-t border-border px-4 py-20 sm:py-28">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="label-caps">The bet we&apos;re making</p>
+          <p className="mt-6 font-editorial text-3xl font-medium leading-snug text-foreground sm:text-4xl">
+            You&apos;ll never want to go back to{" "}
+            <span className="italic text-[color:var(--primary)]">
+              the traditional way
+            </span>{" "}
+            once you&apos;ve tried this.
+          </p>
+          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-muted-foreground">
+            Try it for a week. If you go back to plain flashcards after that,
+            we&apos;d genuinely love to know why.
+          </p>
         </div>
       </section>
 
