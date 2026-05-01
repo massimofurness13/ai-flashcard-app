@@ -18,10 +18,20 @@ async function computeDeckGrade(deckId: string): Promise<string> {
   return letterGrade(avg);
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ preview?: string }>;
+}) {
   const user = await getOptionalUser();
+  const { preview } = await searchParams;
 
-  if (!user) {
+  // Logged-out visitors always see the marketing landing. Logged-in
+  // users normally get the real app — but ?preview=landing forces
+  // the marketing page to render even when authenticated, which is
+  // how you (and anyone you share the URL with) review the landing
+  // copy without having to sign out.
+  if (!user || preview === "landing") {
     return <LandingPage />;
   }
 
