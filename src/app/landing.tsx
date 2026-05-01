@@ -72,9 +72,9 @@ const pricing = [
       "Unlimited packs and cards",
       "SM-2 spaced repetition",
       "Native-speaker voices",
-      "CSV / TSV / XML import",
-      "Light + dark themes",
-      "3 free AI image credits to try",
+      "AI card generation from any text",
+      "Import all common file types",
+      "5 free Premium AI images to try",
     ],
     cta: "Start free",
     href: "/auth/signup",
@@ -139,7 +139,7 @@ const faq = [
   {
     q: "Is there a free trial of Pro?",
     a:
-      "The Free tier gets 3 lifetime AI image credits to try the AI features. Otherwise, just start on Free — full app, all study features, native voices included. Upgrade when you want unlimited AI illustrations.",
+      "The Free tier gets 5 free Premium AI images to try the generation pipeline (or 25 Quick images, your call). Otherwise just start on Free — full app, all study features, native voices, AI card text generation, all included. Upgrade when you want unlimited AI illustrations.",
   },
 ];
 
@@ -202,7 +202,8 @@ export function LandingPage() {
                 </Link>
               </div>
               <p className="mt-5 text-xs text-muted-foreground">
-                No credit card. Free forever for the core experience.
+                Free forever · Pro from <span className="text-foreground font-medium">$8.99/mo</span>{" "}
+                · No credit card
               </p>
             </div>
 
@@ -299,34 +300,20 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ── Side-by-side comparison ────────────────────────────── */}
+      {/* ── Promise + comparison combined ──────────────────────── */}
       <section className="relative border-t border-border px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-5xl">
-          <div className="mb-12 max-w-2xl">
-            <p className="label-caps">Same word. Two ways to study it.</p>
-            <h2 className="font-editorial mt-3 text-3xl font-medium text-foreground sm:text-4xl">
-              The difference is{" "}
-              <span className="italic text-[color:var(--primary)]">
-                impossible to un-see.
-              </span>
-            </h2>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2">
-            <ComparisonCard
-              title="Plain text card"
-              kind="bad"
-              text="el atardecer"
-              caption="(translation: the sunset)"
-            />
-            <ComparisonCard
-              title="FlashMind card"
-              kind="good"
-              text="el atardecer"
-              caption="🌅 With illustration + native-speaker audio"
-            />
-          </div>
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            Same study time. Dramatically more recall.
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="label-caps">The bet we&apos;re making</p>
+          <h2 className="font-editorial mt-4 text-3xl font-medium leading-tight text-foreground sm:text-5xl">
+            You&apos;ll never want to go back to learning{" "}
+            <span className="italic text-[color:var(--primary)]">
+              without images
+            </span>{" "}
+            again.
+          </h2>
+          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-muted-foreground">
+            Try it for a week. If you go back to plain flashcards after that,
+            we&apos;d genuinely love to know why.
           </p>
         </div>
       </section>
@@ -384,6 +371,61 @@ export function LandingPage() {
             memory through one channel; pictures pair into two. We just
             removed the friction of having to draw your own.
           </p>
+        </div>
+      </section>
+
+      {/* ── Stats / progress screenshot ────────────────────────── */}
+      <section className="relative border-t border-border px-4 py-20 sm:py-28">
+        <div className="mx-auto max-w-5xl">
+          <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-center lg:gap-16">
+            <div>
+              <p className="label-caps">Honest progress</p>
+              <h2 className="font-editorial mt-3 text-3xl font-medium leading-tight text-foreground sm:text-4xl">
+                See exactly where{" "}
+                <span className="italic text-[color:var(--primary)]">
+                  the work is paying off
+                </span>
+                .
+              </h2>
+              <p className="mt-5 text-base leading-relaxed text-muted-foreground">
+                Letter grades per pack, daily streaks, a 365-day activity
+                heatmap. Real data from your real reviews — built to
+                motivate, not to manipulate.
+              </p>
+            </div>
+            {/* Screenshot slot. Drop a real /stats screenshot into
+             *  /public/landing/stats.png to activate. Until then a
+             *  styled placeholder keeps the layout intentional. */}
+            <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/landing/stats.png"
+                alt="FlashMind stats page"
+                className="w-full rounded-2xl border border-border shadow-xl"
+                onError={(e) => {
+                  // Fallback to placeholder when the image isn't there yet.
+                  (e.target as HTMLImageElement).style.display = "none";
+                  const sib = (e.target as HTMLImageElement)
+                    .nextElementSibling as HTMLElement | null;
+                  if (sib) sib.style.display = "flex";
+                }}
+              />
+              <div
+                className="hidden aspect-[4/3] w-full rounded-2xl border border-dashed border-border bg-card/50 items-center justify-center text-center p-8"
+                style={{ display: "none" }}
+              >
+                <div>
+                  <div className="text-3xl mb-2" aria-hidden>📊</div>
+                  <p className="text-sm text-muted-foreground">
+                    Stats screenshot
+                  </p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">
+                    /public/landing/stats.png
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -504,10 +546,10 @@ export function LandingPage() {
       {/* ── FAQ ────────────────────────────────────────────────── */}
       <section className="relative border-t border-border px-4 py-20 sm:py-28">
         <div className="mx-auto max-w-3xl">
-          <p className="label-caps">Frequently asked</p>
+          <p className="label-caps">FAQ</p>
           <h2 className="font-editorial mt-3 text-3xl font-medium text-foreground sm:text-4xl">
-            Things people{" "}
-            <span className="italic text-[color:var(--primary)]">always ask</span>
+            Frequently asked{" "}
+            <span className="italic text-[color:var(--primary)]">questions</span>
             .
           </h2>
           <div className="mt-10 space-y-8">
@@ -525,23 +567,6 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ── Promise / pull-quote ────────────────────────────────── */}
-      <section className="relative border-t border-border px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="label-caps">The bet we&apos;re making</p>
-          <p className="mt-6 font-editorial text-3xl font-medium leading-snug text-foreground sm:text-4xl">
-            You&apos;ll never want to go back to{" "}
-            <span className="italic text-[color:var(--primary)]">
-              the traditional way
-            </span>{" "}
-            once you&apos;ve tried this.
-          </p>
-          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-muted-foreground">
-            Try it for a week. If you go back to plain flashcards after that,
-            we&apos;d genuinely love to know why.
-          </p>
-        </div>
-      </section>
 
       {/* ── Closing CTA ────────────────────────────────────────── */}
       <section className="relative border-t border-border px-4 py-20 sm:py-28">
@@ -608,54 +633,3 @@ export function LandingPage() {
   );
 }
 
-interface ComparisonCardProps {
-  title: string;
-  kind: "good" | "bad";
-  text: string;
-  caption: string;
-}
-
-function ComparisonCard({ title, kind, text, caption }: ComparisonCardProps) {
-  return (
-    <div
-      className={`rounded-2xl border p-7 sm:p-8 ${
-        kind === "bad"
-          ? "border-dashed border-border bg-card/40"
-          : "border-[color:var(--primary)]/40 bg-card shadow-lg"
-      }`}
-    >
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
-      <div
-        className={`mt-4 rounded-xl border ${
-          kind === "bad"
-            ? "border-border bg-background"
-            : "border-border bg-background"
-        } p-6 text-center min-h-[200px] flex flex-col items-center justify-center gap-3`}
-      >
-        {kind === "good" && (
-          <div
-            aria-hidden
-            className="w-20 h-20 rounded-xl border border-border flex items-center justify-center text-3xl"
-            style={{
-              background:
-                "radial-gradient(circle at 30% 30%, color-mix(in oklch, var(--primary) 30%, transparent), color-mix(in oklch, var(--glow) 18%, transparent))",
-            }}
-          >
-            🌅
-          </div>
-        )}
-        <p className="font-editorial text-2xl font-medium text-foreground">
-          {text}
-        </p>
-        <p className="text-xs text-muted-foreground">{caption}</p>
-      </div>
-      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-        {kind === "bad"
-          ? "One pathway: text → meaning. You'll need to see this card 15-20 times before it sticks."
-          : "Two pathways: image AND text. You'll often nail it after 4-6 reviews."}
-      </p>
-    </div>
-  );
-}

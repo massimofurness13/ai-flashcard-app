@@ -19,7 +19,10 @@ import type { ImageTier } from "@/lib/image-gen";
  * at cycle end; purchased credits are owned by the user forever.
  */
 
-export const FREE_LIFETIME_CREDITS = 15;
+// 25 credits = enough for 5 premium illustrations (5 credits each)
+// or 25 quick illustrations. The free trial point: try it both ways
+// and feel which one sticks before paying for Pro.
+export const FREE_LIFETIME_CREDITS = 25;
 export const PRO_MONTHLY_CREDITS = 500;
 export const PRO_YEARLY_CREDITS = 6000;
 
