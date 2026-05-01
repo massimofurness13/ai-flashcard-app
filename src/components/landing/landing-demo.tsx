@@ -3,25 +3,21 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
 /**
- * Interactive flashcard demo embedded on the landing page. Click to
- * flip; click the speaker to hear the phrase in the native voice;
- * carousel between two examples (Spanish + French).
+ * Interactive flashcard demo embedded on the landing page. Click
+ * the card to flip; click the speaker to hear the phrase in the
+ * native voice. Each instance shows ONE card — pass DEMO_CARDS.es
+ * for the Spanish example or DEMO_CARDS.fr for the French one.
+ * Two instances on the same page give us two distinct moments
+ * instead of a single carousel.
  *
  * Audio uses the public /api/landing/tts route — same Google Cloud
- * voices the authenticated app uses, scoped to a small phrase
+ * voices the authenticated app uses, scoped to a four-phrase
  * whitelist so the route can serve anonymous landing visitors
- * without opening the main TTS endpoint up to abuse.
+ * without opening up the main TTS endpoint.
  *
- * The two demo cards are pulled from the founder's real Spanish and
- * French decks — premium-tier illustrations that show the AI image
- * engine at its strongest. If you ever want to swap them for
- * different examples, update the DEMO_CARDS constant AND the
- * whitelist in src/app/api/landing/tts/route.ts.
- *
- * Scroll behaviour: a subtle scroll-driven animation lets the card
- * float and rotate as the user moves down the hero. Implemented
- * with native CSS scroll-driven animations where supported (fallback
- * is just no animation — the static demo still works fine).
+ * If you ever swap the cards, update both DEMO_CARDS here AND the
+ * whitelist in src/app/api/landing/tts/route.ts — they have to
+ * match exactly.
  */
 
 interface DemoCard {
@@ -34,8 +30,8 @@ interface DemoCard {
   backCaption: string;
 }
 
-const DEMO_CARDS: DemoCard[] = [
-  {
+export const DEMO_CARDS = {
+  es: {
     front: "Aunque sea duro, hay que seguir.",
     back: "Even if it's hard, we have to continue.",
     imageUrl:
@@ -45,7 +41,7 @@ const DEMO_CARDS: DemoCard[] = [
     frontCaption: "Spanish (Mexico)",
     backCaption: "English",
   },
-  {
+  fr: {
     front: "Avoir un chat dans la gorge",
     back: "To have a frog in one's throat",
     imageUrl:
@@ -55,10 +51,10 @@ const DEMO_CARDS: DemoCard[] = [
     frontCaption: "French",
     backCaption: "English",
   },
-];
+} satisfies Record<string, DemoCard>;
 
 // In-memory cache so the second click on the same phrase plays
-// instantly — first click hits the API, every click after reuses
+// instantly. First click hits the API, every click after reuses
 // the Supabase URL.
 const audioCache = new Map<string, string>();
 
@@ -83,8 +79,12 @@ async function fetchAudioUrl(
   }
 }
 
-export function LandingDemo() {
-  const [activeIdx, setActiveIdx] = useState(0);
+interface LandingDemoProps {
+  card: DemoCard;
+  className?: string;
+}
+
+export function LandingDemo({ card, className }: LandingDemoProps) {
   const [flipped, setFlipped] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -95,8 +95,6 @@ export function LandingDemo() {
     return () => cancelAnimationFrame(t);
   }, []);
 
-  // Stop any in-flight audio when the carousel switches cards or
-  // the component unmounts.
   useEffect(() => {
     return () => {
       audioRef.current?.pause();
@@ -104,7 +102,6 @@ export function LandingDemo() {
     };
   }, []);
 
-  const card = DEMO_CARDS[activeIdx];
   const visibleText = flipped ? card.back : card.front;
   const visibleLang = flipped ? card.backLang : card.frontLang;
   const visibleCaption = flipped ? card.backCaption : card.frontCaption;
@@ -125,7 +122,7 @@ export function LandingDemo() {
   }, [visibleText, visibleLang]);
 
   return (
-    <div className="mx-auto max-w-md w-full landing-demo-float">
+    <div className={`mx-auto max-w-md w-full ${className ?? ""}`}>
       <div className="relative" style={{ perspective: "1200px" }}>
         <div
           className={`relative w-full transition-transform duration-700 ease-out cursor-pointer ${
@@ -162,8 +159,6 @@ export function LandingDemo() {
           />
         </div>
 
-        {/* Speaker button anchored to the card frame. Click stops
-         *  propagation so it doesn't double-trigger a flip. */}
         <button
           type="button"
           onClick={(e) => {
@@ -193,34 +188,9 @@ export function LandingDemo() {
         </button>
       </div>
 
-      {/* Tap hint + carousel dots */}
-      <div className="mt-5 flex items-center justify-between">
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-          {visibleCaption ? `${visibleCaption} · ` : ""}tap card to flip
-        </p>
-        {DEMO_CARDS.length > 1 && (
-          <div className="flex items-center gap-1.5">
-            {DEMO_CARDS.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  setActiveIdx(idx);
-                  setFlipped(false);
-                  audioRef.current?.pause();
-                  setSpeaking(false);
-                }}
-                aria-label={`Show example ${idx + 1}`}
-                className={`h-1.5 rounded-full transition-all ${
-                  idx === activeIdx
-                    ? "w-6 bg-primary"
-                    : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
-                }`}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <p className="mt-4 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
+        {visibleCaption} · tap card to flip
+      </p>
     </div>
   );
 }
