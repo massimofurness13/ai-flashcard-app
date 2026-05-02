@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useCallback, useMemo } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { RatingButtons } from "./rating-buttons";
@@ -54,6 +55,46 @@ export interface StudyStats {
 // than this reads as sluggish; shorter than ~150ms reads as a glitch.
 const DEAL_OUT_MS = 200;
 
+// Round-trip session state through sessionStorage when the user clicks
+// "Edit card." Without this, navigating to the edit page and back via
+// `?returnTo=` re-mounts StudySession at currentIndex=0, kicking the
+// user out of their session mid-flight (the bug the user hit at 36/49).
+//
+// Fingerprinted by card-set identity so a different deck/filter/limit
+// combination cleanly starts a new session — we don't accidentally
+// resume the wrong queue. TTL guards against stale "yesterday's
+// session" restores when the user returns hours later.
+const STUDY_RESUME_KEY = "study-session-resume";
+const STUDY_RESUME_TTL_MS = 30 * 60 * 1000;
+
+interface StudyResumeSnapshot {
+  fingerprint: string;
+  currentIndex: number;
+  stats: StudyStats;
+  isFlipped: boolean;
+  savedAt: number;
+}
+
+function fingerprintCards(cards: Card[]): string {
+  if (cards.length === 0) return "empty";
+  return `${cards.length}:${cards[0].id}:${cards[cards.length - 1].id}`;
+}
+
+function readResumeSnapshot(fingerprint: string): StudyResumeSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(STUDY_RESUME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StudyResumeSnapshot;
+    sessionStorage.removeItem(STUDY_RESUME_KEY); // consume once
+    if (parsed.fingerprint !== fingerprint) return null;
+    if (Date.now() - parsed.savedAt > STUDY_RESUME_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function StudySession({
   initialCards,
   autoFlipSeconds,
@@ -61,9 +102,19 @@ export function StudySession({
   orientation,
   onComplete,
 }: StudySessionProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [cards] = useState(initialCards);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
+  // Lazy initial state: if the user just came back from editing a card,
+  // sessionStorage holds the index/flip/stats they were at. Restore once,
+  // then drop the snapshot so a fresh navigation back to /study starts
+  // clean. Fingerprint match ensures we never resume into the wrong deck.
+  const fingerprint = useMemo(() => fingerprintCards(initialCards), [initialCards]);
+  const resumeSnapshot = useMemo(() => readResumeSnapshot(fingerprint), [fingerprint]);
+  const [currentIndex, setCurrentIndex] = useState(
+    resumeSnapshot?.currentIndex ?? 0,
+  );
+  const [isFlipped, setIsFlipped] = useState(resumeSnapshot?.isFlipped ?? false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dealingOut, setDealingOut] = useState(false);
   // Tracks which (card-id, side) combination has finished playing
@@ -75,10 +126,13 @@ export function StudySession({
   // User-facing pause: freezes the countdown wheel and cancels any
   // in-flight audio. Resume picks up from the same offset.
   const [isPaused, setIsPaused] = useState(false);
-  const [stats, setStats] = useState<StudyStats>({
-    cardsReviewed: 0,
-    ratings: { 1: 0, 3: 0, 5: 0 },
-  });
+  const [stats, setStats] = useState<StudyStats>(
+    () =>
+      resumeSnapshot?.stats ?? {
+        cardsReviewed: 0,
+        ratings: { 1: 0, 3: 0, 5: 0 },
+      },
+  );
 
   // Pro status drives whether AI illustrations show in clear or
   // behind a "Resubscribe to view" blur. Hook is shared with the
@@ -271,16 +325,40 @@ export function StudySession({
           )}
         </span>
         <div className="flex items-center gap-2 shrink-0">
-          {/* Edit-this-card affordance — opens in a new tab so the
-           *  current study session keeps its place. The user can fix
-           *  a typo or regenerate the image, save, close the tab, and
-           *  carry on with the same card without losing position. */}
+          {/* Edit-this-card affordance — same-tab navigation so the
+           *  edit page replaces the session view (timer/audio/auto-
+           *  advance all stop, no background drift). On click we
+           *  snapshot the session position to sessionStorage and pass
+           *  the current URL as ?returnTo=, so Save in flashcard-form
+           *  brings the user back to the exact same card with the same
+           *  flip-state and stats. */}
           <Link
-            href={`/decks/${currentCard.deck.id}/cards/${currentCard.id}/edit`}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={(() => {
+              const search = searchParams?.toString() ?? "";
+              const returnTo = pathname + (search ? `?${search}` : "");
+              const qp = new URLSearchParams({ returnTo });
+              return `/decks/${currentCard.deck.id}/cards/${currentCard.id}/edit?${qp.toString()}`;
+            })()}
+            onClick={() => {
+              const snapshot: StudyResumeSnapshot = {
+                fingerprint,
+                currentIndex,
+                stats,
+                isFlipped,
+                savedAt: Date.now(),
+              };
+              try {
+                sessionStorage.setItem(
+                  STUDY_RESUME_KEY,
+                  JSON.stringify(snapshot),
+                );
+              } catch {
+                // Quota or private mode: degrade gracefully — user
+                // returns to a fresh session, same as before this fix.
+              }
+            }}
             className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-foreground transition-colors"
-            title="Edit this card (opens in a new tab)"
+            title="Edit this card"
             aria-label="Edit this card"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
