@@ -28,6 +28,10 @@ interface DemoCard {
   backLang: "es-MX" | "en-GB" | "fr-FR";
   frontCaption: string;
   backCaption: string;
+  /** Which AI tier produced this image — drives the price chip
+   *  shown under each demo card so visitors can see what each
+   *  tier costs and compare quality with their own eyes. */
+  tier: "quick" | "premium";
 }
 
 // Internal card data — kept inside this client module so it
@@ -47,6 +51,7 @@ const DEMO_CARDS_INTERNAL: Record<string, DemoCard> = {
     backLang: "en-GB",
     frontCaption: "Spanish (Mexico)",
     backCaption: "English",
+    tier: "premium",
   },
   fr: {
     front: "Avoir un chat dans la gorge",
@@ -57,6 +62,7 @@ const DEMO_CARDS_INTERNAL: Record<string, DemoCard> = {
     backLang: "en-GB",
     frontCaption: "French",
     backCaption: "English",
+    tier: "quick",
   },
 };
 
@@ -199,6 +205,28 @@ export function LandingDemo({ cardKey, className }: LandingDemoProps) {
       <p className="mt-4 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
         {visibleCaption} · tap card to flip
       </p>
+      {/* Tier + price chip — frames the comparison between Quick
+       *  and Premium tiers so visitors can see what each costs at
+       *  a glance. */}
+      <div className="mt-3 flex justify-center">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium ${
+            card.tier === "premium"
+              ? "bg-primary/15 text-foreground border border-primary/30"
+              : "bg-muted text-muted-foreground border border-border"
+          }`}
+        >
+          <span aria-hidden>{card.tier === "premium" ? "🎨" : "✨"}</span>
+          <span className="font-semibold">
+            {card.tier === "premium" ? "Premium" : "Quick"}
+          </span>
+          <span className="opacity-75">·</span>
+          <span>
+            {card.tier === "premium" ? "5 credits (5¢)" : "1 credit (1¢)"} per
+            card
+          </span>
+        </span>
+      </div>
     </div>
   );
 }

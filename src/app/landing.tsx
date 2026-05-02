@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LandingDemo } from "@/components/landing/landing-demo";
 import { SwoopController } from "@/components/landing/swoop-controller";
-import { StatsScreenshot } from "@/components/landing/stats-screenshot";
+import { ScreenshotSlot } from "@/components/landing/screenshot-slot";
 
 // ─────────────────────────────────────────────────────────────────────
 // Landing page — public-facing marketing surface for unauthenticated
@@ -33,31 +33,37 @@ import { StatsScreenshot } from "@/components/landing/stats-screenshot";
 
 const features = [
   {
+    icon: "🎨",
     eyebrow: "See",
     title: "A picture for every card",
     body: "AI-generated illustrations on every card. Pictures stick 6× harder than words alone.",
   },
   {
+    icon: "🔊",
     eyebrow: "Hear",
     title: "Native voice engine",
     body: "Real native speakers, 30+ languages, automatically — not a robot for everyone.",
   },
   {
+    icon: "⚡",
     eyebrow: "Generate",
     title: "Cards in seconds",
     body: "Paste notes, drop a PDF, type a topic. AI drafts the deck. You hit study.",
   },
   {
+    icon: "🧠",
     eyebrow: "Remember",
     title: "Spaced repetition, invisible",
     body: "Proven SM-2 scheduling. You rate the card. The system handles when to show it next.",
   },
   {
+    icon: "📊",
     eyebrow: "Track",
     title: "Honest progress",
     body: "Letter grades, streaks, a year-long activity heatmap. Built to motivate, not to manipulate.",
   },
   {
+    icon: "🔄",
     eyebrow: "Switch",
     title: "Anki imports without losing a thing",
     body: "One-click .apkg import. Cards, history, media. Export back any time — no lock-in.",
@@ -212,46 +218,67 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ── Hook stat — supporting science block ─────────────────── */}
-      <section className="relative border-t border-border px-4 py-16 sm:py-20">
+      {/* ── Hook stat — visual recall comparison ─────────────────── */}
+      <section className="relative border-t border-border px-4 py-20 sm:py-24">
         <div className="mx-auto max-w-3xl">
-          <div className="grid gap-6 sm:grid-cols-[1fr_2fr] sm:items-center">
-            <div className="swoop-left space-y-1">
-              <p className="font-editorial text-4xl font-medium text-foreground sm:text-5xl">
-                <span className="italic text-[color:var(--primary)]">10%</span>
-                {" → "}
-                <span className="italic text-[color:var(--primary)]">65%</span>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Recall after 72 hours
+          <div className="space-y-8">
+            <div className="swoop-up space-y-2 text-center sm:text-left">
+              <p className="label-caps">After 72 hours, how much sticks?</p>
+              <p className="text-sm text-muted-foreground max-w-xl">
+                Plain text fades fast. Words paired with images stick — the
+                most replicated finding in memory science.
               </p>
             </div>
-            <div className="swoop-right space-y-3">
-              <p className="text-base leading-relaxed text-muted-foreground">
-                Plain text fades fast. Words paired with images stick. The
-                most replicated finding in memory science — we just removed
-                the friction of having to draw your own.
-              </p>
-              <p className="text-xs text-muted-foreground/80">
-                Source: Lester (2006) · Paivio (1971), Dual Coding Theory
-              </p>
+
+            {/* Visual recall comparison bars. Width is set to the
+             *  recall percentage; same scale on both rows so the
+             *  contrast lands instantly. */}
+            <div className="swoop-up space-y-5">
+              <RecallBar
+                label="Plain text"
+                percent={10}
+                tone="muted"
+              />
+              <RecallBar
+                label="Words + memorable images"
+                percent={65}
+                tone="primary"
+                emphasized
+              />
             </div>
+
+            <p className="swoop-up text-xs text-muted-foreground/80 text-center sm:text-left">
+              Source: Lester (2006), Pictorial Superiority Effect · Paivio
+              (1971), Dual Coding Theory
+            </p>
           </div>
         </div>
       </section>
 
-      {/* ── Manifesto — single line, no paragraphs ──────────────── */}
+      {/* ── Manifesto with filing-problem image ────────────────── */}
       <section className="relative border-t border-border px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-3xl">
-          <p className="label-caps swoop-up">Why FlashMind</p>
-          <p className="swoop-up font-editorial mt-6 text-3xl font-medium leading-snug text-foreground sm:text-4xl">
-            Most flashcard apps treat memory like a filing problem —{" "}
-            <span className="italic text-[color:var(--primary)]">
-              feed it more, hope it sticks.
-            </span>{" "}
-            FlashMind starts from how memory actually works: with a picture,
-            a sound, and a rhythm.
-          </p>
+        <div className="mx-auto max-w-5xl">
+          <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-center lg:gap-16">
+            <div>
+              <p className="label-caps swoop-up">Why FlashMind</p>
+              <p className="swoop-up font-editorial mt-6 text-3xl font-medium leading-snug text-foreground sm:text-4xl">
+                Most flashcard apps treat memory like a filing problem —{" "}
+                <span className="italic text-[color:var(--primary)]">
+                  feed it more, hope it sticks.
+                </span>{" "}
+                FlashMind starts from how memory actually works: with a
+                picture, a sound, and a rhythm.
+              </p>
+            </div>
+            <div className="swoop-right">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://fghxwycixcawwtctknmp.supabase.co/storage/v1/object/public/card-images/starter-packs/ai-1777682440948-b57kem.png"
+                alt="Cartoon character overwhelmed by stacks of paper folders and cards"
+                className="w-full rounded-2xl border border-border shadow-xl"
+              />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -283,7 +310,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ── Differentiator ──────────────────────────────────────── */}
+      {/* ── Differentiator + promise combined ───────────────────── */}
       <section className="relative border-t border-border px-4 py-20 sm:py-28">
         <div className="mx-auto max-w-3xl text-center">
           <p className="label-caps swoop-up">If you&apos;ve used a flashcard app before</p>
@@ -292,26 +319,10 @@ export function LandingPage() {
             <br />
             <span className="italic text-[color:var(--primary)]">But better.</span>
           </h2>
-          <p className="swoop-up font-editorial mt-6 text-xl italic text-foreground/80 sm:text-2xl">
-            Make flashcard learning enjoyable.
-          </p>
-        </div>
-      </section>
-
-      {/* ── Promise pull-quote ──────────────────────────────────── */}
-      <section className="relative border-t border-border px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="label-caps swoop-up">The bet we&apos;re making</p>
-          <h2 className="swoop-up font-editorial mt-4 text-3xl font-medium leading-tight text-foreground sm:text-5xl">
-            You&apos;ll never want to go back to learning{" "}
-            <span className="italic text-[color:var(--primary)]">
-              without images
-            </span>{" "}
-            again.
-          </h2>
           <p className="swoop-up mx-auto mt-6 max-w-xl text-base leading-relaxed text-muted-foreground">
-            Try it for a week. If you go back to plain flashcards after that,
-            we&apos;d genuinely love to know why.
+            You&apos;ll never want to go back to learning without images
+            again. Try it for a week — if you go back to plain flashcards
+            after that, we&apos;d genuinely love to know why.
           </p>
         </div>
       </section>
@@ -329,41 +340,32 @@ export function LandingPage() {
               .
             </h2>
           </div>
-          <div className="swoop-stagger grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
+          <div className="swoop-stagger grid grid-cols-1 gap-6 md:grid-cols-2">
             {features.map((feature) => (
-              <article key={feature.title} className="swoop-up space-y-2">
-                <p className="label-caps">{feature.eyebrow}</p>
-                <h3 className="font-editorial text-xl font-medium text-foreground">
-                  {feature.title}
-                </h3>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {feature.body}
-                </p>
+              <article
+                key={feature.title}
+                className="swoop-up rounded-2xl border border-border bg-card p-6 transition-colors hover:border-primary/40"
+              >
+                <div className="flex items-start gap-4">
+                  <div
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-2xl"
+                    aria-hidden
+                  >
+                    {feature.icon}
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <p className="label-caps">{feature.eyebrow}</p>
+                    <h3 className="font-editorial text-xl font-medium text-foreground">
+                      {feature.title}
+                    </h3>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      {feature.body}
+                    </p>
+                  </div>
+                </div>
               </article>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* ── Stanford / Horn quote ──────────────────────────────── */}
-      <section className="relative border-t border-border px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-3xl">
-          <p className="label-caps swoop-up">The science, in plainer English</p>
-          <blockquote className="swoop-up mt-6 border-l-2 border-[color:var(--primary)] pl-6">
-            <p className="font-editorial text-2xl font-medium leading-snug text-foreground sm:text-3xl">
-              &ldquo;When words and visual elements are closely entwined, we
-              create something new and we augment our communal intelligence …
-              visual language has the potential for{" "}
-              <span className="italic text-[color:var(--primary)]">
-                increasing &lsquo;human bandwidth&rsquo;
-              </span>{" "}
-              — the capacity to take in, comprehend, and more efficiently
-              synthesize large amounts of new information.&rdquo;
-            </p>
-            <footer className="mt-5 text-sm text-muted-foreground">
-              — Robert E. Horn, Stanford University
-            </footer>
-          </blockquote>
         </div>
       </section>
 
@@ -391,7 +393,12 @@ export function LandingPage() {
              *  swap can run — landing.tsx itself stays on the
              *  server. */}
             <div className="swoop-right relative">
-              <StatsScreenshot />
+              <ScreenshotSlot
+                src="/landing/stats.png"
+                alt="FlashMind stats page"
+                placeholderEmoji="📊"
+                placeholderLabel="Stats screenshot"
+              />
             </div>
           </div>
         </div>
@@ -399,26 +406,41 @@ export function LandingPage() {
 
       {/* ── Anki migration callout ─────────────────────────────── */}
       <section className="relative border-t border-border px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-3xl">
-          <p className="label-caps swoop-up">Switching from Anki?</p>
-          <h2 className="swoop-up font-editorial mt-3 text-3xl font-medium leading-tight text-foreground sm:text-4xl">
-            Bring everything.{" "}
-            <span className="italic text-[color:var(--primary)]">
-              Take it back any time.
-            </span>
-          </h2>
-          <p className="swoop-up mt-6 text-base leading-relaxed text-muted-foreground">
-            One-click .apkg import preserves your cards, review history, and
-            media intact. Decide it isn&apos;t for you? Export back to Anki —
-            no lock-in.
-          </p>
-          <div className="swoop-up mt-8">
-            <Link
-              href="/auth/signup"
-              className="inline-flex h-11 items-center justify-center rounded-lg border border-border bg-card px-6 text-sm font-medium text-foreground transition-colors hover:border-[color:var(--primary)]"
-            >
-              Import your Anki collection
-            </Link>
+        <div className="mx-auto max-w-5xl">
+          <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-center lg:gap-16">
+            <div>
+              <p className="label-caps swoop-up">Switching from Anki?</p>
+              <h2 className="swoop-up font-editorial mt-3 text-3xl font-medium leading-tight text-foreground sm:text-4xl">
+                Bring everything.{" "}
+                <span className="italic text-[color:var(--primary)]">
+                  Take it back any time.
+                </span>
+              </h2>
+              <p className="swoop-up mt-6 text-base leading-relaxed text-muted-foreground">
+                One-click .apkg import preserves your cards, review history,
+                and media intact. Decide it isn&apos;t for you? Export back
+                to Anki — no lock-in.
+              </p>
+              <div className="swoop-up mt-8">
+                <Link
+                  href="/auth/signup"
+                  className="inline-flex h-11 items-center justify-center rounded-lg border border-border bg-card px-6 text-sm font-medium text-foreground transition-colors hover:border-[color:var(--primary)]"
+                >
+                  Import your Anki collection
+                </Link>
+              </div>
+            </div>
+            {/* Drop /public/landing/anki-import.png to activate.
+             *  Until then a styled placeholder keeps the layout
+             *  intentional. */}
+            <div className="swoop-right">
+              <ScreenshotSlot
+                src="/landing/anki-import.png"
+                alt="FlashMind one-click Anki import settings"
+                placeholderEmoji="📥"
+                placeholderLabel="Anki import screenshot"
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -595,6 +617,58 @@ export function LandingPage() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+interface RecallBarProps {
+  label: string;
+  /** 0-100 — width of the filled segment, also displayed as the
+   *  trailing percentage label. */
+  percent: number;
+  tone: "muted" | "primary";
+  emphasized?: boolean;
+}
+
+/**
+ * Horizontal recall comparison bar. Two of these stacked do most
+ * of the persuasion work for the hook stat block — the visual
+ * length difference between 10% and 65% lands the science before
+ * a user has to read a single word about cognitive psychology.
+ */
+function RecallBar({ label, percent, tone, emphasized }: RecallBarProps) {
+  const fill =
+    tone === "primary"
+      ? "bg-primary"
+      : "bg-muted-foreground/40";
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <p
+          className={`text-sm ${
+            emphasized
+              ? "font-medium text-foreground"
+              : "text-muted-foreground"
+          }`}
+        >
+          {label}
+        </p>
+        <p
+          className={`font-editorial text-2xl ${
+            emphasized
+              ? "font-medium text-[color:var(--primary)]"
+              : "text-muted-foreground"
+          }`}
+        >
+          {percent}%
+        </p>
+      </div>
+      <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className={`h-full rounded-full ${fill} transition-all duration-700`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }
