@@ -3,11 +3,87 @@ import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { masteryLevel, letterGrade, type LetterGrade } from "@/lib/sm2";
 
+function generateDemoStats() {
+  const heatmapData: { date: string; count: number }[] = [];
+  for (let i = 364; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    const dayNum = Math.floor(d.getTime() / 86400000);
+    const hash = ((dayNum * 2654435761) >>> 0) % 100;
+
+    let count = 0;
+    if (i < 50) {
+      count = hash < 5 ? 0 : 18 + (hash % 32);
+    } else if (i < 150) {
+      count = hash < 8 ? 0 : 12 + (hash % 28);
+    } else if (i < 270) {
+      count = hash < 15 ? 0 : 6 + (hash % 20);
+    } else {
+      count = hash < 35 ? 0 : 3 + (hash % 12);
+    }
+    heatmapData.push({ date: dateStr, count });
+  }
+
+  const calendarMonth: { date: string; count: number }[] = [];
+  for (let day = 1; day <= 30; day++) {
+    const dateStr = `2026-04-${day.toString().padStart(2, "0")}`;
+    const h = ((day * 7 + 13) % 47);
+    calendarMonth.push({
+      date: dateStr,
+      count: day === 5 || day === 22 ? 0 : 20 + (h % 30),
+    });
+  }
+
+  const dailyCounts: { date: string; count: number }[] = [];
+  const counts = [35, 0, 28, 42, 31, 38, 32];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dailyCounts.push({ date: d.toISOString().split("T")[0], count: counts[6 - i] });
+  }
+
+  return {
+    totalCards: 482,
+    cardsDueToday: 18,
+    cardsReviewedInPeriod: 206,
+    cardsReviewedToday: 32,
+    dailyGoal: 25,
+    goalHitToday: true,
+    goalHitCelebrationShown: true,
+    averageQuality: 4.2,
+    streak: 47,
+    longestStreak: 47,
+    dailyCounts,
+    heatmapData,
+    deckStats: [
+      { id: "1", name: "Spanish Vocab", emoji: "🇪🇸", totalCards: 156, masteryPercent: 78 },
+      { id: "2", name: "Medical Terminology", emoji: "🏥", totalCards: 94, masteryPercent: 65 },
+      { id: "3", name: "JavaScript Patterns", emoji: "⚡", totalCards: 82, masteryPercent: 91 },
+      { id: "4", name: "World Capitals", emoji: "🌍", totalCards: 85, masteryPercent: 88 },
+      { id: "5", name: "Art History", emoji: "🎨", totalCards: 65, masteryPercent: 42 },
+    ],
+    totalReviews: 4812,
+    successRate: 89,
+    activeDays: 134,
+    bestDay: "2026-04-12",
+    bestDayCount: 67,
+    goalDaysLast30: 27,
+    gradeHistogram: { A: 168, B: 142, C: 87, D: 38, F: 12, New: 35 },
+    calendarMonth,
+  };
+}
+
 export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+
+  if (searchParams.get("demo") === "1") {
+    return NextResponse.json(generateDemoStats());
+  }
+
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
-  const searchParams = request.nextUrl.searchParams;
   const period = searchParams.get("period") || "7"; // days
   const days = parseInt(period, 10);
 

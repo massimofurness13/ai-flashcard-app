@@ -65,7 +65,12 @@ export async function updateSession(request: NextRequest) {
     "/favicon.ico",
     "/robots.txt",
   ];
+  const isDemoMode =
+    request.nextUrl.searchParams.get("demo") === "1" &&
+    (request.nextUrl.pathname === "/stats" ||
+      request.nextUrl.pathname === "/api/stats");
   const isPublicRoute =
+    isDemoMode ||
     request.nextUrl.pathname === "/" ||
     publicRoutes.some((route) =>
       request.nextUrl.pathname.startsWith(route)
