@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +26,18 @@ interface FlashcardFormProps {
 
 export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Where to go after save/delete. The study session passes its own URL
+  // here so the round-trip lands the user back on the exact card they
+  // were on. We only honour same-origin paths starting with "/" to
+  // avoid an open-redirect via crafted URLs (e.g. ?returnTo=https://evil).
+  const rawReturnTo = searchParams?.get("returnTo") ?? null;
+  const returnTo =
+    rawReturnTo &&
+    rawReturnTo.startsWith("/") &&
+    !rawReturnTo.startsWith("//")
+      ? rawReturnTo
+      : null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [front, setFront] = useState(initialData?.front || "");
   const [back, setBack] = useState(initialData?.back || "");
@@ -120,7 +132,7 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
       // current page; the actual reload happens on the destination.
       setSavedConfirm(true);
       router.refresh();
-      router.push(`/decks/${deckId}`);
+      router.push(returnTo ?? `/decks/${deckId}`);
     } catch {
       setSaveError("Network error. Please try again.");
       setSaving(false);
