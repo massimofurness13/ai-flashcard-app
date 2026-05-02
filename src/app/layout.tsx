@@ -7,6 +7,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { Footer } from "@/components/layout/footer";
 import { FontSizeInit } from "@/components/layout/font-size-init";
+import { PostHogProvider } from "@/components/posthog-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -63,15 +64,17 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <FontSizeInit />
-          <Navbar />
-          <main className="flex-1 pb-20 md:pb-0">
-            <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
-          </main>
-          <Footer />
-          <MobileNav />
-        </ThemeProvider>
+        <PostHogProvider>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <FontSizeInit />
+            <Navbar />
+            <main className="flex-1 pb-20 md:pb-0">
+              <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
+            </main>
+            <Footer />
+            <MobileNav />
+          </ThemeProvider>
+        </PostHogProvider>
       </body>
     </html>
   );
