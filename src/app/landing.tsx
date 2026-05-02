@@ -207,7 +207,7 @@ export function LandingPage() {
               <p className="mt-5 text-xs text-muted-foreground">
                 Free forever · Pro from{" "}
                 <span className="text-foreground font-medium">$8.99/mo</span>{" "}
-                · No credit card
+                · No card needed to start
               </p>
             </div>
 
@@ -255,6 +255,44 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ── French demo section — moved before manifesto so the
+       *  product proof comes first, the philosophy comes second. */}
+      <section className="relative border-t border-border px-4 py-20 sm:py-28">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-center lg:gap-16">
+            <div className="swoop-left order-2 lg:order-1">
+              <LandingDemo cardKey="fr" />
+            </div>
+            <div className="swoop-right order-1 lg:order-2">
+              <p className="label-caps">Memorable by design</p>
+              <h2 className="font-editorial mt-4 text-3xl font-medium leading-tight text-foreground sm:text-4xl lg:text-5xl">
+                Try forgetting{" "}
+                <span className="italic text-[color:var(--primary)]">
+                  this tomorrow.
+                </span>
+              </h2>
+              <p className="mt-5 text-base leading-relaxed text-muted-foreground">
+                Our image engine is tuned specifically for memorability —
+                vivid, character-led scenes that lock the meaning into
+                your visual memory. Tap the card. Hear it in a native
+                voice. Whatever you&apos;re learning, that&apos;s the
+                picture you&apos;ll remember.
+              </p>
+              <p className="mt-5 font-editorial text-2xl text-foreground sm:text-3xl">
+                <span className="italic text-[color:var(--primary)]">
+                  From 1¢ per image.
+                </span>
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Quick illustrations cost 1 credit (1¢). Premium cost 5
+                credits (5¢) — same memorability dial, different art-
+                direction budget.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Manifesto with filing-problem image ────────────────── */}
       <section className="relative border-t border-border px-4 py-20 sm:py-28">
         <div className="mx-auto max-w-5xl">
@@ -277,34 +315,6 @@ export function LandingPage() {
                 alt="Cartoon character overwhelmed by stacks of paper folders and cards"
                 className="w-full rounded-2xl border border-border shadow-xl"
               />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── French demo section ──────────────────────────────────── */}
-      <section className="relative border-t border-border px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-6xl">
-          <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-center lg:gap-16">
-            <div className="swoop-left order-2 lg:order-1">
-              <LandingDemo cardKey="fr" />
-            </div>
-            <div className="swoop-right order-1 lg:order-2">
-              <p className="label-caps">Memorable by design</p>
-              <h2 className="font-editorial mt-4 text-3xl font-medium leading-tight text-foreground sm:text-4xl lg:text-5xl">
-                Try forgetting{" "}
-                <span className="italic text-[color:var(--primary)]">
-                  this tomorrow.
-                </span>
-              </h2>
-              <p className="mt-5 text-base leading-relaxed text-muted-foreground">
-                Our image engine isn&apos;t a generic illustrator — it&apos;s
-                tuned specifically for memorability. Every card gets a vivid,
-                character-led scene that pins the meaning into your visual
-                memory. Tap the card. Hear it in a native voice. Whether
-                you&apos;re studying French, Japanese, or anything else,
-                that&apos;s the picture you&apos;ll remember.
-              </p>
             </div>
           </div>
         </div>
@@ -563,7 +573,7 @@ export function LandingPage() {
             Ready to remember the things you study?
           </h2>
           <p className="swoop-up mt-5 text-base text-muted-foreground">
-            One free account. No credit card. Make your first pack in under a
+            One free account, no card needed. Make your first pack in under a
             minute.
           </p>
           <div className="swoop-up mt-8">
