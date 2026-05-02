@@ -164,6 +164,15 @@ model Card {
   // Flips to true once used so feedback after that no longer triggers
   // a paid generation cycle for free.
   freeImageRegenUsed Boolean @default(false)
+  // --- Background image-generation queue state ---
+  // Cards with imageUrl=null are the queue. These fields are how the
+  // cron worker (process-image-queue) safely claims and tracks them
+  // without duplicate work or stuck-forever rows. Replaces the old
+  // fire-and-forget pattern that died when Vercel terminated the
+  // function mid-loop.
+  imageGenAttempts Int       @default(0)
+  imageGenLockedAt DateTime?
+  imageGenError    String?
   hint     String?
   tags     String? // comma-separated
   position Int     @default(0)
