@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { ActivityHeatmap } from "@/components/stats/activity-heatmap";
 import { GradeHistogram } from "@/components/stats/grade-histogram";
 import { CalendarMonth } from "@/components/stats/calendar-month";
+import { MetricTile } from "@/components/stats/metric-tile";
+import { TodayRing } from "@/components/stats/today-ring";
+import { StreakHero } from "@/components/stats/streak-hero";
 import type { LetterGrade } from "@/lib/sm2";
 
 interface DeckStat {
@@ -51,7 +52,6 @@ function formatBestDate(iso: string | null): string {
   return d.toLocaleDateString("en", {
     month: "short",
     day: "numeric",
-    year: "numeric",
   });
 }
 
@@ -67,24 +67,33 @@ export function StatsClient() {
 
   if (!stats) {
     return (
-      <div className="space-y-6">
-        <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Statistics</h1>
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="space-y-4">
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
+          Statistics
+        </h1>
+        <p className="text-muted-foreground">Loading…</p>
       </div>
     );
   }
 
   const maxCount = Math.max(...stats.dailyCounts.map((d) => d.count), 1);
-  const bestDayPct =
-    stats.bestDayCount > 0
-      ? Math.min((stats.cardsReviewedToday / stats.bestDayCount) * 100, 100)
-      : 0;
+  const successRateTone =
+    stats.totalReviews === 0
+      ? "default"
+      : stats.successRate >= 70
+        ? "success"
+        : stats.successRate >= 50
+          ? "default"
+          : "danger";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-5">
+      {/* ── Header + period filter ─────────────────────────────── */}
       <div className="flex items-center justify-between">
-        <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Statistics</h1>
-        <div className="flex gap-2">
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
+          Statistics
+        </h1>
+        <div className="flex gap-1">
           {[
             { label: "7 days", value: 7 },
             { label: "30 days", value: 30 },
@@ -102,248 +111,184 @@ export function StatsClient() {
         </div>
       </div>
 
-      {/* Hero: current streak + today vs goal */}
+      {/* ── Hero row: streak + today ring ──────────────────────── */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Current streak</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-4xl font-bold">
-                {stats.streak > 0 ? "🔥 " : ""}
-                {stats.streak}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                day{stats.streak === 1 ? "" : "s"}
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Longest: {stats.longestStreak} day{stats.longestStreak === 1 ? "" : "s"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6 space-y-2">
-            <p className="text-sm text-muted-foreground">Today</p>
-            <p className="text-4xl font-bold">
-              {stats.cardsReviewedToday}
-              <span className="text-base text-muted-foreground ml-1">
-                / {stats.dailyGoal}
-              </span>
-            </p>
-            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-500"
-                style={{
-                  width: `${Math.min(
-                    (stats.cardsReviewedToday / Math.max(stats.dailyGoal, 1)) * 100,
-                    100
-                  )}%`,
-                }}
-              />
-            </div>
-            {stats.goalHitToday && (
-              <p className="text-xs text-primary font-medium">Goal hit! 🎉</p>
-            )}
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <StreakHero
+            streak={stats.streak}
+            longestStreak={stats.longestStreak}
+          />
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <TodayRing
+            done={stats.cardsReviewedToday}
+            goal={stats.dailyGoal}
+            goalHit={stats.goalHitToday}
+          />
+        </div>
       </div>
 
-      {/* Study momentum — Goal Days / Active Days / Best Day / Success Rate */}
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Goal days (30d)
-            </p>
-            <p className="text-3xl font-bold mt-1">
+      {/* ── Six metric tiles ───────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <MetricTile
+          label="Goal days · 30d"
+          value={
+            <>
               {stats.goalDaysLast30}
-              <span className="text-base text-muted-foreground ml-1">/ 30</span>
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Active days
-            </p>
-            <p className="text-3xl font-bold mt-1">{stats.activeDays}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Success rate
-            </p>
-            <p
-              className={`text-3xl font-bold mt-1 ${
-                stats.successRate >= 70
-                  ? "text-green-500"
-                  : stats.successRate >= 50
-                    ? "text-foreground"
-                    : "text-destructive"
-              }`}
-            >
-              {stats.totalReviews > 0 ? `${stats.successRate}%` : "—"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.totalReviews.toLocaleString()} total reviews
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 space-y-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Best day
-              </p>
-              {stats.bestDay && (
-                <p className="text-[10px] text-muted-foreground">
-                  {formatBestDate(stats.bestDay)}
-                </p>
-              )}
-            </div>
-            <p className="text-3xl font-bold">{stats.bestDayCount}</p>
-            {stats.bestDayCount > 0 && (
-              <div className="w-full h-1 bg-muted rounded-full overflow-hidden mt-1">
-                <div
-                  className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${bestDayPct}%` }}
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              <span className="text-base text-muted-foreground font-normal ml-1">
+                / 30
+              </span>
+            </>
+          }
+        />
+        <MetricTile label="Active days" value={stats.activeDays} />
+        <MetricTile
+          label="Success rate"
+          value={stats.totalReviews > 0 ? `${stats.successRate}%` : "—"}
+          hint={`${stats.totalReviews.toLocaleString()} reviews`}
+          tone={successRateTone as "default" | "success" | "danger"}
+        />
+        <MetricTile
+          label="Best day"
+          value={stats.bestDayCount}
+          hint="cards in one day"
+          kicker={stats.bestDay ? formatBestDate(stats.bestDay) : undefined}
+        />
+        <MetricTile
+          label="Cards due"
+          value={stats.cardsDueToday}
+          hint="ready to study"
+          tone={stats.cardsDueToday > 0 ? "primary" : "default"}
+        />
+        <MetricTile
+          label={`Reviews · ${period}d`}
+          value={stats.cardsReviewedInPeriod}
+          hint={`${stats.totalCards.toLocaleString()} total cards`}
+        />
       </div>
 
-      {/* Secondary stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Cards due today</p>
-            <p className="text-3xl font-bold text-primary">{stats.cardsDueToday}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total cards</p>
-            <p className="text-3xl font-bold">{stats.totalCards}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Reviews ({period}d)</p>
-            <p className="text-3xl font-bold">{stats.cardsReviewedInPeriod}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Calendar month view */}
-      <Card>
-        <CardHeader>
-          <CardTitle>This month</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* ── Calendar (this month) + recent activity bar chart ──── */}
+      <div className="grid gap-4 lg:grid-cols-[2fr_3fr]">
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-3">
+            This month
+          </p>
           <CalendarMonth data={stats.calendarMonth} />
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* 365-day heatmap */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Last 365 days</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ActivityHeatmap data={stats.heatmapData} />
-        </CardContent>
-      </Card>
-
-      {/* Recent activity bar chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent activity ({period} days)</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Recent activity · {period} days
+            </p>
+            <p className="text-[10px] text-muted-foreground/70">
+              {stats.cardsReviewedInPeriod.toLocaleString()} reviews
+            </p>
+          </div>
           {stats.dailyCounts.length > 0 ? (
-            <div className="flex items-end gap-1 h-32">
+            <div className="flex items-end gap-1 h-40">
               {stats.dailyCounts.map((day) => {
-                const height =
-                  day.count > 0 ? Math.max((day.count / maxCount) * 100, 8) : 4;
+                const heightPct =
+                  day.count > 0 ? Math.max((day.count / maxCount) * 100, 6) : 4;
                 const date = new Date(day.date);
                 const isShortPeriod = stats.dailyCounts.length <= 14;
-                // Day names for short periods, day-of-month numbers for long
                 const label = isShortPeriod
-                  ? date.toLocaleDateString("en", { weekday: "short" })
+                  ? date.toLocaleDateString("en", { weekday: "short" })[0]
                   : `${date.getDate()}`;
                 return (
                   <div
                     key={day.date}
-                    className="flex-1 flex flex-col items-center gap-1"
+                    className="flex-1 flex flex-col items-center gap-1.5 min-w-0"
                   >
                     <div
-                      className={`w-full rounded-t transition-all ${
-                        day.count > 0 ? "bg-primary" : "bg-muted"
+                      className={`w-full rounded-t-md transition-all duration-500 ${
+                        day.count > 0
+                          ? "bg-gradient-to-t from-primary/80 to-primary"
+                          : "bg-muted/60"
                       }`}
-                      style={{ height: `${height}%` }}
+                      style={{ height: `${heightPct}%` }}
                       title={`${date.toLocaleDateString("en", {
                         month: "short",
                         day: "numeric",
-                      })}: ${day.count} reviews`}
+                      })}: ${day.count} review${day.count === 1 ? "" : "s"}`}
                     />
-                    {isShortPeriod && (
-                      <span className="text-[10px] text-muted-foreground truncate w-full text-center">
-                        {label}
-                      </span>
-                    )}
+                    <span className="text-[10px] text-muted-foreground truncate w-full text-center">
+                      {label}
+                    </span>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <p className="text-muted-foreground text-sm text-center py-8">
-              No review activity yet
+            <p className="text-muted-foreground text-sm text-center py-12">
+              No review activity yet.
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Grade distribution */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Grade distribution</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* ── 365-day heatmap (full width) ───────────────────────── */}
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="flex items-baseline justify-between mb-3">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Last 365 days
+          </p>
+          <p className="text-[10px] text-muted-foreground/70">
+            {stats.activeDays} active in {period}d window
+          </p>
+        </div>
+        <ActivityHeatmap data={stats.heatmapData} />
+      </div>
+
+      {/* ── Grade distribution + Pack mastery side by side ─────── */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-4">
+            Grade distribution
+          </p>
           <GradeHistogram histogram={stats.gradeHistogram} />
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Deck mastery */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pack mastery</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-4">
+            Pack mastery
+          </p>
           {stats.deckStats.length > 0 ? (
-            stats.deckStats.map((deck) => (
-              <div key={deck.id} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span>
-                    {deck.emoji || "\ud83d\udcda"} {deck.name}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {deck.masteryPercent}% ({deck.totalCards} cards)
+            <div className="space-y-3">
+              {stats.deckStats.map((deck) => (
+                <div
+                  key={deck.id}
+                  className="grid grid-cols-[1fr_auto] items-center gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="truncate">
+                        {deck.emoji || "📚"} {deck.name}
+                      </span>
+                      <span className="text-muted-foreground tabular-nums shrink-0">
+                        {deck.masteryPercent}%
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted/60 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-primary/70 to-primary transition-all duration-700"
+                        style={{ width: `${deck.masteryPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 self-start">
+                    {deck.totalCards}
                   </span>
                 </div>
-                <Progress value={deck.masteryPercent} className="h-2" />
-              </div>
-            ))
+              ))}
+            </div>
           ) : (
-            <p className="text-muted-foreground text-sm text-center py-4">
-              No packs created yet
+            <p className="text-muted-foreground text-sm text-center py-6">
+              No packs created yet.
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
