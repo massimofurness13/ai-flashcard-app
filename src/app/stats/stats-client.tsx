@@ -58,12 +58,16 @@ function formatBestDate(iso: string | null): string {
 export function StatsClient() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [period, setPeriod] = useState(7);
+  const [demo] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("demo") === "1";
+  });
 
   useEffect(() => {
-    fetch(`/api/stats?period=${period}`)
+    fetch(`/api/stats?period=${period}${demo ? "&demo=1" : ""}`)
       .then((res) => res.json())
       .then(setStats);
-  }, [period]);
+  }, [period, demo]);
 
   if (!stats) {
     return (
@@ -188,8 +192,11 @@ export function StatsClient() {
           {stats.dailyCounts.length > 0 ? (
             <div className="flex items-end gap-1 h-40">
               {stats.dailyCounts.map((day) => {
-                const heightPct =
-                  day.count > 0 ? Math.max((day.count / maxCount) * 100, 6) : 4;
+                const barMaxPx = 136;
+                const heightPx =
+                  day.count > 0
+                    ? Math.max(Math.round((day.count / maxCount) * barMaxPx), 8)
+                    : 5;
                 const date = new Date(day.date);
                 const isShortPeriod = stats.dailyCounts.length <= 14;
                 const label = isShortPeriod
@@ -206,7 +213,7 @@ export function StatsClient() {
                           ? "bg-gradient-to-t from-primary/80 to-primary"
                           : "bg-muted/60"
                       }`}
-                      style={{ height: `${heightPct}%` }}
+                      style={{ height: `${heightPx}px` }}
                       title={`${date.toLocaleDateString("en", {
                         month: "short",
                         day: "numeric",

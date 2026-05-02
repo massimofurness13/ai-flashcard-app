@@ -2,20 +2,32 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { isProUser } from "@/lib/subscription";
-import { generateAndUploadImage, type ImageTier } from "@/lib/image-gen";
-import {
-  consumeImageCredit,
-  refundImageCredit,
-  getQuotaState,
-  TIER_COSTS,
-} from "@/lib/image-quota";
+import { type ImageTier } from "@/lib/image-gen";
+import { getQuotaState, TIER_COSTS } from "@/lib/image-quota";
+import { processQueue } from "@/app/api/cron/process-image-queue/route";
 
-const CONCURRENCY = 3;
+// One inline batch (~50s) gives the user instant first-page feedback;
+// the rest is drained by the per-minute cron at /api/cron/process-image-queue.
+export const maxDuration = 60;
 
 /**
- * Fire-and-forget image generation for all cards in a deck that don't
- * have an image yet. Accepts tier (quick | premium). Returns immediately —
- * generation continues on the server regardless of whether the user stays.
+ * Trigger image generation for a deck.
+ *
+ * This used to spawn a fire-and-forget worker pool. That pattern dies
+ * on Vercel — the function is terminated the moment the response is
+ * returned, stranding cards mid-loop (the "stops at 53/102" / "0/49"
+ * bug). Replaced with a persisted queue: cards with imageUrl IS NULL
+ * ARE the queue, drained by the cron worker at /api/cron/process-image-queue.
+ *
+ * This route now:
+ *   1. Validates auth, Pro status, and deck ownership.
+ *   2. Sets imageTier on each pending card so the worker honours the
+ *      user's quick/premium mix.
+ *   3. Affordability check — caps the queue at what the user can pay for.
+ *   4. Runs ONE inline batch (best-effort) so the first few images
+ *      appear immediately rather than waiting for the next cron tick.
+ *   5. Returns. The cron drains the rest, durably, even if this
+ *      function gets killed.
  */
 export async function POST(request: Request) {
   const auth = await requireAuth();
@@ -31,12 +43,6 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const { deckId } = body;
-  // Default tier (when caller doesn't pass a mix) is `quick` — cheaper
-  // and what most "fill in the rest" cases want. `premiumCount` lets
-  // the caller request that the FIRST N cards (in DB insertion order)
-  // be processed as premium and the remainder as quick. Used by the
-  // unified create flow to honour the user's silver/gold mix when
-  // generation is handed off mid-session.
   const tier: ImageTier = body.tier === "premium" ? "premium" : "quick";
   const premiumCountRaw = Number(body.premiumCount);
   const premiumCount =
@@ -56,13 +62,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
-  // Ordering matters — premium tier is assigned positionally (the
-  // first `premiumCount` cards in this list become premium, the rest
-  // are quick). Use createdAt + id so ties are deterministic across
-  // requests.
+  // Pull the pending cards in deterministic order so positional tier
+  // assignment (first N premium, rest quick) is stable across calls.
   const cards = await prisma.card.findMany({
     where: { deckId, imageUrl: null },
-    select: { id: true, front: true, back: true },
+    select: { id: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
 
@@ -70,27 +74,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ queued: 0, message: "All cards already have images" });
   }
 
-  // Build the per-card tier assignment up-front so the worker pool
-  // doesn't need to know about the boundary. If no premiumCount is
-  // passed, every card uses the legacy single-tier path.
-  const assignments: { id: string; front: string; back: string; tier: ImageTier }[] =
-    premiumCount > 0
-      ? cards.map((c, i) => ({ ...c, tier: i < premiumCount ? "premium" : "quick" }))
-      : cards.map((c) => ({ ...c, tier }));
-
-  // Affordability check: walk the assignments in order, keep cards
-  // we can afford, drop the tail we can't. Premium cards are 5x more
-  // expensive than quick, so the order matters — burning premium
-  // credits on the first cards and falling back to quick later is
-  // exactly what the user signed up for in the slider.
+  // Affordability: walk the assignments in user-intent order, drop the
+  // tail we can't pay for. Premium is 5x quick, so order matters.
   const quota = await getQuotaState(auth.userId);
   let remaining = quota.totalRemaining;
-  const affordable: typeof assignments = [];
-  for (const a of assignments) {
-    const cost = TIER_COSTS[a.tier];
+  const affordable: { id: string; tier: ImageTier }[] = [];
+  for (let i = 0; i < cards.length; i++) {
+    const cardTier: ImageTier =
+      premiumCount > 0 && i < premiumCount ? "premium" : tier;
+    const cost = TIER_COSTS[cardTier];
     if (remaining < cost) break;
     remaining -= cost;
-    affordable.push(a);
+    affordable.push({ id: cards[i].id, tier: cardTier });
   }
 
   if (affordable.length === 0) {
@@ -104,50 +99,40 @@ export async function POST(request: Request) {
     );
   }
 
-  processBatch(auth.userId, affordable).catch((err) => {
-    console.error("[background image] batch failed:", err);
-  });
+  // Stamp the tier on each queued card AND reset queue-state fields so
+  // a previously-failed card (imageGenAttempts at max) gets another
+  // shot when the user explicitly re-triggers generation.
+  await Promise.all(
+    affordable.map(({ id, tier: t }) =>
+      prisma.card.update({
+        where: { id },
+        data: {
+          imageTier: t,
+          imageGenAttempts: 0,
+          imageGenError: null,
+          imageGenLockedAt: null,
+        },
+      }),
+    ),
+  );
+
+  // Best-effort inline batch — gives the user instant first-page
+  // feedback. Wrapped in a Promise.race against a short deadline so a
+  // slow run doesn't block the response. The cron drains everything
+  // we miss here, so a partial inline result is fine.
+  const inlineDeadline = new Promise<null>((resolve) =>
+    setTimeout(() => resolve(null), 25_000),
+  );
+  await Promise.race([processQueue().catch(() => null), inlineDeadline]);
 
   const skipped = cards.length - affordable.length;
   return NextResponse.json({
     queued: affordable.length,
     total: cards.length,
     premiumCount: Math.min(premiumCount, affordable.length),
-    message: skipped > 0
-      ? `Generating ${affordable.length} images with your remaining credits. ${skipped} cards will need more credits.`
-      : "Generation started. Images will appear as they're ready.",
+    message:
+      skipped > 0
+        ? `Generating ${affordable.length} images with your remaining credits. ${skipped} cards will need more credits.`
+        : "Generation started. Images will appear as they're ready.",
   });
-}
-
-async function processBatch(
-  userId: string,
-  cards: { id: string; front: string; back: string; tier: ImageTier }[],
-) {
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(CONCURRENCY, cards.length) }, async () => {
-    while (cursor < cards.length) {
-      const card = cards[cursor++];
-
-      const consumed = await consumeImageCredit(userId, card.tier);
-      if (!consumed.ok) return;
-
-      try {
-        const imageUrl = await generateAndUploadImage(
-          userId,
-          card.front,
-          card.back,
-          card.tier
-        );
-        await prisma.card.updateMany({
-          where: { id: card.id, imageUrl: null },
-          data: { imageUrl },
-        });
-      } catch (err) {
-        await refundImageCredit(userId, consumed.source, consumed.amountUsed);
-        console.error(`[background image] card ${card.id}:`, err);
-      }
-    }
-  });
-
-  await Promise.all(workers);
 }
