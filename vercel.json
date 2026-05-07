@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/process-image-queue",
-      "schedule": "* * * * *"
+      "schedule": "0 4 * * *"
     }
   ]
 }
