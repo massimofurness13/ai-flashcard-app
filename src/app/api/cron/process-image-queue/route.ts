@@ -38,7 +38,16 @@ const STALE_LOCK_MS = 5 * 60 * 1000; // 5 min — a worker that's been "processi
  * inline once by the deck trigger route for instant first-batch
  * feedback. Both code paths share this implementation.
  */
-export async function processQueue(): Promise<{
+interface ProcessQueueOptions {
+  /** When set, only consider cards owned by this user. */
+  userId?: string;
+  /** Override the default batch size. */
+  maxCards?: number;
+  /** Override the default time budget (milliseconds). */
+  deadlineMs?: number;
+}
+
+export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
   processed: number;
   succeeded: number;
   failed: number;
@@ -46,17 +55,21 @@ export async function processQueue(): Promise<{
   reason: "drained" | "deadline" | "no_work";
 }> {
   const startedAt = Date.now();
-  const deadline = startedAt + BATCH_DEADLINE_MS;
+  const deadline = startedAt + (opts.deadlineMs ?? BATCH_DEADLINE_MS);
+  const maxCards = opts.maxCards ?? MAX_CARDS_PER_RUN;
   const staleCutoff = new Date(startedAt - STALE_LOCK_MS);
 
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
 
-  // Pull a slate of candidates. We over-pull (MAX_CARDS_PER_RUN) and
-  // then attempt to atomically claim each one — losers (claimed by a
+  // Pull a slate of candidates. We over-pull (maxCards) and then
+  // attempt to atomically claim each one — losers (claimed by a
   // racing run) skip silently. Cheaper than a SELECT FOR UPDATE here
-  // because Prisma doesn't expose row-level locks portably.
+  // because Prisma doesn't expose row-level locks portably. With a
+  // userId filter the query becomes per-user — used by the
+  // /api/images/queue-tick endpoint that's driven by the user's
+  // own polling loop, no Vercel cron required.
   const candidates = await prisma.card.findMany({
     where: {
       imageUrl: null,
@@ -65,6 +78,7 @@ export async function processQueue(): Promise<{
         { imageGenLockedAt: null },
         { imageGenLockedAt: { lt: staleCutoff } },
       ],
+      ...(opts.userId ? { deck: { userId: opts.userId } } : {}),
     },
     select: {
       id: true,
@@ -74,7 +88,7 @@ export async function processQueue(): Promise<{
       deck: { select: { userId: true } },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    take: MAX_CARDS_PER_RUN,
+    take: maxCards,
   });
 
   if (candidates.length === 0) {
@@ -172,7 +186,11 @@ export async function processQueue(): Promise<{
   await Promise.all(workers);
 
   const remaining = await prisma.card.count({
-    where: { imageUrl: null, imageGenAttempts: { lt: MAX_ATTEMPTS } },
+    where: {
+      imageUrl: null,
+      imageGenAttempts: { lt: MAX_ATTEMPTS },
+      ...(opts.userId ? { deck: { userId: opts.userId } } : {}),
+    },
   });
 
   return {

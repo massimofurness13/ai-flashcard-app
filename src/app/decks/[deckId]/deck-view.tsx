@@ -61,8 +61,16 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
   // view just polls and renders the "generating…" banner when it sees
   // ?generating=true on mount or a stored sessionStorage flag.
 
-  // On mount, check if we arrived with ?generating=true (from the generate
-  // page after save) or if there's an active generation from before.
+  // On mount, decide whether to start the queue-drain polling loop.
+  //
+  // Three triggering paths:
+  //   1. Arrived with ?generating=true (from the generate page) — fresh
+  //      session, set the expiry and start polling.
+  //   2. Stored sessionStorage flag from an earlier visit still valid.
+  //   3. Stranded cards exist on this deck (cardsWithoutImages > 0) —
+  //      auto-resume so cards left over from a previous session
+  //      (e.g. tab closed mid-flight, Vercel cron failing on hobby
+  //      plan) get drained the next time the user opens the deck.
   useEffect(() => {
     const fromGenerate = searchParams.get("generating") === "true";
     if (fromGenerate) {
@@ -82,22 +90,57 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
         const total = Number(sessionStorage.getItem(generationTotalKey)) || cardsWithoutImages;
         setInitialPending(total);
         setGenerationActive(true);
-      } else {
-        sessionStorage.removeItem(generationKey);
-        sessionStorage.removeItem(generationTotalKey);
+        return;
       }
+      sessionStorage.removeItem(generationKey);
+      sessionStorage.removeItem(generationTotalKey);
+    }
+
+    // Stranded-cards auto-resume. Pro users with cards still missing
+    // images get the polling loop kicked off automatically — drives
+    // the per-user queue-tick endpoint until everything has an image
+    // or quota runs out. No explicit "Resume" button needed.
+    if (cardsWithoutImages > 0 && isPro) {
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      sessionStorage.setItem(generationKey, String(expiresAt));
+      sessionStorage.setItem(generationTotalKey, String(cardsWithoutImages));
+      setInitialPending(cardsWithoutImages);
+      setGenerationActive(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll every 5s while generation is active — refreshes the server data
-  // so new images appear as they complete. Stops once all cards have
-  // images or the 10-minute window expires.
+  // Poll every ~12s while generation is active. Each tick:
+  //   1. Calls /api/images/queue-tick — drains a small batch of the
+  //      user's pending images server-side (bounded ~10s).
+  //   2. router.refresh() — re-renders the server component with the
+  //      newly-filled image URLs so the UI updates.
+  //
+  // This makes the queue self-driving from the user's open tab — no
+  // dependency on Vercel cron (which on the hobby plan is capped at
+  // once per day). Stops once all cards have images or the 10-minute
+  // window expires; the user can simply revisit the deck to pick up
+  // wherever it left off.
   useEffect(() => {
     if (!generationActive) return;
 
+    let cancelled = false;
+
+    async function tickOnce() {
+      try {
+        await fetch("/api/images/queue-tick", { method: "POST" });
+      } catch {
+        // Network blip — non-fatal, next tick will retry.
+      }
+      if (cancelled) return;
+      router.refresh();
+    }
+
     function scheduleNext() {
-      pollRef.current = setTimeout(() => {
+      // Slightly longer than the tick's ~10s deadline so back-to-back
+      // ticks don't overlap and stack up serverless invocations.
+      pollRef.current = setTimeout(async () => {
+        if (cancelled) return;
         const stored = sessionStorage.getItem(generationKey);
         const expiresAt = stored ? Number(stored) : 0;
         if (expiresAt <= Date.now()) {
@@ -106,13 +149,21 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
           setGenerationActive(false);
           return;
         }
-        router.refresh();
+        await tickOnce();
+        if (cancelled) return;
         scheduleNext();
-      }, 5000);
+      }, 12000);
     }
 
-    scheduleNext();
+    // Kick off an immediate first tick so the user sees progress
+    // within seconds of the page mounting, then settle into the
+    // 12s cadence.
+    void tickOnce().then(() => {
+      if (!cancelled) scheduleNext();
+    });
+
     return () => {
+      cancelled = true;
       if (pollRef.current) clearTimeout(pollRef.current);
     };
   }, [generationActive, router, generationKey, generationTotalKey]);
