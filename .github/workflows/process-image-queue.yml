@@ -1,0 +1,65 @@
+# GitHub Actions cron — drains the AI image-generation queue every 5
+# minutes from the cloud, so generation completes whether or not the
+# user has the app open.
+#
+# Pairs with the in-tab polling at /api/images/queue-tick: the tab
+# loop drains in real time when the user is watching (4 cards every
+# 12s); this workflow keeps drainage going from the cloud at a slower
+# 5-min cadence when the tab is closed.
+#
+# Why GH Actions and not Vercel Cron: Vercel's hobby plan caps cron
+# schedules to once per day, which can't drain a 100-card batch in
+# real time. GH Actions allows */5 schedules and is free.
+#
+# Caveats:
+#   - Schedule is best-effort; runs can be delayed during GitHub
+#     load. Real-world cadence is typically 5-7 min.
+#   - GitHub auto-pauses scheduled workflows after 60 days of no
+#     repo activity. They send a warning email; one click re-enables.
+#
+# Secrets required (Settings → Secrets and variables → Actions):
+#   - APP_URL: the canonical production origin, e.g.
+#     https://flashmind.app  (no trailing slash)
+#   - CRON_SECRET: must match the CRON_SECRET set on Vercel/Render
+#     so the cron route accepts the call.
+
+name: Process AI image queue
+
+on:
+  schedule:
+    # Every 5 minutes. POSIX cron, UTC.
+    - cron: "*/5 * * * *"
+  # Allow manual trigger from the Actions tab — useful for testing
+  # and for forcing an immediate drain when the user reports stuck
+  # cards.
+  workflow_dispatch:
+
+# Prevents two cron runs from overlapping. The queue worker uses
+# atomic claim so overlapping runs would be safe (they'd just split
+# work), but skipping the second saves CI minutes and keeps the log
+# easy to read.
+concurrency:
+  group: process-image-queue
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Hit the queue-drain endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::APP_URL or CRON_SECRET secret is not set"
+            exit 1
+          fi
+          # -fsS: fail on HTTP error, silent progress, show errors.
+          # --max-time 90: hard timeout; the route's own deadline is
+          # ~50s + cold-start headroom.
+          response=$(curl -fsS --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/process-image-queue")
+          echo "Response: $response"
