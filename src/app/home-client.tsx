@@ -346,7 +346,12 @@ export function HomePage({
                       <div className="h-px flex-1 bg-border" />
                     </div>
                   )}
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {/* Single-column dense list. Each DeckCard is now a
+                   *  skinny single-line row, so stacking them vertically
+                   *  is the readable choice — multi-column would force
+                   *  text truncation at narrow widths and hurts scan-
+                   *  ability. */}
+                  <div className="grid gap-2">
                     {unfolderedDecks.map((deck, i) => (
                       <div
                         key={deck.id}
