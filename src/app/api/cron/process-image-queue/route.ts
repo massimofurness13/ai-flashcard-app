@@ -81,6 +81,11 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
   const candidates = await prisma.card.findMany({
     where: {
       imageUrl: null,
+      // Only cards the user explicitly requested an image for. Cards
+      // born without imageTier (manual create, Anki import, abandoned
+      // sessions) stay out of the queue — we never auto-burn credits
+      // on cards the user didn't ask to illustrate.
+      imageTier: { not: null },
       imageGenAttempts: { lt: MAX_ATTEMPTS },
       OR: [
         { imageGenLockedAt: null },
@@ -196,6 +201,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
   const remaining = await prisma.card.count({
     where: {
       imageUrl: null,
+      imageTier: { not: null },
       imageGenAttempts: { lt: MAX_ATTEMPTS },
       ...(opts.userId ? { deck: { userId: opts.userId } } : {}),
     },

@@ -446,10 +446,18 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
               name: trimmedName,
               frontLanguageCode: frontLanguageCode || null,
               backLanguageCode: backLanguageCode || null,
-              cards: generated.map((c) => ({
+              // Stamp imageTier on every card at save time so the
+              // cron's queue-scoping filter (imageTier IS NOT NULL =
+              // "user explicitly wants an image here") recognises
+              // these as real generation requests. Without this,
+              // cards where the user navigated away mid-image-loop
+              // would be permanently invisible to the cron and never
+              // get their images.
+              cards: generated.map((c, i) => ({
                 front: c.front,
                 back: c.back,
                 hint: c.hint || null,
+                imageTier: i < premiumCount ? "premium" : "quick",
               })),
             }),
           });
