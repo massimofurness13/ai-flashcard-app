@@ -464,6 +464,13 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
           if (deckRes.ok) {
             const deck = await deckRes.json();
             setAutoSavedDeckId(deck.id);
+            // Invalidate Next's in-memory router cache so a back-
+            // navigation to the home page actually re-fetches and
+            // shows this new deck. Without this, the user sees a
+            // stale library (the duplicate-pack bug reported by
+            // the user: "I navigated back, didn't see it, generated
+            // again — now I have three copies").
+            router.refresh();
             // Pull back the cards we just saved so we know their
             // server-side IDs. Needed by the image loop to PATCH
             // each card individually as illustrations land.
