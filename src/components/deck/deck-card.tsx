@@ -29,6 +29,12 @@ function formatRelative(iso: string): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
+/**
+ * Single-line pack card. Compact by design so the user sees as many
+ * packs per screen as possible — emoji, title, card count, and grade
+ * status are all on one row. Replaces the old two-zone card whose
+ * header/footer split wasted vertical space.
+ */
 export function DeckCard({
   id,
   name,
@@ -38,11 +44,12 @@ export function DeckCard({
   folderColor,
   lastStudiedAt,
 }: DeckCardProps) {
-  const gradeText = grade === "New" ? "Not studied" : `Grade ${grade}`;
+  const isStudied = grade !== "New";
+  const gradeLabel = isStudied ? grade : "New";
 
   return (
     <Link href={`/decks/${id}`} className="block">
-      <article className="editorial-card group relative flex h-full flex-col justify-between gap-6 overflow-hidden rounded-2xl border border-border bg-card p-5">
+      <article className="editorial-card group relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-4 py-2.5 transition-colors hover:border-[color:var(--primary)]/40">
         {/* Folder-color spine */}
         {folderColor && (
           <div
@@ -52,44 +59,48 @@ export function DeckCard({
           />
         )}
 
-        {/* Header — emoji as subtle accent, name as the focal element */}
-        <div className="flex items-start gap-3">
+        {/* Emoji — fixed-width slot so titles align across rows */}
+        <span
+          aria-hidden
+          className="shrink-0 text-lg leading-none opacity-80 transition-opacity group-hover:opacity-100"
+        >
+          {emoji || "📚"}
+        </span>
+
+        {/* Title — takes all remaining space, truncates on overflow */}
+        <h3 className="min-w-0 flex-1 truncate font-editorial text-base font-medium leading-tight text-card-foreground transition-colors group-hover:text-[color:var(--primary)]">
+          {name}
+        </h3>
+
+        {/* Meta — right-aligned, all inline. Hides last-studied on
+         *  very narrow widths to keep the row from breaking. */}
+        <div className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
+          {lastStudiedAt && (
+            <>
+              <span className="hidden sm:inline">
+                {formatRelative(lastStudiedAt)}
+              </span>
+              <span
+                aria-hidden
+                className="hidden h-1 w-1 rounded-full bg-muted-foreground/40 sm:inline-block"
+              />
+            </>
+          )}
+          <span>
+            {cardCount} {cardCount === 1 ? "card" : "cards"}
+          </span>
           <span
             aria-hidden
-            className="mt-0.5 text-xl leading-none opacity-80 transition-opacity group-hover:opacity-100"
-          >
-            {emoji || "\ud83d\udcda"}
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-editorial text-lg font-medium leading-snug text-card-foreground transition-colors group-hover:text-[color:var(--primary)]">
-              {name}
-            </h3>
-            {lastStudiedAt && (
-              <p className="label-caps mt-1">
-                Last studied {formatRelative(lastStudiedAt)}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Footer — metadata row, editorial byline style */}
-        <div className="flex items-end justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            <span className="font-editorial text-lg font-medium text-foreground">
-              {cardCount}
-            </span>{" "}
-            {cardCount === 1 ? "card" : "cards"}
-          </p>
-          <div className="flex items-center gap-2">
+            className="h-1 w-1 rounded-full bg-muted-foreground/40"
+          />
+          <span className="flex items-center gap-1">
             <span
               aria-hidden
               className="h-1.5 w-1.5 rounded-full"
               style={{ backgroundColor: gradeColor(grade as LetterGrade) }}
             />
-            <span className="label-caps" style={{ color: "var(--muted-foreground)" }}>
-              {gradeText}
-            </span>
-          </div>
+            {gradeLabel}
+          </span>
         </div>
       </article>
     </Link>
