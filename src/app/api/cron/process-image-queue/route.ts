@@ -14,7 +14,15 @@ import {
 export const maxDuration = 60;
 
 const BATCH_DEADLINE_MS = 50_000;
-const MAX_CARDS_PER_RUN = 12;
+// Was 12; bumped to 40 after observing GitHub Actions cron throttle
+// our */5 schedule down to ~25-30 min real cadence. At 12 cards per
+// tick that's 24 cards/hour — a 100-card pack would take 4+ hours to
+// drain. With 40 cards/tick (still well within the 50s deadline given
+// CONCURRENCY=3 and ~3s per card) we drain ~80 cards/hour from cron
+// alone, plus whatever in-tab polling does when the user's watching.
+const MAX_CARDS_PER_RUN = 40;
+// Concurrency 3 keeps fal.ai concurrency budget headroom (10 cap, app
+// only ever uses 3 from cron + 3 from in-tab polling = 6 worst-case).
 const CONCURRENCY = 3;
 const MAX_ATTEMPTS = 3;
 const STALE_LOCK_MS = 5 * 60 * 1000; // 5 min — a worker that's been "processing" longer than this is dead
