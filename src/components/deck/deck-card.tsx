@@ -48,8 +48,13 @@ export function DeckCard({
   const gradeLabel = isStudied ? grade : "New";
 
   return (
-    <Link href={`/decks/${id}`} className="block">
-      <article className="editorial-card group relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-4 py-2.5 transition-colors hover:border-[color:var(--primary)]/40">
+    // `block w-full min-w-0`: keep the Link from expanding past its
+    // grid/flex parent when the title is long. Without min-w-0 the
+    // truncate inside doesn't apply because the parent's intrinsic
+    // min-width still respects content width — caused the home page
+    // to scroll horizontally on iPhone width.
+    <Link href={`/decks/${id}`} className="block w-full min-w-0">
+      <article className="editorial-card group relative flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3 py-2.5 transition-colors hover:border-[color:var(--primary)]/40 sm:px-4">
         {/* Folder-color spine */}
         {folderColor && (
           <div
@@ -72,35 +77,28 @@ export function DeckCard({
           {name}
         </h3>
 
-        {/* Meta — right-aligned, all inline. Hides last-studied on
-         *  very narrow widths to keep the row from breaking. */}
+        {/* Meta — right-aligned, all inline. Mobile shows just the
+         *  count + grade dot to keep the row from breaking on iPhone
+         *  width. Tablet+ adds the grade letter and last-studied. */}
         <div className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
           {lastStudiedAt && (
             <>
-              <span className="hidden sm:inline">
+              <span className="hidden md:inline">
                 {formatRelative(lastStudiedAt)}
               </span>
               <span
                 aria-hidden
-                className="hidden h-1 w-1 rounded-full bg-muted-foreground/40 sm:inline-block"
+                className="hidden h-1 w-1 rounded-full bg-muted-foreground/40 md:inline-block"
               />
             </>
           )}
-          <span>
-            {cardCount} {cardCount === 1 ? "card" : "cards"}
-          </span>
+          <span>{cardCount}</span>
           <span
             aria-hidden
-            className="h-1 w-1 rounded-full bg-muted-foreground/40"
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ backgroundColor: gradeColor(grade as LetterGrade) }}
           />
-          <span className="flex items-center gap-1">
-            <span
-              aria-hidden
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: gradeColor(grade as LetterGrade) }}
-            />
-            {gradeLabel}
-          </span>
+          <span className="hidden sm:inline">{gradeLabel}</span>
         </div>
       </article>
     </Link>

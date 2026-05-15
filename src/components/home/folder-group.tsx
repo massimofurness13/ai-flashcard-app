@@ -61,7 +61,7 @@ export function FolderGroup({
       </button>
 
       {open && (
-        <div className="grid gap-2">
+        <div className="flex w-full min-w-0 flex-col gap-2">
           {decks.map((deck) => (
             <DeckCard
               key={deck.id}
