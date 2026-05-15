@@ -346,16 +346,15 @@ export function HomePage({
                       <div className="h-px flex-1 bg-border" />
                     </div>
                   )}
-                  {/* Single-column dense list. Each DeckCard is now a
-                   *  skinny single-line row, so stacking them vertically
-                   *  is the readable choice — multi-column would force
-                   *  text truncation at narrow widths and hurts scan-
-                   *  ability. */}
-                  <div className="grid gap-2">
+                  {/* Single-column dense list. flex-col instead of
+                   *  grid because grid items default to min-width:auto,
+                   *  which lets a long pack name blow past the viewport
+                   *  on iPhone and create a horizontal scroll. */}
+                  <div className="flex w-full min-w-0 flex-col gap-2">
                     {unfolderedDecks.map((deck, i) => (
                       <div
                         key={deck.id}
-                        className="reveal"
+                        className="reveal w-full min-w-0"
                         style={
                           {
                             "--delay": `${200 + i * 35}ms`,
