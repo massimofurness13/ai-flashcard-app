@@ -56,10 +56,28 @@ jobs:
             echo "::error::APP_URL or CRON_SECRET secret is not set"
             exit 1
           fi
-          # -fsS: fail on HTTP error, silent progress, show errors.
-          # --max-time 90: hard timeout; the route's own deadline is
-          # ~50s + cold-start headroom.
-          response=$(curl -fsS --max-time 90 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/cron/process-image-queue")
-          echo "Response: $response"
+          # We call the drain endpoint UP TO 5 times back-to-back per
+          # cron tick. Why: GH Actions throttles our */5 schedule to
+          # ~25-30 min real cadence under load, and each call drains
+          # at most 40 cards. Chaining gets us ~200 cards per cron
+          # tick worst-case, which keeps a typical 100-card pack moving
+          # even with sparse scheduling.
+          #
+          # We break early when the route returns "no_work" — no point
+          # spinning Render's CPU once the queue is empty. The route's
+          # own deadline is ~50s; we set curl --max-time 90 to cover
+          # Render's cold-start tax on top.
+          for attempt in 1 2 3 4 5; do
+            response=$(curl -fsS --max-time 90 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "$APP_URL/api/cron/process-image-queue") || {
+                echo "::warning::Attempt $attempt failed"
+                continue
+              }
+            echo "Attempt $attempt: $response"
+            # Bail out as soon as the queue reports empty.
+            echo "$response" | grep -q '"reason":"no_work"' && {
+              echo "Queue drained, stopping."
+              break
+            }
+          done
