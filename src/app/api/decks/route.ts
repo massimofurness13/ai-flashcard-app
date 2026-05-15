@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { createDeckSchema } from "@/lib/validations";
@@ -108,6 +109,13 @@ export async function POST(request: Request) {
       },
     });
   });
+
+  // Bust the home page's server cache so the new deck shows up on
+  // first navigation back. Without this, a user who auto-saved a
+  // pack and then back-navigated would see the OLD library and
+  // (per the duplicate-pack bug report) regenerate the same pack
+  // thinking it was lost.
+  revalidatePath("/");
 
   return NextResponse.json(deck, { status: 201 });
 }
