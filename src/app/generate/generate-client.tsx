@@ -119,6 +119,65 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   useEffect(() => {
     cardsRef.current = cards;
   }, [cards]);
+
+  // Guard against accidental navigation away during in-flight work.
+  // The user reported "I clicked back and lost everything" — this hooks
+  // both browser-level navigation (refresh, tab close: beforeunload) and
+  // SPA back/swipe-back on mobile (popstate). The popstate path uses
+  // a confirm() dialog because beforeunload does NOT fire reliably for
+  // mobile back-gestures or in-app SPA navigation.
+  //
+  // Pattern: push a dummy history entry while a generation is active so
+  // the FIRST back-press lands on that entry (no actual navigation).
+  // popstate handler shows the confirm; on accept, we call history.back()
+  // ourselves to actually navigate. On cancel, we re-push to stay put.
+  const navGuardActive = generating || generatingImages || saving || ankiImporting;
+  useEffect(() => {
+    if (!navGuardActive) return;
+
+    const warnMessage =
+      "Generation is still in progress. If you leave now, you'll lose what's not yet saved. Continue?";
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Modern browsers ignore custom strings (security: prevent
+      // spoofing OS dialogs) but the empty string still triggers the
+      // generic "Leave site?" prompt. That's the contract we want.
+      e.returnValue = "";
+      return "";
+    };
+
+    // Dummy entry: lets us intercept the next back-press without the
+    // browser actually navigating away. We clean it up on unmount via
+    // the guard flip below.
+    window.history.pushState({ navGuard: true }, "", window.location.href);
+
+    const handlePopState = () => {
+      const confirmed = window.confirm(warnMessage);
+      if (confirmed) {
+        // User said "yes, leave" — go back one more step to actually
+        // exit the page (the dummy entry we just popped is consumed).
+        window.history.back();
+      } else {
+        // User cancelled — re-arm the dummy entry so the next back-
+        // press is intercepted too.
+        window.history.pushState({ navGuard: true }, "", window.location.href);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+      // When generation finishes naturally, pop the dummy entry so the
+      // user's back-button history isn't polluted by it.
+      if (window.history.state?.navGuard) {
+        window.history.back();
+      }
+    };
+  }, [navGuardActive]);
   // Holds the in-flight image-generation promise so handleSave can
   // await whatever's currently being generated before navigating.
   // Without this, the last in-flight card's imageUrl would be set on
