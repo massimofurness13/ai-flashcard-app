@@ -139,11 +139,15 @@ export function HomePage({
 
       <div className="space-y-12 sm:space-y-14">
         {/* ── Masthead ────────────────────────────────────────────── */}
+        {/* min-w-0 on the title wrapper + shrink-0 on the CreateMenu
+         *  wrapper: keeps the "+ New" button fully inside the viewport
+         *  even when the username is long. Without shrink-0 the title
+         *  was crowding the button against the right edge on mobile. */}
         <header
-          className="reveal flex items-start justify-between gap-4 pb-2"
+          className="reveal flex items-start justify-between gap-3 pb-2"
           style={{ "--delay": "0ms" } as React.CSSProperties}
         >
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="label-caps">{today}</p>
             <h1 className="font-editorial mt-2 text-4xl font-medium leading-[1.05] text-foreground sm:text-5xl">
               {greeting},{" "}
@@ -162,7 +166,9 @@ export function HomePage({
               )}
             </p>
           </div>
-          <CreateMenu />
+          <div className="shrink-0">
+            <CreateMenu />
+          </div>
         </header>
 
         {/* ── Today's study — editorial hero with progress ring ───── */}

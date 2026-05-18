@@ -53,7 +53,7 @@ export function FlashcardImage({
       return (
         <div
           className={cn(
-            "relative w-full max-h-48 rounded-lg overflow-hidden",
+            "relative w-full max-h-72 sm:max-h-80 rounded-lg overflow-hidden",
             className
           )}
         >
@@ -62,7 +62,7 @@ export function FlashcardImage({
             src={imageUrl}
             alt="Card illustration (locked)"
             aria-hidden
-            className="w-full max-h-48 object-contain blur-2xl scale-110 opacity-70"
+            className="w-full max-h-72 sm:max-h-80 object-contain blur-2xl scale-110 opacity-70"
           />
           <div className="absolute inset-0 flex items-center justify-center bg-background/40 backdrop-blur-sm">
             <div className="rounded-lg bg-background/85 px-3 py-2 text-center shadow-lg max-w-[85%]">
@@ -87,7 +87,7 @@ export function FlashcardImage({
         <img
           src={imageUrl}
           alt="Card illustration"
-          className="w-full max-h-48 object-contain rounded-lg"
+          className="w-full max-h-72 sm:max-h-80 object-contain rounded-lg"
         />
         {imageTier && (
           <span

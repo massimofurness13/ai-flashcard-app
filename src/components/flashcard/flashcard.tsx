@@ -118,12 +118,16 @@ export function Flashcard({
   }, [autoPlayVoice, paused, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode]);
 
   return (
+    // Widened from max-w-md to max-w-2xl so the card consumes more of
+    // the viewport — user feedback: previous card was too small and
+    // left lots of dead space below on mobile. minHeight bumped from
+    // 320 to 520 so the image + text get visual breathing room.
     <div
       className={cn(
-        "flashcard-container relative w-full max-w-md mx-auto",
+        "flashcard-container relative w-full max-w-2xl mx-auto",
         className
       )}
-      style={{ minHeight: "320px" }}
+      style={{ minHeight: "520px" }}
     >
       <div
         className={cn(
@@ -132,10 +136,10 @@ export function Flashcard({
           isFlipped && "flipped"
         )}
         onClick={onFlip}
-        style={{ minHeight: "320px" }}
+        style={{ minHeight: "520px" }}
       >
         {/* Front face */}
-        <div className="flashcard-front rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
+        <div className="flashcard-front rounded-2xl border border-border bg-card shadow-lg p-5 sm:p-8 flex flex-col">
           {showImage && (
             <div className="mb-4 flex justify-center">
               <FlashcardImage
@@ -147,7 +151,7 @@ export function Flashcard({
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-lg font-medium text-center text-card-foreground">
+            <p className="text-xl sm:text-2xl font-medium text-center text-card-foreground">
               {front}
             </p>
           </div>
@@ -159,7 +163,7 @@ export function Flashcard({
         </div>
 
         {/* Back face */}
-        <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-6 flex flex-col">
+        <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-5 sm:p-8 flex flex-col">
           {showImage && (
             <div className="mb-4 flex justify-center">
               <FlashcardImage
@@ -171,7 +175,7 @@ export function Flashcard({
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-lg text-center text-card-foreground">{back}</p>
+            <p className="text-xl sm:text-2xl text-center text-card-foreground">{back}</p>
           </div>
         </div>
       </div>
