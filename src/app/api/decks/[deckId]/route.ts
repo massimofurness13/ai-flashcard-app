@@ -47,6 +47,21 @@ export async function PATCH(
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
+  // If the user is moving the deck into a folder, verify they own
+  // that folder. Without this, a user could move their deck under
+  // another user's folderId — the deck would still be theirs (we
+  // don't change userId) but it would surface inside the target
+  // user's folder listing, leaking deck name/emoji/card-count.
+  if (body.folderId) {
+    const folder = await prisma.folder.findUnique({
+      where: { id: body.folderId, userId: auth.userId },
+      select: { id: true },
+    });
+    if (!folder) {
+      return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+    }
+  }
+
   const deck = await prisma.deck.update({
     where: { id: deckId },
     data: {
