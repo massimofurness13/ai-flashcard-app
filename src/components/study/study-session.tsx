@@ -51,9 +51,10 @@ export interface StudyStats {
   ratings: Record<number, number>;
 }
 
-// Shorter deal-out animation keeps the session feeling fast. Longer
-// than this reads as sluggish; shorter than ~150ms reads as a glitch.
-const DEAL_OUT_MS = 200;
+// Shorter deal-out animation keeps the session feeling fast. Lowered
+// from 200ms to 100ms after user feedback that the gap between rating
+// a card and seeing the next one's audio was noticeable.
+const DEAL_OUT_MS = 100;
 
 // Round-trip session state through sessionStorage when the user clicks
 // "Edit card." Without this, navigating to the edit page and back via
@@ -130,7 +131,7 @@ export function StudySession({
     () =>
       resumeSnapshot?.stats ?? {
         cardsReviewed: 0,
-        ratings: { 1: 0, 3: 0, 5: 0 },
+        ratings: { 1: 0, 2: 0, 3: 0, 5: 0 },
       },
   );
 

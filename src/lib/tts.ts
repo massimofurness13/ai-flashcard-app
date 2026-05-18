@@ -123,17 +123,23 @@ export async function preloadAudio(
   }
 }
 
+// Default TTS speed. 1.0 is "broadcast standard" but Google's Neural2
+// voices have natural breath pauses that make 1.0 feel slow during
+// rapid-fire study. 1.2 splits the difference — clearer than 1.5,
+// noticeably brisker than 1.0. Users can still override in settings.
+const DEFAULT_TTS_SPEED = 1.2;
+
 function getSettings(): { ttsSpeed: number } {
   try {
     const saved = localStorage.getItem("flashmind-settings");
     if (saved) {
       const s = JSON.parse(saved);
-      return { ttsSpeed: s.ttsSpeed || 1 };
+      return { ttsSpeed: s.ttsSpeed || DEFAULT_TTS_SPEED };
     }
   } catch {
     /* ignore */
   }
-  return { ttsSpeed: 1 };
+  return { ttsSpeed: DEFAULT_TTS_SPEED };
 }
 
 function cancelAll() {

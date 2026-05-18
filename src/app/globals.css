@@ -139,7 +139,10 @@ body.font-xlarge { font-size: 20px; }
 }
 
 .flashcard-inner.flashcard-animated {
-  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  /* 150ms keeps the flip readable but snappy — user reported 600ms
+   * felt sluggish, 350ms still slow. Raise back to ~250ms if this
+   * ends up feeling abrupt. */
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .flashcard-inner.flipped {
