@@ -51,12 +51,17 @@ export function useKeyboardNav({
         case "Digit2":
         case "Numpad2":
           event.preventDefault();
-          onRate?.(3); // Good
+          onRate?.(2); // Hard (new)
           break;
         case "Digit3":
         case "Numpad3":
           event.preventDefault();
-          onRate?.(5); // Easy
+          onRate?.(3); // Good
+          break;
+        case "Digit4":
+        case "Numpad4":
+          event.preventDefault();
+          onRate?.(5); // Easy (SM-2 quality stays 5)
           break;
       }
     }

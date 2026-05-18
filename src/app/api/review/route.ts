@@ -45,11 +45,21 @@ export async function GET(request: NextRequest) {
     where.nextReviewAt = { lte: now };
   }
 
-  // Recency cutoff (optional) — skip cards reviewed too recently
-  if (recencyCutoffDays > 0) {
-    const cutoffDate = new Date(now.getTime() - recencyCutoffDays * 86400000);
-    where.reviews = { none: { reviewedAt: { gte: cutoffDate } } };
-  }
+  // Session-boundary: never re-serve a card the user touched in the
+  // past 6 hours, regardless of filter. Fixes the bug where a user
+  // who quit mid-session was shown the same cards again on return.
+  // SM-2 still drives the long-term schedule; this just adds a
+  // short-term "already saw it this afternoon" guard.
+  const sessionCutoff = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+
+  // The optional `recencyCutoffDays` URL param can extend this further
+  // (e.g. "don't show me anything from the past 3 days") — when set, it
+  // overrides the 6-hour default with the longer window.
+  const effectiveCutoff =
+    recencyCutoffDays > 0
+      ? new Date(now.getTime() - recencyCutoffDays * 86400000)
+      : sessionCutoff;
+  where.reviews = { none: { reviewedAt: { gte: effectiveCutoff } } };
 
   const orderBy: Prisma.CardOrderByWithRelationInput =
     filter === "due"

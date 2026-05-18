@@ -11,23 +11,42 @@ export interface SM2Result extends SM2State {
 /**
  * SM-2 spaced repetition algorithm.
  *
- * @param quality - 1 (Again), 3 (Good), or 5 (Easy)
+ * @param quality - 1 (Again), 2 (Hard), 3 (Good), or 5 (Easy)
  * @param current - The card's current SM-2 state.
  * @returns Updated SM-2 state with the next review date.
+ *
+ * Quality semantics:
+ *   1 = Again — failed recall, reset the card
+ *   2 = Hard  — passed but with difficulty, smaller interval bump + ease hit
+ *   3 = Good  — passed normally, standard interval bump
+ *   5 = Easy  — passed easily, normal interval + ease bonus
+ *
+ * Quality 2 (Hard) was added on top of the original 1/3/5 set. Existing
+ * ReviewLog rows with quality 1/3/5 are unchanged in meaning.
  */
 export function sm2(quality: number, current: SM2State): SM2Result {
   const q = Math.max(0, Math.min(5, Math.round(quality)));
 
   let { easeFactor, interval, repetitions } = current;
 
-  if (q < 3) {
-    // Failed recall: reset
+  if (q < 2) {
+    // Again: failed recall — reset the schedule
     repetitions = 0;
     interval = 1;
-  } else {
-    // Successful recall
+  } else if (q === 2) {
+    // Hard: passed but struggled. Don't reset progress (still building
+    // familiarity), but give a much smaller interval bump than Good
+    // would — roughly 1.2× instead of ease-factor multiplier. Pair with
+    // an ease penalty (handled in the ease formula below).
     repetitions += 1;
-
+    if (repetitions === 1) {
+      interval = 1;
+    } else {
+      interval = Math.max(Math.round(interval * 1.2), interval + 1);
+    }
+  } else {
+    // Good (q=3) or Easy (q=5): successful recall, normal SM-2 bumps
+    repetitions += 1;
     if (repetitions === 1) {
       interval = 1;
     } else if (repetitions === 2) {
@@ -37,7 +56,9 @@ export function sm2(quality: number, current: SM2State): SM2Result {
     }
   }
 
-  // Update ease factor
+  // Update ease factor — q=2 takes a moderate hit, q=3 stays roughly
+  // flat, q=5 boosts. The formula is SM-2's original; we just feed it
+  // the new quality values.
   easeFactor = easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
   if (easeFactor < 1.3) {
     easeFactor = 1.3;
