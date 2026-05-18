@@ -38,13 +38,27 @@ export async function POST(request: Request) {
             ? session.payment_intent
             : session.payment_intent?.id;
 
-        if (userId && creditsAmount > 0 && paymentIntentId) {
-          // Idempotent via unique stripePaymentIntentId
-          const alreadyLogged = await prisma.creditPurchase.findUnique({
-            where: { stripePaymentIntentId: paymentIntentId },
-          });
-          if (!alreadyLogged) {
-            await prisma.creditPurchase.create({
+        // Reject (with 500) if any required field is missing — Stripe
+        // will retry, and we get to fix our metadata bug before money
+        // is silently attached to an empty userId.
+        if (!userId || creditsAmount <= 0 || !paymentIntentId) {
+          console.error(
+            `[stripe/webhook] credit_purchase missing fields ` +
+              `(userId=${!!userId}, credits=${creditsAmount}, pi=${!!paymentIntentId})`,
+          );
+          return NextResponse.json(
+            { error: "credit_purchase missing required metadata" },
+            { status: 500 },
+          );
+        }
+
+        // Atomic idempotency: do create + increment in one transaction,
+        // and let the unique constraint on stripePaymentIntentId guard
+        // against double-delivery. If the create fails with P2002, the
+        // increment never runs — no double-credit possible.
+        try {
+          await prisma.$transaction(async (tx) => {
+            await tx.creditPurchase.create({
               data: {
                 userId,
                 stripePaymentIntentId: paymentIntentId,
@@ -53,10 +67,22 @@ export async function POST(request: Request) {
                 amountCents: session.amount_total || 0,
               },
             });
-            await prisma.user.update({
+            await tx.user.update({
               where: { id: userId },
               data: { imageCredits: { increment: creditsAmount } },
             });
+          });
+        } catch (err: unknown) {
+          // P2002 = Prisma unique-constraint violation — we already
+          // processed this PI on a prior delivery. Treat as success
+          // and return 200 so Stripe stops retrying.
+          const code = (err as { code?: string })?.code;
+          if (code !== "P2002") {
+            console.error(`[stripe/webhook] credit_purchase tx failed:`, err);
+            return NextResponse.json(
+              { error: "credit_purchase transaction failed" },
+              { status: 500 },
+            );
           }
         }
         break;
@@ -68,7 +94,28 @@ export async function POST(request: Request) {
         );
         const periodEnd = subscription.items.data[0]?.current_period_end;
         const periodEndDate = periodEnd ? new Date(periodEnd * 1000) : null;
-        const userId = session.metadata?.userId || "";
+
+        // userId lives in BOTH the session metadata (set by the
+        // checkout route) and the subscription metadata (copied via
+        // subscription_data.metadata). Try both. If neither has it,
+        // return 500 so Stripe retries — we'd rather have Stripe yell
+        // at us than silently create an orphan Subscription with
+        // userId="" that no one can ever access.
+        const userId =
+          session.metadata?.userId ||
+          subscription.metadata?.userId ||
+          "";
+
+        if (!userId) {
+          console.error(
+            `[stripe/webhook] subscription checkout missing userId metadata ` +
+              `(session=${session.id}, sub=${subscription.id})`,
+          );
+          return NextResponse.json(
+            { error: "subscription checkout missing userId metadata" },
+            { status: 500 },
+          );
+        }
 
         // Plan is derived from the Stripe price ID, not from
         // metadata — the price ID is the only thing the user can't

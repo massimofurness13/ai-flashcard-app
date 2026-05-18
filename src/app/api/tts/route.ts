@@ -3,11 +3,21 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { getVoiceEntry } from "@/lib/voice-catalog";
 import { getOrCreateAudioUrl } from "@/lib/tts-server";
+import { rateLimit } from "@/lib/validations";
 
 const RequestSchema = z.object({
   text: z.string().min(1).max(500),
   languageCode: z.string().min(2).max(16),
 });
+
+// 120 TTS requests / min / user. A study session typically rings the
+// TTS endpoint ~2x per card (front + back), and 1 card every few
+// seconds is the upper bound of human flipping. 120/min comfortably
+// covers that with headroom for preloader prefetches; anything
+// significantly above is a script. Cap protects us from worst-case
+// Google TTS spend ($16/M chars uncached) — without it, a single
+// authenticated user can burn unbounded $$$ on cache-miss prompts.
+const TTS_MAX_PER_MINUTE = 120;
 
 /**
  * POST /api/tts
@@ -22,6 +32,15 @@ const RequestSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
+
+  // Rate limit BEFORE the JSON parse — even rejected requests are
+  // cheap, so a flood with malformed bodies shouldn't slow us down.
+  if (!rateLimit(`tts:${auth.userId}`, TTS_MAX_PER_MINUTE, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many TTS requests. Please slow down." },
+      { status: 429 },
+    );
+  }
 
   let body: unknown;
   try {
