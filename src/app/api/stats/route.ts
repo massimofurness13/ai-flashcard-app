@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { masteryLevel, letterGrade, type LetterGrade } from "@/lib/sm2";
+import { toLocalDateKey, startOfTodayInTz } from "@/lib/timezone";
 
 function generateDemoStats() {
   const heatmapData: { date: string; count: number }[] = [];
   for (let i = 364; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
+    const dateStr = toLocalDateKey(d, "UTC");
     const dayNum = Math.floor(d.getTime() / 86400000);
     const hash = ((dayNum * 2654435761) >>> 0) % 100;
 
@@ -40,7 +41,7 @@ function generateDemoStats() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    dailyCounts.push({ date: d.toISOString().split("T")[0], count: counts[6 - i] });
+    dailyCounts.push({ date: toLocalDateKey(d, "UTC"), count: counts[6 - i] });
   }
 
   return {
@@ -87,18 +88,27 @@ export async function GET(request: NextRequest) {
   const period = searchParams.get("period") || "7"; // days
   const days = parseInt(period, 10);
 
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  since.setHours(0, 0, 0, 0);
+  // Fetch user tz first so date bucketing aligns with the user's
+  // calendar rather than server UTC. ?tz= override is supported for
+  // testing; falls back to user's stored reminderTimezone, then UTC.
+  const userPrefs = await prisma.user.findUnique({
+    where: { id: auth.userId },
+    select: { reminderTimezone: true },
+  });
+  const tz =
+    searchParams.get("tz") ||
+    userPrefs?.reminderTimezone ||
+    "UTC";
 
   const now = new Date();
+  const startOfToday = startOfTodayInTz(tz);
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
-  const yearAgo = new Date();
-  yearAgo.setDate(yearAgo.getDate() - 365);
-  yearAgo.setHours(0, 0, 0, 0);
+  // For the SQL filter we compute a UTC timestamp = start-of-day in tz
+  // N days ago. Day arithmetic in JS Date space (subtract 86400000 ms)
+  // is fine here — minor DST jitter doesn't affect "have we reviewed
+  // in the past N days" semantics.
+  const since = new Date(startOfToday.getTime() - days * 86_400_000);
+  const yearAgo = new Date(startOfToday.getTime() - 365 * 86_400_000);
 
   const [
     totalCards,
@@ -169,12 +179,12 @@ export async function GET(request: NextRequest) {
 
   // Calculate streak (consecutive days with at least one review)
   const reviewDays = new Set(
-    dailyReviews.map((r) => new Date(r.reviewedAt).toISOString().split("T")[0])
+    dailyReviews.map((r) => toLocalDateKey(new Date(r.reviewedAt), tz))
   );
   let streak = 0;
   const checkDate = new Date();
   while (true) {
-    const dayStr = checkDate.toISOString().split("T")[0];
+    const dayStr = toLocalDateKey(checkDate, tz);
     if (reviewDays.has(dayStr)) {
       streak++;
       checkDate.setDate(checkDate.getDate() - 1);
@@ -182,7 +192,7 @@ export async function GET(request: NextRequest) {
       // Allow today to not have reviews yet
       if (streak === 0) {
         checkDate.setDate(checkDate.getDate() - 1);
-        const yesterdayStr = checkDate.toISOString().split("T")[0];
+        const yesterdayStr = toLocalDateKey(checkDate, tz);
         if (reviewDays.has(yesterdayStr)) {
           streak++;
           checkDate.setDate(checkDate.getDate() - 1);
@@ -198,10 +208,10 @@ export async function GET(request: NextRequest) {
   for (let i = 0; i < days; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    dailyCounts[d.toISOString().split("T")[0]] = 0;
+    dailyCounts[toLocalDateKey(d, tz)] = 0;
   }
   for (const r of dailyReviews) {
-    const day = new Date(r.reviewedAt).toISOString().split("T")[0];
+    const day = toLocalDateKey(new Date(r.reviewedAt), tz);
     if (dailyCounts[day] !== undefined) {
       dailyCounts[day]++;
     }
@@ -236,10 +246,10 @@ export async function GET(request: NextRequest) {
   for (let i = 0; i < 365; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    heatmapCounts[d.toISOString().split("T")[0]] = 0;
+    heatmapCounts[toLocalDateKey(d, tz)] = 0;
   }
   for (const r of yearlyReviews) {
-    const day = new Date(r.reviewedAt).toISOString().split("T")[0];
+    const day = toLocalDateKey(new Date(r.reviewedAt), tz);
     if (heatmapCounts[day] !== undefined) {
       heatmapCounts[day]++;
     }
@@ -250,7 +260,7 @@ export async function GET(request: NextRequest) {
 
   // Longest streak over the year
   const yearDaysWithReviews = new Set(
-    yearlyReviews.map((r) => new Date(r.reviewedAt).toISOString().split("T")[0])
+    yearlyReviews.map((r) => toLocalDateKey(new Date(r.reviewedAt), tz))
   );
   let longestStreak = 0;
   let running = 0;
@@ -267,7 +277,7 @@ export async function GET(request: NextRequest) {
   const lifetimeByDay = new Map<string, number>();
   let lifetimeSuccessful = 0;
   for (const r of lifetimeReviews) {
-    const day = new Date(r.reviewedAt).toISOString().split("T")[0];
+    const day = toLocalDateKey(new Date(r.reviewedAt), tz);
     lifetimeByDay.set(day, (lifetimeByDay.get(day) || 0) + 1);
     // Quality 3+ counts as "knew it" (Good or Easy in SM-2 terms)
     if (r.quality >= 3) lifetimeSuccessful++;
@@ -290,7 +300,7 @@ export async function GET(request: NextRequest) {
   for (let i = 0; i < 30; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const day = d.toISOString().split("T")[0];
+    const day = toLocalDateKey(d, tz);
     if ((lifetimeByDay.get(day) || 0) >= dailyGoal) goalDaysLast30++;
   }
 
@@ -322,7 +332,7 @@ export async function GET(request: NextRequest) {
   monthStart.setHours(0, 0, 0, 0);
   const monthCursor = new Date(monthStart);
   while (monthCursor.getMonth() === monthStart.getMonth()) {
-    const day = monthCursor.toISOString().split("T")[0];
+    const day = toLocalDateKey(monthCursor, tz);
     calendarMonth.push({ date: day, count: lifetimeByDay.get(day) || 0 });
     monthCursor.setDate(monthCursor.getDate() + 1);
   }

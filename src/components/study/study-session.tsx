@@ -300,9 +300,27 @@ export function StudySession({
   });
 
   if (!currentCard) {
+    // Friendly empty state instead of the previous "No cards to
+    // review" wall. The most common cause of an empty queue is
+    // "everything's been reviewed in the past 6 hours" (session-
+    // boundary exclusion) or "you finished today's due cards" —
+    // give the user a clear next step.
     return (
-      <div className="text-center py-16">
-        <p className="text-muted-foreground">No cards to review</p>
+      <div className="text-center py-16 space-y-3">
+        <div className="text-4xl" aria-hidden>
+          🎉
+        </div>
+        <h2 className="font-editorial text-2xl font-medium">
+          Nothing to review right now
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+          You&apos;ve cleared your queue. New cards become due on a
+          spaced-repetition schedule — check back later, or pick
+          another pack from your library.
+        </p>
+        <Link href="/">
+          <Button>Back to home</Button>
+        </Link>
       </div>
     );
   }

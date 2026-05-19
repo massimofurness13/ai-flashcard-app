@@ -3,6 +3,7 @@ import { getOptionalUser, ensureUser } from "@/lib/auth";
 import { HomePage } from "./home-client";
 import { LandingPage } from "./landing";
 import { masteryLevel, letterGrade } from "@/lib/sm2";
+import { toLocalDateKey, startOfTodayInTz } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -113,19 +114,22 @@ export default async function Home({
       email: true,
       dailyGoal: true,
       goalHitCelebrationShown: true,
+      reminderTimezone: true,
     },
   });
   const displayName = userData?.name || userData?.email?.split("@")[0] || "there";
   const dailyGoal = userData?.dailyGoal ?? 25;
   const goalHitCelebrationShown = userData?.goalHitCelebrationShown ?? false;
 
-  // Engagement: today's review count + streak (consecutive days)
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  // Engagement: today's review count + streak. Both depend on the
+  // user's local timezone — without it, a user east of UTC reviewing
+  // at 9am local could see the review attributed to "yesterday" and
+  // miss the streak day.
+  const tz = userData?.reminderTimezone || "UTC";
+  const startOfToday = startOfTodayInTz(tz);
 
-  const yearAgo = new Date();
-  yearAgo.setDate(yearAgo.getDate() - 60); // 60 days is plenty to compute a streak
-  yearAgo.setHours(0, 0, 0, 0);
+  // 60 days back from today's local start is plenty for a streak calc.
+  const yearAgo = new Date(startOfToday.getTime() - 60 * 86_400_000);
 
   const recentReviews = await prisma.reviewLog.findMany({
     where: {
@@ -140,19 +144,19 @@ export default async function Home({
   ).length;
 
   const reviewDays = new Set(
-    recentReviews.map((r) => r.reviewedAt.toISOString().split("T")[0])
+    recentReviews.map((r) => toLocalDateKey(r.reviewedAt, tz))
   );
   let streak = 0;
   const checkDate = new Date();
   while (true) {
-    const dayStr = checkDate.toISOString().split("T")[0];
+    const dayStr = toLocalDateKey(checkDate, tz);
     if (reviewDays.has(dayStr)) {
       streak++;
       checkDate.setDate(checkDate.getDate() - 1);
     } else if (streak === 0) {
       // Allow today to have zero so yesterday-and-back still counts
       checkDate.setDate(checkDate.getDate() - 1);
-      const yesterdayStr = checkDate.toISOString().split("T")[0];
+      const yesterdayStr = toLocalDateKey(checkDate, tz);
       if (reviewDays.has(yesterdayStr)) {
         streak++;
         checkDate.setDate(checkDate.getDate() - 1);

@@ -136,53 +136,103 @@ export type ConsumeResult =
 
 /**
  * Atomically consume N credits for the requested tier.
- * Draws first from monthly allowance, then credits, then lifetime free.
- * Must be able to fit the whole tier cost in ONE source — no cross-source splitting.
+ * Draws first from monthly allowance, then purchased credits, then
+ * lifetime free trial. Must fit the whole tier cost in ONE source —
+ * no cross-source splitting.
+ *
+ * Race-safe: each spend path is a single conditional `updateMany`
+ * with the precondition baked into the WHERE clause. Two concurrent
+ * requests with the same userId can NEVER both succeed on the same
+ * source — Postgres serialises the writes and the loser sees
+ * `count === 0`, falls through to the next source. Previous version
+ * did read-then-write which let bursts overspend during cache windows.
  */
 export async function consumeImageCredit(
   userId: string,
   tier: ImageTier = "quick"
 ): Promise<ConsumeResult> {
   const cost = TIER_COSTS[tier];
-  const state = await getQuotaState(userId);
-
   const now = new Date();
-  const needsReset = state.resetAt !== null && state.resetAt <= now;
   const nextResetAt = new Date();
   nextResetAt.setMonth(nextResetAt.getMonth() + 1);
 
-  // Try sources in order, each must fit the whole cost to be picked
-  const monthlyAvailable = state.isPro
-    ? (needsReset ? state.monthlyLimit : state.monthlyRemaining)
-    : 0;
-  if (monthlyAvailable >= cost) {
-    await prisma.user.update({
-      where: { id: userId },
+  const isPro = await isProUser(userId);
+
+  if (isPro) {
+    const sub = await prisma.subscription.findUnique({
+      where: { userId },
+      select: { plan: true },
+    });
+    const allowance =
+      sub?.plan === "yearly" ? PRO_YEARLY_CREDITS : PRO_MONTHLY_CREDITS;
+
+    // First-time monthly use (no reset date set yet) — initialise.
+    const initResult = await prisma.user.updateMany({
+      where: { id: userId, monthlyImagesResetAt: null },
       data: {
-        monthlyImagesUsed: needsReset ? cost : { increment: cost },
-        monthlyImagesResetAt:
-          state.resetAt === null || needsReset ? nextResetAt : undefined,
+        monthlyImagesUsed: cost,
+        monthlyImagesResetAt: nextResetAt,
       },
     });
-    return { ok: true, source: "monthly", amountUsed: cost };
+    if (initResult.count === 1) {
+      return { ok: true, source: "monthly", amountUsed: cost };
+    }
+
+    // Cycle expired — reset usage and charge in one atomic update.
+    const resetResult = await prisma.user.updateMany({
+      where: { id: userId, monthlyImagesResetAt: { lte: now } },
+      data: {
+        monthlyImagesUsed: cost,
+        monthlyImagesResetAt: nextResetAt,
+      },
+    });
+    if (resetResult.count === 1) {
+      return { ok: true, source: "monthly", amountUsed: cost };
+    }
+
+    // Normal in-cycle increment. The `monthlyImagesUsed: { lte: allowance - cost }`
+    // precondition is what makes this race-safe — if N concurrent
+    // requests all see "100 used, 500 limit", only some will pass
+    // this WHERE clause depending on the order Postgres applies the
+    // writes; the rest get count=0 and try the next source.
+    const incResult = await prisma.user.updateMany({
+      where: {
+        id: userId,
+        monthlyImagesResetAt: { gt: now },
+        monthlyImagesUsed: { lte: allowance - cost },
+      },
+      data: { monthlyImagesUsed: { increment: cost } },
+    });
+    if (incResult.count === 1) {
+      return { ok: true, source: "monthly", amountUsed: cost };
+    }
   }
 
-  if (state.credits >= cost) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { imageCredits: { decrement: cost } },
-    });
+  // Purchased credits — never expire, available to everyone.
+  const creditsResult = await prisma.user.updateMany({
+    where: { id: userId, imageCredits: { gte: cost } },
+    data: { imageCredits: { decrement: cost } },
+  });
+  if (creditsResult.count === 1) {
     return { ok: true, source: "credits", amountUsed: cost };
   }
 
-  if (!state.isPro && state.lifetimeFreeRemaining >= cost) {
-    await prisma.user.update({
-      where: { id: userId },
+  // Lifetime free trial — non-Pro only.
+  if (!isPro) {
+    const freeResult = await prisma.user.updateMany({
+      where: {
+        id: userId,
+        lifetimeFreeImagesUsed: { lte: FREE_LIFETIME_CREDITS - cost },
+      },
       data: { lifetimeFreeImagesUsed: { increment: cost } },
     });
-    return { ok: true, source: "free", amountUsed: cost };
+    if (freeResult.count === 1) {
+      return { ok: true, source: "free", amountUsed: cost };
+    }
   }
 
+  // Everyone failed — read state for the error response.
+  const state = await getQuotaState(userId);
   return { ok: false, reason: "out_of_quota", state };
 }
 

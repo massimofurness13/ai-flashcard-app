@@ -59,6 +59,12 @@ export function EditCardsClient({
   const [premiumCount, setPremiumCount] = useState(0);
   const [savingMap, setSavingMap] = useState<Record<string, "saving" | "saved" | "error" | undefined>>({});
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set());
+  // Per-card error message for image / delete operations. Cleared
+  // when a new operation starts on the same card, or on success.
+  // Without this, network failures showed as "button stops spinning
+  // and nothing happens" — user has no way to know whether credits
+  // were spent or whether to retry.
+  const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
   const [bulkGenLoading, setBulkGenLoading] = useState(false);
   const [bulkGenError, setBulkGenError] = useState("");
   const imageUploadRef = useRef<HTMLInputElement>(null);
@@ -139,14 +145,31 @@ export function EditCardsClient({
 
   async function removeCard(id: string) {
     if (!confirm("Remove this card permanently?")) return;
+    setImageErrors((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     try {
       const res = await fetch(`/api/cards/${id}`, { method: "DELETE" });
       if (res.ok) {
         setCards((prev) => prev.filter((c) => c.id !== id));
         delete lastSavedRef.current[id];
+      } else {
+        let msg = "Could not delete card.";
+        try {
+          const data = await res.json();
+          if (data?.error) msg = data.error;
+        } catch {
+          // body wasn't JSON
+        }
+        setImageErrors((prev) => ({ ...prev, [id]: msg }));
       }
     } catch {
-      // Silent — nothing changed locally
+      setImageErrors((prev) => ({
+        ...prev,
+        [id]: "Network error — card not deleted.",
+      }));
     }
   }
 
@@ -169,13 +192,19 @@ export function EditCardsClient({
     }
 
     setPendingImages((prev) => new Set(prev).add(id));
+    // Clear any prior error on this card.
+    setImageErrors((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     try {
       const res = await fetch("/api/images/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ front: card.front, back: card.back, tier }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
       if (res.status === 402) {
         // Server-side quota check failed — refetch from the source
@@ -188,7 +217,7 @@ export function EditCardsClient({
         return;
       }
 
-      if (res.ok && data.imageUrl) {
+      if (res.ok && data?.imageUrl) {
         // Persist the new imageUrl on the card row before reflecting
         // it locally — otherwise a refresh would lose it.
         await fetch(`/api/cards/${id}`, {
@@ -203,9 +232,20 @@ export function EditCardsClient({
         // pill, the slider header, and the per-card buttons all
         // reflect the spend simultaneously.
         emitCreditsChanged();
+      } else {
+        // Generation failed for a non-quota reason (fal hiccup,
+        // network blip, prompt validation, etc.). Surface it so the
+        // user knows whether to retry.
+        const msg =
+          (data && typeof data.error === "string" && data.error) ||
+          "Image generation failed — please try again.";
+        setImageErrors((prev) => ({ ...prev, [id]: msg }));
       }
     } catch {
-      // Silent
+      setImageErrors((prev) => ({
+        ...prev,
+        [id]: "Network error — image not generated.",
+      }));
     }
     setPendingImages((prev) => {
       const next = new Set(prev);
@@ -228,13 +268,18 @@ export function EditCardsClient({
     const id = uploadTargetId;
 
     setPendingImages((prev) => new Set(prev).add(id));
+    setImageErrors((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     try {
       const res = await fetch("/api/images/upload", {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
-      if (res.ok && data.url) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.url) {
         await fetch(`/api/cards/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -243,9 +288,17 @@ export function EditCardsClient({
         setCards((prev) =>
           prev.map((c) => (c.id === id ? { ...c, imageUrl: data.url } : c))
         );
+      } else {
+        const msg =
+          (data && typeof data.error === "string" && data.error) ||
+          "Image upload failed — please try again.";
+        setImageErrors((prev) => ({ ...prev, [id]: msg }));
       }
     } catch {
-      // Silent
+      setImageErrors((prev) => ({
+        ...prev,
+        [id]: "Network error — image not uploaded.",
+      }));
     }
     setPendingImages((prev) => {
       const next = new Set(prev);
@@ -540,6 +593,12 @@ export function EditCardsClient({
                     </div>
                   )}
                 </div>
+
+                {imageErrors[card.id] && (
+                  <p className="mt-2 text-xs text-destructive">
+                    {imageErrors[card.id]}
+                  </p>
+                )}
               </CardContent>
             </Card>
           );
