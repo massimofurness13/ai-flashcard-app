@@ -42,16 +42,59 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ cards });
   } catch (error) {
-    const message =
+    // Log the raw error for our debugging, but DON'T pipe Anthropic's
+    // verbose stack-y strings (e.g. "Error 429: rate_limit_error...")
+    // directly into the user-facing toast. Map to short, friendly
+    // messages and stash the technical detail server-side.
+    console.error("[/api/generate]", error);
+
+    const raw =
       error instanceof Error ? error.message : "Failed to generate flashcards";
 
-    if (message.includes("ANTHROPIC_API_KEY")) {
+    if (raw.includes("ANTHROPIC_API_KEY")) {
       return NextResponse.json(
-        { error: "API key not configured. Set ANTHROPIC_API_KEY in .env.local" },
-        { status: 500 }
+        { error: "AI service not configured. Please contact support." },
+        { status: 500 },
       );
     }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Anthropic SDK throws structured errors; we sniff by status if
+    // available and fall back to message-string matching for
+    // robustness across SDK versions.
+    const status =
+      (error as { status?: number; statusCode?: number })?.status ??
+      (error as { statusCode?: number })?.statusCode;
+    if (status === 429 || /rate_?limit|429/i.test(raw)) {
+      return NextResponse.json(
+        {
+          error:
+            "AI is busy right now. Please wait a minute and try again.",
+        },
+        { status: 503 },
+      );
+    }
+    if (status === 401 || /invalid.*api.*key|authentication/i.test(raw)) {
+      return NextResponse.json(
+        { error: "AI service is misconfigured. Please contact support." },
+        { status: 500 },
+      );
+    }
+    if (status === 529 || /overloaded|capacity/i.test(raw)) {
+      return NextResponse.json(
+        { error: "AI is overloaded. Please try again shortly." },
+        { status: 503 },
+      );
+    }
+    if (/insufficient.*credit|payment.*required|billing/i.test(raw)) {
+      return NextResponse.json(
+        { error: "AI service is out of credits. Please contact support." },
+        { status: 503 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Couldn't generate cards right now. Please try again." },
+      { status: 500 },
+    );
   }
 }

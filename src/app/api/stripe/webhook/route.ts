@@ -167,16 +167,18 @@ export async function POST(request: Request) {
       const itemPeriodEnd = subscription.items.data[0]?.current_period_end;
       const periodEndDate = itemPeriodEnd ? new Date(itemPeriodEnd * 1000) : null;
 
-      const existing = await prisma.subscription.findFirst({
-        where: { stripeSubscriptionId: subscription.id },
-        select: { userId: true, currentPeriodEnd: true },
-      });
-
       // Plan can change mid-cycle (monthly → yearly upgrade with
       // proration). Re-derive from the current price every time.
       const priceId = subscription.items.data[0]?.price.id;
       const plan = planFromPriceId(priceId);
 
+      // Just sync subscription state. Credit-reset on renewal is
+      // handled by invoice.payment_succeeded (with
+      // billing_reason="subscription_cycle") because it's the only
+      // event that distinguishes "actual renewal" from "plan change
+      // that happens to extend the period." The old logic here
+      // (periodEndDate > existing.currentPeriodEnd) would falsely
+      // reset credits when a user did downgrade-then-upgrade.
       await prisma.subscription.updateMany({
         where: { stripeSubscriptionId: subscription.id },
         data: {
@@ -185,23 +187,6 @@ export async function POST(request: Request) {
           plan,
         },
       });
-
-      // On successful renewal (new periodEnd is later than the previous one),
-      // reset the monthly image counter and sync to the new cycle end.
-      if (
-        existing &&
-        periodEndDate &&
-        subscription.status === "active" &&
-        (!existing.currentPeriodEnd || periodEndDate > existing.currentPeriodEnd)
-      ) {
-        await prisma.user.update({
-          where: { id: existing.userId },
-          data: {
-            monthlyImagesUsed: 0,
-            monthlyImagesResetAt: periodEndDate,
-          },
-        });
-      }
       break;
     }
 
@@ -275,6 +260,60 @@ export async function POST(request: Request) {
           });
         }
       });
+      break;
+    }
+
+    case "invoice.payment_succeeded": {
+      // Authoritative source for "the subscription just renewed."
+      // Stripe fires this on every successful renewal payment, and
+      // includes billing_reason="subscription_cycle" specifically
+      // for the recurring renewal (vs subscription_create which is
+      // the first checkout, handled separately above).
+      //
+      // We rely on this — not the customer.subscription.updated
+      // event's period_end change — because subscription.updated
+      // can fire with stale period data in edge cases, and worse,
+      // can fire on plan changes which would falsely trigger a
+      // credit reset.
+      const invoice = event.data.object as Stripe.Invoice;
+      const billingReason = invoice.billing_reason;
+      if (billingReason !== "subscription_cycle") break;
+
+      const subId = invoice.parent?.subscription_details?.subscription;
+      if (!subId) break;
+      const subscriptionId =
+        typeof subId === "string" ? subId : subId.id;
+
+      const existing = await prisma.subscription.findFirst({
+        where: { stripeSubscriptionId: subscriptionId },
+        select: { userId: true },
+      });
+      if (!existing?.userId) break;
+
+      // Pull fresh subscription state from Stripe to get the new
+      // current_period_end — invoice.lines.data[0].period.end is
+      // also available but the subscription is the source of truth.
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const periodEnd = subscription.items.data[0]?.current_period_end;
+      const periodEndDate = periodEnd ? new Date(periodEnd * 1000) : null;
+      if (!periodEndDate) break;
+
+      // Reset the monthly counter and sync the reset date to the
+      // new cycle end. Also re-stamp Subscription.currentPeriodEnd
+      // so isProUser / quota calculations agree with Stripe.
+      await Promise.all([
+        prisma.user.update({
+          where: { id: existing.userId },
+          data: {
+            monthlyImagesUsed: 0,
+            monthlyImagesResetAt: periodEndDate,
+          },
+        }),
+        prisma.subscription.updateMany({
+          where: { stripeSubscriptionId: subscriptionId },
+          data: { currentPeriodEnd: periodEndDate, status: "active" },
+        }),
+      ]);
       break;
     }
 

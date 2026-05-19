@@ -141,9 +141,27 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
 
   async function handleDelete() {
     if (!confirm("Delete this card?")) return;
-    await fetch(`/api/cards/${initialData?.id}`, { method: "DELETE" });
-    router.refresh();
-    router.push(`/decks/${deckId}`);
+    setSaveError("");
+    try {
+      const res = await fetch(`/api/cards/${initialData?.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        let msg = "Delete failed. Please try again.";
+        try {
+          const data = await res.json();
+          if (data?.error) msg = data.error;
+        } catch {
+          // body wasn't JSON — keep the generic message
+        }
+        setSaveError(msg);
+        return;
+      }
+      router.refresh();
+      router.push(`/decks/${deckId}`);
+    } catch {
+      setSaveError("Network error. Please try again.");
+    }
   }
 
   return (
