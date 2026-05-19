@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { parseApkg } from "./parse-apkg";
-import { mapToFlashMind, type MappedCard } from "./map-to-flashmind";
+import { mapToHuella, type MappedCard } from "./map-to-huella";
 
 const BUCKET = "card-images";
 
@@ -88,7 +88,7 @@ function findCardImage(
 /**
  * Full Anki .apkg import pipeline:
  *  1. Parse .apkg ZIP (SQLite + media)
- *  2. Map Anki fields to FlashMind format
+ *  2. Map Anki fields to Huella format
  *  3. Upload media to Supabase Storage
  *  4. Create decks + cards in database with SM-2 state
  */
@@ -101,8 +101,8 @@ export async function importAnkiPackage(
   // Step 1: Parse the .apkg file
   const parsed = await parseApkg(fileBuffer);
 
-  // Step 2: Map to FlashMind format
-  const mappedCards = mapToFlashMind(parsed);
+  // Step 2: Map to Huella format
+  const mappedCards = mapToHuella(parsed);
 
   if (mappedCards.length === 0) {
     return {

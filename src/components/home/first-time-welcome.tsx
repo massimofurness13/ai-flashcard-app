@@ -216,7 +216,7 @@ function IntroStep({ userName, onContinue }: IntroStepProps) {
             }}
           />
           <div className="relative max-w-2xl">
-            <p className="label-caps">Welcome to FlashMind</p>
+            <p className="label-caps">Welcome to Huella</p>
             <h1 className="font-editorial mt-3 text-4xl font-medium leading-tight text-foreground sm:text-5xl">
               Lovely to meet you,{" "}
               <span className="italic text-[color:var(--primary)]">{userName}</span>.

@@ -230,8 +230,8 @@ export default function PricingPage() {
       <p className="text-center text-xs text-muted-foreground max-w-xl mx-auto leading-relaxed">
         All sales are final once any credits are used. Within 7 days of
         purchase, if no credits have been used, contact{" "}
-        <a className="underline" href="mailto:support@flashmind.app">
-          support@flashmind.app
+        <a className="underline" href="mailto:support@huella.app">
+          support@huella.app
         </a>{" "}
         for a refund. Cancel any time — your existing top-up credits are yours
         to keep.

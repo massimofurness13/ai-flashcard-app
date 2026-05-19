@@ -115,9 +115,9 @@ export async function POST(request: NextRequest) {
       body:
         remaining > 0
           ? `${remaining} to go to hit your daily goal.`
-          : "Open FlashMind to keep your streak alive.",
+          : "Open Huella to keep your streak alive.",
       url: "/study",
-      tag: `flashmind-${getLocalDateKey(user.reminderTimezone) || "reminder"}`,
+      tag: `huella-${getLocalDateKey(user.reminderTimezone) || "reminder"}`,
     };
 
     for (const sub of user.pushSubscriptions) {

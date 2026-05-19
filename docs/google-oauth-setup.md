@@ -7,13 +7,13 @@ The "Continue with Google" buttons are now live in the code. To make them actual
 1. Go to [console.cloud.google.com](https://console.cloud.google.com)
 2. Sign in with the Google account that will own the OAuth app (use a long-term account, not a throwaway)
 3. **Create a new project** (top-left dropdown → "New Project")
-   - Name it `FlashMind` (or whatever)
+   - Name it `Huella` (or whatever)
 4. In the left sidebar: **APIs & Services → OAuth consent screen**
    - User Type: **External** (unless you have a Google Workspace org)
-   - App name: `FlashMind`
+   - App name: `Huella`
    - User support email: your email
-   - App logo: optional but nice — upload your FlashMind icon (512×512)
-   - Application home page: `https://flashmind-35q4.onrender.com`
+   - App logo: optional but nice — upload your Huella icon (512×512)
+   - Application home page: `https://huella-35q4.onrender.com`
    - Authorized domains: add `onrender.com` and `supabase.co`
    - Developer contact email: your email
    - Save and continue through "Scopes" (no changes needed) and "Test users" (add your own email so you can test before publishing)
@@ -22,9 +22,9 @@ The "Continue with Google" buttons are now live in the code. To make them actual
 5. Sidebar: **APIs & Services → Credentials**
    - Click **"Create credentials" → "OAuth client ID"**
    - Application type: **Web application**
-   - Name: `FlashMind web`
+   - Name: `Huella web`
    - **Authorized JavaScript origins** — add both:
-     - `https://flashmind-35q4.onrender.com`
+     - `https://huella-35q4.onrender.com`
      - `https://fghxwycixcawwtctknmp.supabase.co`
    - **Authorized redirect URIs** — add exactly this (copy-paste, it's what Supabase expects):
      - `https://fghxwycixcawwtctknmp.supabase.co/auth/v1/callback`
@@ -34,7 +34,7 @@ The "Continue with Google" buttons are now live in the code. To make them actual
 
 ## Step 2 — Supabase dashboard
 
-1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) → your FlashMind project
+1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) → your Huella project
 2. Sidebar: **Authentication → Providers**
 3. Find **Google** in the list, click to expand
 4. Toggle **Enable Sign in with Google** to ON
@@ -46,7 +46,7 @@ The "Continue with Google" buttons are now live in the code. To make them actual
 
 ## Step 3 — Test it
 
-1. Visit `https://flashmind-35q4.onrender.com/auth/login`
+1. Visit `https://huella-35q4.onrender.com/auth/login`
 2. Click "Continue with Google"
 3. Pick your Google account → approve the permission prompt
 4. You should land on the home page, signed in
@@ -54,7 +54,7 @@ The "Continue with Google" buttons are now live in the code. To make them actual
 If it fails:
 
 - **"redirect_uri_mismatch"** — the URI in Google Cloud doesn't exactly match what Supabase sends. Double-check `https://fghxwycixcawwtctknmp.supabase.co/auth/v1/callback` is in the Authorized redirect URIs list.
-- **"This app isn't verified"** — normal for a new Google OAuth app; click "Advanced" → "Go to FlashMind (unsafe)" to bypass for testing. For production, Google requires a verification process (~1 week) if you add sensitive scopes, but the basic `email` + `profile` scopes don't need verification.
+- **"This app isn't verified"** — normal for a new Google OAuth app; click "Advanced" → "Go to Huella (unsafe)" to bypass for testing. For production, Google requires a verification process (~1 week) if you add sensitive scopes, but the basic `email` + `profile` scopes don't need verification.
 - **"provider is not enabled"** — you didn't save in Supabase, or saved without the Client ID/Secret.
 
 ## What happens on first Google sign-in

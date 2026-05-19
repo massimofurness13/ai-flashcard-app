@@ -1,4 +1,4 @@
-# FlashMind — marketing copy bank
+# Huella — marketing copy bank
 
 The single source of truth for every line of copy you might use anywhere — landing page, ads, Reddit comments, YouTube replies, Instagram captions, long-form posts. Pick from here, drop into context, edit if needed.
 
@@ -29,7 +29,7 @@ Voice rules across everything: warm, conversational, science-backed but not acad
 
 Use under a headline as the second beat:
 
-- "FlashMind gives every flashcard an AI illustration and a native-speaker voice — so the meaning lands the first time instead of the twentieth."
+- "Huella gives every flashcard an AI illustration and a native-speaker voice — so the meaning lands the first time instead of the twentieth."
 - "A tiny investment that saves you hundreds of hours of wasted learning time."
 - "Same study time. Dramatically more recall."
 - "Pictures get remembered roughly 6× more often than words alone."
@@ -69,7 +69,7 @@ If we want to use the "X views to remember" angle, we have to find a real publis
 
 For the landing page, blog posts, "about" sections, founder posts:
 
-> "Most flashcard apps treat memory like a filing problem — feed it more, hope it sticks. FlashMind starts from how memory actually works: with a picture, a sound, and a rhythm."
+> "Most flashcard apps treat memory like a filing problem — feed it more, hope it sticks. Huella starts from how memory actually works: with a picture, a sound, and a rhythm."
 
 > "Built for the kind of learner who's tried Anki and bounced off, who has half a dozen Quizlet decks they never finished. The same proven spaced-repetition engine, but everything around it — the illustrations, the voices, the pacing — designed so you actually want to come back tomorrow."
 
@@ -107,7 +107,7 @@ Variant D — challenge-led:
 > **A simple test**
 > Glance at this card. **Look away. Describe it.**
 >
-> If you can describe what you just saw, you've experienced the Pictorial Superiority Effect — the same principle every flashcard in FlashMind is built around. Our image engine is tuned to make that experience reliable: every card, every word, every language.
+> If you can describe what you just saw, you've experienced the Pictorial Superiority Effect — the same principle every flashcard in Huella is built around. Our image engine is tuned to make that experience reliable: every card, every word, every language.
 
 Hard rule for this section: **don't single out any language as "weird"**. The point of the demo isn't that French (or Japanese, or whatever) is unusual — it's that our generator makes any language stick. Keep the focus on the algorithm; let the example be incidental.
 
@@ -171,7 +171,7 @@ For r/languagelearning, r/Anki, r/SideProject, r/InternetIsBeautiful, etc. **Rea
 >
 > Quick context: I've been a flashcards-and-spaced-repetition person for years. Anki works, but plain text cards always felt like the *minimum viable* version of how memory should work — even though every memory researcher will tell you that pictures stick about six times harder than words alone (Paivio's dual-coding theory, Lester's Pictorial Superiority Effect, etc.).
 >
-> So I built [FlashMind](https://flashmind.app) — same proven SM-2 spaced-repetition engine, but every card automatically gets an AI illustration and a native-speaker voice in the language you're learning. The point isn't novelty; it's that you stop needing to see the same word 15 times for it to stick.
+> So I built [Huella](https://huella.app) — same proven SM-2 spaced-repetition engine, but every card automatically gets an AI illustration and a native-speaker voice in the language you're learning. The point isn't novelty; it's that you stop needing to see the same word 15 times for it to stick.
 >
 > A few honest things up front:
 >
@@ -185,7 +185,7 @@ For r/languagelearning, r/Anki, r/SideProject, r/InternetIsBeautiful, etc. **Rea
 
 ## Instagram caption (short)
 
-For carousel posts, before/after shots of plain card vs FlashMind card:
+For carousel posts, before/after shots of plain card vs Huella card:
 
 > Plain words: 10% recalled after three days.
 > Words + pictures: 65%.
@@ -199,11 +199,11 @@ For carousel posts, before/after shots of plain card vs FlashMind card:
 
 ## YouTube comment template
 
-Reply to language-learning videos, polyglot channels, study-tips content. **Only post when genuinely relevant — never under unrelated videos.** Lead with helpful, mention FlashMind only if the comment makes sense without it.
+Reply to language-learning videos, polyglot channels, study-tips content. **Only post when genuinely relevant — never under unrelated videos.** Lead with helpful, mention Huella only if the comment makes sense without it.
 
 > Great video — the bit about [specific thing they said] really lines up with the dual-coding research. Pictures pair into memory through two pathways automatically; words alone only one, which is why visual flashcards out-recall plain text by roughly 6× in standard studies. (Source: Pictorial Superiority Effect, Lester 2006.)
 >
-> If anyone's curious to actually try this with their own vocabulary, I built [FlashMind](https://flashmind.app) — flashcards with auto-generated illustrations and native-speaker audio. Works with Anki imports. Free to try, no card needed.
+> If anyone's curious to actually try this with their own vocabulary, I built [Huella](https://huella.app) — flashcards with auto-generated illustrations and native-speaker audio. Works with Anki imports. Free to try, no card needed.
 
 ---
 
@@ -217,7 +217,7 @@ For blog posts, founder posts, or "the science" section of the landing page:
 >
 > The practical implication for flashcards: you're either making your brain do the visualization work itself (which is exhausting and uneven), or you're skipping the visual encoding entirely and wondering why the same word keeps coming back as "Again" night after night.
 >
-> FlashMind generates the illustration for you, automatically, on every card. Same algorithm, same study time. Different memory.
+> Huella generates the illustration for you, automatically, on every card. Same algorithm, same study time. Different memory.
 
 ---
 

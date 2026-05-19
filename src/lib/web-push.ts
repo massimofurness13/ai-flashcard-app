@@ -16,7 +16,7 @@ function ensureConfigured() {
   if (configured) return;
   const publicKey = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT || "mailto:support@flashmind.app";
+  const subject = process.env.VAPID_SUBJECT || "mailto:support@huella.app";
   if (!publicKey || !privateKey) {
     throw new Error("VAPID keys not configured");
   }

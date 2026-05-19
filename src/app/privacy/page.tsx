@@ -2,20 +2,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy · FlashMind",
+  title: "Privacy Policy · Huella",
   description:
-    "How FlashMind collects, uses, and protects your data — written in plain English.",
+    "How Huella collects, uses, and protects your data — written in plain English.",
 };
 
 const LAST_UPDATED = "28 April 2026";
-const SUPPORT_EMAIL = "support@flashmind.app";
+const SUPPORT_EMAIL = "support@huella.app";
 
 export default function PrivacyPolicyPage() {
   return (
     <article className="legal-page max-w-3xl mx-auto">
       <header className="mb-10">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">
-          FlashMind
+          Huella
         </p>
         <h1 className="font-editorial text-4xl font-medium mt-2">
           Privacy Policy
@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
       </header>
 
       <p>
-        This is our plain-English summary of what data FlashMind
+        This is our plain-English summary of what data Huella
         collects, why, and what we do with it. We&apos;ve tried to make it
         readable. If anything is unclear, email us at{" "}
         <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and
@@ -35,10 +35,10 @@ export default function PrivacyPolicyPage() {
 
       <h2>Who we are</h2>
       <p>
-        FlashMind is a personal study app — flashcards with spaced
+        Huella is a personal study app — flashcards with spaced
         repetition, AI-generated illustrations, and audio. It&apos;s
-        operated by the FlashMind team. References to &ldquo;we&rdquo;,
-        &ldquo;us&rdquo;, or &ldquo;FlashMind&rdquo; in this policy mean the same thing.
+        operated by the Huella team. References to &ldquo;we&rdquo;,
+        &ldquo;us&rdquo;, or &ldquo;Huella&rdquo; in this policy mean the same thing.
       </p>
 
       <h2>What we collect</h2>
@@ -110,7 +110,7 @@ export default function PrivacyPolicyPage() {
 
       <h2>Who we share data with</h2>
       <p>
-        FlashMind uses a small set of well-known infrastructure
+        Huella uses a small set of well-known infrastructure
         providers to run the product. Your data is shared with them
         only to the extent the product needs:
       </p>
@@ -189,7 +189,7 @@ export default function PrivacyPolicyPage() {
 
       <h2>Children</h2>
       <p>
-        FlashMind is intended for users aged 16 and over. If you
+        Huella is intended for users aged 16 and over. If you
         believe a child has signed up, please email us and we&apos;ll
         delete the account.
       </p>

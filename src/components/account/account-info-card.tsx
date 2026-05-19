@@ -124,7 +124,7 @@ export function AccountInfoCard() {
                     <span className="text-xs font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
                       PRO
                     </span>
-                    FlashMind Pro
+                    Huella Pro
                   </p>
                   {renewalDate && (
                     <p className="text-xs text-muted-foreground mt-1">

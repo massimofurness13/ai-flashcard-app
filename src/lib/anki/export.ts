@@ -26,7 +26,7 @@ interface ExportDeck {
 }
 
 /**
- * Build an Anki-compatible .apkg file from a FlashMind deck.
+ * Build an Anki-compatible .apkg file from a Huella deck.
  *
  * The .apkg format:
  *  - collection.anki2 — SQLite database with col, notes, cards, revlog tables
@@ -121,7 +121,7 @@ export async function buildApkg(deck: ExportDeck): Promise<Buffer> {
     const model = {
       [modelId]: {
         id: modelId,
-        name: "FlashMind Basic",
+        name: "Huella Basic",
         type: 0,
         mod: now,
         usn: -1,
@@ -273,7 +273,7 @@ export async function buildApkg(deck: ExportDeck): Promise<Buffer> {
         // If the card has an image, add it to the front
         if (card.imageUrl) {
           const ext = card.imageUrl.split(".").pop()?.split("?")[0] || "jpg";
-          const mediaFilename = `flashmind_${i}.${ext}`;
+          const mediaFilename = `huella_${i}.${ext}`;
           mediaEntries.push({
             index: mediaIndex,
             filename: mediaFilename,

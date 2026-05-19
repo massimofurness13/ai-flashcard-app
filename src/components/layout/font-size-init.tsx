@@ -5,7 +5,7 @@ import { useEffect } from "react";
 export function FontSizeInit() {
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("flashmind-settings");
+      const saved = localStorage.getItem("huella-settings");
       if (saved) {
         const settings = JSON.parse(saved);
         if (settings.fontSize) {

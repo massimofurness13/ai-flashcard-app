@@ -1,5 +1,6 @@
-export const APP_NAME = "FlashMind";
-export const APP_DESCRIPTION = "Your personal AI study companion — master any subject with intelligent flashcards and spaced repetition";
+export const APP_NAME = "Huella";
+export const APP_TAGLINE = "Illustrated AI flashcards";
+export const APP_DESCRIPTION = "Huella — illustrated AI flashcards. Master any subject with vivid, AI-generated cards and proven spaced repetition.";
 
 export const CARDS_PER_SESSION_OPTIONS = [10, 25, 50, 100, 200] as const;
 export const DEFAULT_CARDS_PER_SESSION = 10;

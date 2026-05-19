@@ -172,7 +172,7 @@ export function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-center lg:gap-16">
             <div>
-              <p className="label-caps">FlashMind — for language learners</p>
+              <p className="label-caps">Huella — for language learners</p>
               <h1 className="font-editorial mt-4 text-4xl font-medium leading-[1.05] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
                 Memorize vocabulary{" "}
                 <span className="italic text-[color:var(--primary)]">
@@ -182,7 +182,7 @@ export function LandingPage() {
                 Your brain remembers pictures, not text.
               </h1>
               <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-                FlashMind gives every flashcard an AI illustration and a
+                Huella gives every flashcard an AI illustration and a
                 native-speaker voice — so the meaning lands the first time
                 instead of the twentieth.
               </p>
@@ -298,13 +298,13 @@ export function LandingPage() {
         <div className="mx-auto max-w-5xl">
           <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-center lg:gap-16">
             <div>
-              <p className="label-caps swoop-up">Why FlashMind</p>
+              <p className="label-caps swoop-up">Why Huella</p>
               <p className="swoop-up font-editorial mt-6 text-3xl font-medium leading-snug text-foreground sm:text-4xl">
                 Most flashcard apps treat memory like a filing problem —{" "}
                 <span className="italic text-[color:var(--primary)]">
                   feed it more, hope it sticks.
                 </span>{" "}
-                FlashMind starts from how memory actually works: with a
+                Huella starts from how memory actually works: with a
                 picture, a sound, and a rhythm.
               </p>
             </div>
@@ -405,7 +405,7 @@ export function LandingPage() {
             <div className="swoop-right relative">
               <ScreenshotSlot
                 src="/landing/stats.png"
-                alt="FlashMind stats page"
+                alt="Huella stats page"
                 placeholderEmoji="📊"
                 placeholderLabel="Stats screenshot"
               />
@@ -446,7 +446,7 @@ export function LandingPage() {
             <div className="swoop-right">
               <ScreenshotSlot
                 src="/landing/anki-import.png"
-                alt="FlashMind one-click Anki import settings"
+                alt="Huella one-click Anki import settings"
                 placeholderEmoji="📥"
                 placeholderLabel="Anki import screenshot"
               />

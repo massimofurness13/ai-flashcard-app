@@ -2,20 +2,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Terms of Service · FlashMind",
+  title: "Terms of Service · Huella",
   description:
-    "The agreement between you and FlashMind, in plain English.",
+    "The agreement between you and Huella, in plain English.",
 };
 
 const LAST_UPDATED = "28 April 2026";
-const SUPPORT_EMAIL = "support@flashmind.app";
+const SUPPORT_EMAIL = "support@huella.app";
 
 export default function TermsPage() {
   return (
     <article className="legal-page max-w-3xl mx-auto">
       <header className="mb-10">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">
-          FlashMind
+          Huella
         </p>
         <h1 className="font-editorial text-4xl font-medium mt-2">
           Terms of Service
@@ -26,7 +26,7 @@ export default function TermsPage() {
       </header>
 
       <p>
-        These terms set out the agreement between you and FlashMind
+        These terms set out the agreement between you and Huella
         when you use the app. By creating an account, you agree to
         them. We&apos;ve tried to write them in plain English; if
         anything reads as legalese, we&apos;ve probably failed and
@@ -36,7 +36,7 @@ export default function TermsPage() {
 
       <h2>1. The service</h2>
       <p>
-        FlashMind is a study app that lets you create decks of
+        Huella is a study app that lets you create decks of
         flashcards, schedule reviews using spaced repetition, and
         optionally use AI to generate card text and illustrations.
         We provide the platform; you provide the cards and the work
@@ -52,14 +52,14 @@ export default function TermsPage() {
         you didn&apos;t reasonably protect the account.
       </p>
       <p>
-        You must be at least 16 years old to use FlashMind. If we
+        You must be at least 16 years old to use Huella. If we
         find out you&apos;re younger, we&apos;ll delete the account.
       </p>
 
       <h2>3. What you can and can&apos;t do</h2>
       <p>You can:</p>
       <ul>
-        <li>Use FlashMind for your own personal study, in any subject.</li>
+        <li>Use Huella for your own personal study, in any subject.</li>
         <li>Generate AI illustrations for your cards within your credit allowance.</li>
         <li>Export your decks as Anki files at any time.</li>
         <li>Cancel your subscription whenever you like.</li>
@@ -78,7 +78,7 @@ export default function TermsPage() {
 
       <h2>4. Subscriptions and payments</h2>
       <p>
-        FlashMind has a free tier and paid Pro tiers (monthly and
+        Huella has a free tier and paid Pro tiers (monthly and
         yearly). Pricing is shown on the{" "}
         <Link href="/pricing">pricing page</Link> and may change for
         future renewals — you&apos;ll get clear notice before any
@@ -128,7 +128,7 @@ export default function TermsPage() {
       <h2>6. Your content</h2>
       <p>
         You own the card text, hints, tags, and any images you
-        upload. By using the service, you grant FlashMind a limited
+        upload. By using the service, you grant Huella a limited
         licence to store, process, and display that content
         <em>only</em> for the purpose of running the service for
         you. We don&apos;t use it to train AI models or share it
@@ -144,7 +144,7 @@ export default function TermsPage() {
 
       <h2>7. The platform</h2>
       <p>
-        The FlashMind app, design, code, brand, and underlying
+        The Huella app, design, code, brand, and underlying
         technology are ours. You can use them as a customer; you
         can&apos;t copy, redistribute, or build a competing
         product on top of them.
@@ -171,7 +171,7 @@ export default function TermsPage() {
 
       <h2>10. Liability</h2>
       <p>
-        FlashMind is provided &ldquo;as is&rdquo;. To the extent
+        Huella is provided &ldquo;as is&rdquo;. To the extent
         allowed by law, we&apos;re not liable for indirect,
         consequential, or speculative damages. Our maximum
         cumulative liability to you is capped at what you&apos;ve

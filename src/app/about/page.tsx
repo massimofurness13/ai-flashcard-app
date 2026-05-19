@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "About · FlashMind",
+  title: "About · Huella",
 };
 
 export default function AboutPage() {
@@ -14,18 +14,18 @@ export default function AboutPage() {
         >
           ← Account
         </Link>
-        <h1 className="font-editorial text-3xl font-medium sm:text-4xl mt-1">About FlashMind</h1>
+        <h1 className="font-editorial text-3xl font-medium sm:text-4xl mt-1">About Huella</h1>
       </div>
 
       <div className="prose prose-sm max-w-none text-muted-foreground space-y-4">
         <p>
-          FlashMind is a flashcard app built on one idea: <strong>we remember
+          Huella is a flashcard app built on one idea: <strong>we remember
           pictures far better than text</strong>. Research on the picture
           superiority effect has known this for decades — images recall at
           roughly 65% a week later, text alone at around 10%.
         </p>
         <p>
-          Every card in FlashMind gets a unique AI-generated illustration,
+          Every card in Huella gets a unique AI-generated illustration,
           automatically, as you create your packs. No hunting for images, no
           manual editing. Just paste your notes, pick a pack, and learn.
         </p>

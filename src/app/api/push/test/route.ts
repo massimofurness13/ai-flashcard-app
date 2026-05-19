@@ -27,10 +27,10 @@ export async function POST() {
   let pruned = 0;
   for (const sub of subs) {
     const result = await sendPush(sub, {
-      title: "FlashMind test",
+      title: "Huella test",
       body: "If you see this, push notifications are working.",
       url: "/account",
-      tag: "flashmind-test",
+      tag: "huella-test",
     });
     if (result.ok) {
       sent++;

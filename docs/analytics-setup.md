@@ -1,6 +1,6 @@
 # Analytics setup — PostHog
 
-FlashMind ships with PostHog wired up for product analytics: pageviews, heatmaps, session replay, and funnels. The integration is dormant until two env vars are set, so local dev never burns quota and a missing key on Render won't break the app.
+Huella ships with PostHog wired up for product analytics: pageviews, heatmaps, session replay, and funnels. The integration is dormant until two env vars are set, so local dev never burns quota and a missing key on Render won't break the app.
 
 ## One-time setup
 
@@ -8,7 +8,7 @@ FlashMind ships with PostHog wired up for product analytics: pageviews, heatmaps
 
 1. Go to <https://posthog.com> and sign up. Free tier: 1M events/mo + 5,000 session replays/mo. **No credit card required.**
 2. Pick a region at signup — **US cloud** (`https://us.i.posthog.com`) or **EU cloud** (`https://eu.i.posthog.com`). This is permanent per project, so pick whichever matches where most of your users are.
-3. Create a project (e.g. `flashmind-prod`).
+3. Create a project (e.g. `huella-prod`).
 
 ### 2. Grab the keys
 
@@ -19,7 +19,7 @@ In the PostHog dashboard:
 
 ### 3. Set them on Render
 
-In the Render dashboard for the FlashMind service → **Environment**, add:
+In the Render dashboard for the Huella service → **Environment**, add:
 
 | Key | Value |
 | --- | --- |
@@ -48,7 +48,7 @@ Most of these are dashboard-only switches. No code changes.
 ### Heatmaps
 
 1. PostHog dashboard → **Heatmaps** tab.
-2. Paste the URL of any page (e.g. `https://flashmind.app/` or `/study`). PostHog overlays click density on the live page using the autocapture data it already collected. No tagging required.
+2. Paste the URL of any page (e.g. `https://huella.app/` or `/study`). PostHog overlays click density on the live page using the autocapture data it already collected. No tagging required.
 
 ### Funnels
 
