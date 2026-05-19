@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { APP_NAME } from "@/lib/constants";
 import { Suspense } from "react";
 import {
-  GoogleSignInButton,
+  OAuthSignInButton,
   AuthDivider,
 } from "@/components/auth/google-sign-in-button";
 
@@ -55,7 +55,11 @@ function LoginForm() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <GoogleSignInButton redirectTo={redirectTo} label="Continue with Google" />
+          <div className="space-y-2">
+            <OAuthSignInButton provider="google" redirectTo={redirectTo} />
+            <OAuthSignInButton provider="azure" redirectTo={redirectTo} />
+            <OAuthSignInButton provider="apple" redirectTo={redirectTo} />
+          </div>
           <AuthDivider />
           {/* Email/Password Form */}
           <form onSubmit={handleEmailLogin} className="space-y-3">
