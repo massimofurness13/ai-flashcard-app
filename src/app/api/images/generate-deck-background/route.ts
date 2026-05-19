@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { isProUser } from "@/lib/subscription";
 import { type ImageTier } from "@/lib/image-gen";
 import { getQuotaState, TIER_COSTS } from "@/lib/image-quota";
 import { processQueue } from "@/app/api/cron/process-image-queue/route";
@@ -33,13 +32,11 @@ export async function POST(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
-  const isPro = await isProUser(auth.userId);
-  if (!isPro) {
-    return NextResponse.json(
-      { error: "Pro subscription required for AI image generation" },
-      { status: 403 }
-    );
-  }
+  // No Pro gate — free users can spend their lifetime free credits
+  // on bulk image generation just like Pro users spend subscription
+  // credits. The affordability cap below trims the queue to what
+  // the caller can actually pay for, so a free user with 25 credits
+  // won't kick off a 100-card job they can't finish.
 
   const body = await request.json();
   const { deckId } = body;

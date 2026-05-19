@@ -136,11 +136,6 @@ export function ImportClient({ decks, isPro }: { decks: Deck[]; isPro: boolean }
           onClick={() => setTab("anki")}
         >
           Anki (.apkg)
-          {!isPro && (
-            <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">
-              PRO
-            </span>
-          )}
         </button>
       </div>
 

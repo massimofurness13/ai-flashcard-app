@@ -1,19 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { isProUser } from "@/lib/subscription";
 import { importAnkiPackage } from "@/lib/anki/import";
 
+// Anki import is FREE for all authenticated users — "your data, your
+// app". The only thing we charge for is AI image generation, which
+// happens on a separate per-card flow gated by the credit-quota system.
 export async function POST(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
-
-  const isPro = await isProUser(auth.userId);
-  if (!isPro) {
-    return NextResponse.json(
-      { error: "Pro subscription required for Anki import" },
-      { status: 403 }
-    );
-  }
 
   try {
     const formData = await request.formData();

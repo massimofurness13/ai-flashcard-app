@@ -1,20 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { isProUser } from "@/lib/subscription";
 import { prisma } from "@/lib/db";
 import { buildApkg } from "@/lib/anki/export";
 
+// Anki export is FREE for all authenticated users — "no lock-in" is
+// a load-bearing promise in our Terms of Service and on the landing
+// page. Users get their data back any time, paid or not.
 export async function GET(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
-
-  const isPro = await isProUser(auth.userId);
-  if (!isPro) {
-    return NextResponse.json(
-      { error: "Pro subscription required for Anki export" },
-      { status: 403 }
-    );
-  }
 
   const url = new URL(request.url);
   const deckId = url.searchParams.get("deckId");

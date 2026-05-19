@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { generateFlashcards } from "@/lib/claude";
 import { requireAuth } from "@/lib/auth";
-import { isProUser } from "@/lib/subscription";
 import { generateSchema, rateLimit } from "@/lib/validations";
 
+// AI text generation is FREE for all authenticated users. Only AI
+// images cost credits (handled by /api/images/generate-ai via the
+// credit-quota system). The 10/min rate-limit below is the only
+// throttle — abuse protection without a paywall.
 export async function POST(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
@@ -12,14 +15,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Too many requests. Please wait a moment." },
       { status: 429 }
-    );
-  }
-
-  const isPro = await isProUser(auth.userId);
-  if (!isPro) {
-    return NextResponse.json(
-      { error: "Pro subscription required for AI generation" },
-      { status: 403 }
     );
   }
 
