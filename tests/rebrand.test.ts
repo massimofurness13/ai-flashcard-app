@@ -137,3 +137,26 @@ describe("rebrand: render.yaml service name", () => {
     expect(text).toMatch(/name:\s*huella\b/);
   });
 });
+
+// The first pass of the rebrand missed an inline wordmark in the
+// navbar that split "FlashMind" across two adjacent <span> tags
+// (>Flash< then >Mind<) — neither half trips the forbidden-string
+// scan above. Lock that anti-pattern down separately. If a future
+// component legit needs the word "Flash" or "Mind" in JSX text,
+// they must not appear adjacent.
+describe("rebrand: no split-wordmark FlashMind in JSX", () => {
+  const tsxFiles = walk(join(REPO_ROOT, "src")).filter((f) =>
+    f.endsWith(".tsx"),
+  );
+
+  for (const file of tsxFiles) {
+    const rel = relative(REPO_ROOT, file);
+    it(`${rel} has no >Flash< adjacent to >Mind<`, () => {
+      const text = readFileSync(file, "utf8");
+      // Look for the pattern: ">Flash<" followed within 80 chars by ">Mind<"
+      // (allows for span attributes, whitespace, etc. between).
+      const m = text.match(/>Flash<[^>]*>[\s\S]{0,200}?>Mind</);
+      expect(m, m ? `Found split FlashMind wordmark in ${rel}` : "").toBeNull();
+    });
+  }
+});
