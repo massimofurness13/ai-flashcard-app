@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { APP_NAME } from "@/lib/constants";
 import {
-  GoogleSignInButton,
+  OAuthSignInButton,
   AuthDivider,
 } from "@/components/auth/google-sign-in-button";
 
@@ -91,7 +91,23 @@ export default function SignUpPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <GoogleSignInButton redirectTo="/" label="Sign up with Google" />
+          <div className="space-y-2">
+            <OAuthSignInButton
+              provider="google"
+              redirectTo="/"
+              label="Sign up with Google"
+            />
+            <OAuthSignInButton
+              provider="azure"
+              redirectTo="/"
+              label="Sign up with Microsoft"
+            />
+            <OAuthSignInButton
+              provider="apple"
+              redirectTo="/"
+              label="Sign up with Apple"
+            />
+          </div>
           <AuthDivider />
           {/* Email/Password Form */}
           <form onSubmit={handleSignUp} className="space-y-3">
