@@ -138,7 +138,14 @@ export function LandingDemo({ cardKey, className }: LandingDemoProps) {
   }, [visibleText, visibleLang]);
 
   return (
-    <div className={`mx-auto max-w-md w-full ${className ?? ""}`}>
+    // Mirror the in-app Flashcard sizing so the landing demo
+    // showcases the *real* card UI users get inside the app —
+    // wider container + full-width image + 520px min-height so
+    // the front face has the same visual weight as study mode.
+    // (Previously this was a small max-w-md, 4:5 locked square
+    // with a fixed-size image, which made the marketing card
+    // feel like a different product.)
+    <div className={`mx-auto max-w-lg w-full ${className ?? ""}`}>
       <div className="relative" style={{ perspective: "1200px" }}>
         <div
           className={`relative w-full transition-transform duration-700 ease-out cursor-pointer ${
@@ -147,7 +154,7 @@ export function LandingDemo({ cardKey, className }: LandingDemoProps) {
           style={{
             transformStyle: "preserve-3d",
             transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-            aspectRatio: "4 / 5",
+            minHeight: "520px",
           }}
           onClick={() => setFlipped((v) => !v)}
           role="button"
@@ -240,8 +247,12 @@ interface FaceProps {
 
 function Face({ text, imageUrl, side, accent }: FaceProps) {
   return (
+    // Padding (p-5 sm:p-8) and rounded radius match in-app
+    // Flashcard.tsx so the marketing demo and the real card
+    // read as the same component at a glance. Marketing keeps
+    // the slightly softer rounded-3xl + shadow-xl polish.
     <div
-      className={`absolute inset-0 rounded-3xl border bg-card p-6 sm:p-7 flex flex-col shadow-xl ${
+      className={`absolute inset-0 rounded-3xl border bg-card p-5 sm:p-8 flex flex-col shadow-xl ${
         accent ? "border-primary/40" : "border-border"
       }`}
       style={{
@@ -254,16 +265,20 @@ function Face({ text, imageUrl, side, accent }: FaceProps) {
         <span>{side === "front" ? "Front" : "Back"}</span>
       </div>
 
+      {/* Image renders the same way as flashcard-image.tsx: full
+       *  width of the card, object-contain so the AI illustration
+       *  fills the card naturally, max-h tuned so the text below
+       *  always has room. Previously a fixed w-44/h-52 square. */}
       <div className="mt-4 flex justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={imageUrl}
           alt=""
-          className="w-44 h-44 sm:w-52 sm:h-52 rounded-2xl object-cover border border-border"
+          className="w-full max-h-72 sm:max-h-80 rounded-lg object-contain"
         />
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-2">
+      <div className="flex-1 flex items-center justify-center px-2 mt-4">
         <p className="font-editorial text-2xl sm:text-3xl font-medium text-center text-foreground leading-tight">
           {text}
         </p>
