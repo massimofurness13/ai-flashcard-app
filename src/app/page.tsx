@@ -115,11 +115,19 @@ export default async function Home({
       dailyGoal: true,
       goalHitCelebrationShown: true,
       reminderTimezone: true,
+      // Drives whether the brand-new-user welcome flow renders. We
+      // can't just use "hasDecks === false" — a user who skipped the
+      // starter pack via "I'd rather build my own" still has zero
+      // decks but should NOT see the welcome flow again (they'd be
+      // stuck in a loop since router.refresh would re-render the same
+      // FirstTimeWelcome that they tried to escape).
+      onboardingCompletedAt: true,
     },
   });
   const displayName = userData?.name || userData?.email?.split("@")[0] || "there";
   const dailyGoal = userData?.dailyGoal ?? 25;
   const goalHitCelebrationShown = userData?.goalHitCelebrationShown ?? false;
+  const onboardingCompleted = !!userData?.onboardingCompletedAt;
 
   // Engagement: today's review count + streak. Both depend on the
   // user's local timezone — without it, a user east of UTC reviewing
@@ -178,6 +186,7 @@ export default async function Home({
       dailyGoal={dailyGoal}
       streak={streak}
       goalHitCelebrationShown={goalHitCelebrationShown}
+      onboardingCompleted={onboardingCompleted}
     />
   );
 }

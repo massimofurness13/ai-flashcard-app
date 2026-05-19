@@ -91,7 +91,14 @@ export function FirstTimeWelcome({ userName }: FirstTimeWelcomeProps) {
   const [step, setStep] = useState<Step>("intro");
   const [language, setLanguage] = useState<string>("");
   const [level, setLevel] = useState<string>("");
-  const [busy, setBusy] = useState(false);
+  // Two separate "in-flight" flags so the two CTAs ("Start with this
+  // pack" and "I'd rather build my own") can each show their own
+  // honest progress label. A single `busy` would otherwise leave the
+  // primary button reading "Setting up your library…" while the user
+  // is actually skipping the starter pack, which read as a freeze.
+  const [busyClone, setBusyClone] = useState(false);
+  const [busySkip, setBusySkip] = useState(false);
+  const busy = busyClone || busySkip;
   const [error, setError] = useState<string | null>(null);
 
   // Tag each preview response with the (lang|level) it was fetched
@@ -125,7 +132,8 @@ export function FirstTimeWelcome({ userName }: FirstTimeWelcomeProps) {
 
   async function completeOnboarding(clone: boolean) {
     if (!language || !level) return;
-    setBusy(true);
+    if (clone) setBusyClone(true);
+    else setBusySkip(true);
     setError(null);
     try {
       const res = await fetch("/api/onboarding/complete", {
@@ -140,20 +148,23 @@ export function FirstTimeWelcome({ userName }: FirstTimeWelcomeProps) {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Something went wrong. Try again.");
-        setBusy(false);
+        setBusyClone(false);
+        setBusySkip(false);
         return;
       }
       if (clone && data.deckId) {
         router.push(`/decks/${data.deckId}`);
         router.refresh();
       } else {
-        // No clone (or no pack available) — drop the user into
-        // the manual create-menu UI on the home page.
+        // Skip path: the server set onboardingCompletedAt, so the
+        // refreshed home page will render the empty-library state
+        // instead of bouncing us back into FirstTimeWelcome.
         router.refresh();
       }
     } catch {
       setError("Network error. Try again in a moment.");
-      setBusy(false);
+      setBusyClone(false);
+      setBusySkip(false);
     }
   }
 
@@ -177,6 +188,8 @@ export function FirstTimeWelcome({ userName }: FirstTimeWelcomeProps) {
           level={level}
           preview={preview}
           busy={busy}
+          busyClone={busyClone}
+          busySkip={busySkip}
           error={error}
           onUseStarter={() => completeOnboarding(true)}
           onSkip={() => completeOnboarding(false)}
@@ -473,7 +486,17 @@ interface OfferStepProps {
   language: string;
   level: string;
   preview: StarterPreview | null;
+  /** Either button in flight — disables both so the user can't
+   *  fire two completions at once. */
   busy: boolean;
+  /** Specifically the "Start with this pack" call is in flight,
+   *  so the primary button can show "Setting up your library…". */
+  busyClone: boolean;
+  /** Specifically the "I'd rather build my own" / "take me to
+   *  my library" skip call is in flight. Drives its own honest
+   *  label so users don't see "Setting up your library…" while
+   *  they're actively saying "no, I don't want a library set up". */
+  busySkip: boolean;
   error: string | null;
   onUseStarter: () => void;
   onSkip: () => void;
@@ -486,6 +509,8 @@ function OfferStep({
   level,
   preview,
   busy,
+  busyClone,
+  busySkip,
   error,
   onUseStarter,
   onSkip,
@@ -566,7 +591,7 @@ function OfferStep({
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Button size="md" onClick={onUseStarter} disabled={busy}>
-            {busy ? "Setting up your library…" : "Start with this pack →"}
+            {busyClone ? "Setting up your library…" : "Start with this pack →"}
           </Button>
           <button
             type="button"
@@ -574,7 +599,7 @@ function OfferStep({
             disabled={busy}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            I&apos;d rather build my own
+            {busySkip ? "Taking you to your library…" : "I'd rather build my own"}
           </button>
           <button
             type="button"
@@ -612,7 +637,7 @@ function OfferStep({
           disabled={busy}
           className="text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          {busy ? "Saving…" : "Or just take me to my library"}
+          {busySkip ? "Taking you to your library…" : "Or just take me to my library"}
         </button>
         <button
           type="button"
