@@ -1,4 +1,4 @@
-// FlashMind service worker.
+// Huella service worker.
 // Minimal: just handles push notifications + clicks-through-to-study.
 // No offline caching — we want the app always online for spaced-repetition state.
 
@@ -9,16 +9,16 @@ self.addEventListener("push", (event) => {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: "FlashMind", body: event.data.text() };
+    payload = { title: "Huella", body: event.data.text() };
   }
 
-  const title = payload.title || "FlashMind";
+  const title = payload.title || "Huella";
   const options = {
     body: payload.body || "Time for today's cards.",
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
     data: { url: payload.url || "/study" },
-    tag: payload.tag || "flashmind-reminder",
+    tag: payload.tag || "huella-reminder",
     renotify: true,
   };
 

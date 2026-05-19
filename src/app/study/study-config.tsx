@@ -40,7 +40,7 @@ const SECONDS_PER_CARD = 12;
 
 // Shared localStorage key with the account-settings page. Each field
 // is nullable — missing fields fall through to hardcoded defaults.
-const SETTINGS_KEY = "flashmind-settings";
+const SETTINGS_KEY = "huella-settings";
 
 interface PersistedDefaults {
   defaultCards?: number;

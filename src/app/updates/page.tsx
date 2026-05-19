@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
-  title: "Updates · FlashMind",
+  title: "Updates · Huella",
 };
 
 interface UpdateEntry {

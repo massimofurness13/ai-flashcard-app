@@ -1,7 +1,7 @@
 import type { AnkiCard, AnkiNote, AnkiModelMeta, ParsedApkg } from "./types";
 
 /**
- * A card mapped from Anki format to FlashMind format, ready for DB insertion.
+ * A card mapped from Anki format to Huella format, ready for DB insertion.
  */
 export interface MappedCard {
   front: string;
@@ -25,7 +25,7 @@ const FIELD_SEPARATOR = "\x1f"; // Anki's field separator
 
 /**
  * Strip HTML tags from Anki field content.
- * Anki stores fields as HTML, we want plain text for FlashMind.
+ * Anki stores fields as HTML, we want plain text for Huella.
  */
 function stripHtml(html: string): string {
   return html
@@ -68,7 +68,7 @@ function extractMediaRefs(html: string): string[] {
 }
 
 /**
- * Map Anki SM-2 scheduling data to FlashMind SM-2 format.
+ * Map Anki SM-2 scheduling data to Huella SM-2 format.
  *
  * Anki stores:
  *  - factor: ease factor in permille (2500 = 2.5)
@@ -76,7 +76,7 @@ function extractMediaRefs(html: string): string[] {
  *  - reps: number of reviews
  *  - type: 0=new, 1=learning, 2=review, 3=relearn
  *
- * FlashMind SM-2:
+ * Huella SM-2:
  *  - easeFactor: float (2.5)
  *  - interval: days
  *  - repetitions: count
@@ -116,7 +116,7 @@ function buildDeckMap(parsed: ParsedApkg): Map<number, string> {
 }
 
 /**
- * Map all parsed Anki data to FlashMind card format.
+ * Map all parsed Anki data to Huella card format.
  *
  * Handles:
  *  - Multi-field notes (first field = front, rest = back)
@@ -125,7 +125,7 @@ function buildDeckMap(parsed: ParsedApkg): Map<number, string> {
  *  - Media reference extraction
  *  - Multi-deck assignment
  */
-export function mapToFlashMind(parsed: ParsedApkg): MappedCard[] {
+export function mapToHuella(parsed: ParsedApkg): MappedCard[] {
   const deckMap = buildDeckMap(parsed);
   const noteMap = new Map<number, AnkiNote>();
 

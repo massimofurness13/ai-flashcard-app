@@ -16,7 +16,7 @@ import { formatRelativeDate, cn } from "@/lib/utils";
  * drilling, no provider gymnastics.
  */
 
-const CREDITS_CHANGED_EVENT = "flashmind:credits-changed";
+const CREDITS_CHANGED_EVENT = "huella:credits-changed";
 
 /** Fire-and-forget: tell every mounted CreditBalance / useCreditBalance
  *  to refetch from /api/images/quota. Call after any credit-spending

@@ -19,7 +19,7 @@ export function useSubscription(): SubscriptionState {
 
   useEffect(() => {
     // Check sessionStorage cache first
-    const cached = sessionStorage.getItem("flashmind-subscription");
+    const cached = sessionStorage.getItem("huella-subscription");
     if (cached) {
       try {
         const data = JSON.parse(cached);
@@ -39,7 +39,7 @@ export function useSubscription(): SubscriptionState {
       .then((data) => {
         const isPro = data.isPro === true;
         sessionStorage.setItem(
-          "flashmind-subscription",
+          "huella-subscription",
           JSON.stringify({ isPro, timestamp: Date.now() })
         );
         setState({ isPro, loading: false });

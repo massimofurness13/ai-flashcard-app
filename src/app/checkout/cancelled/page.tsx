@@ -42,7 +42,7 @@ export default function CheckoutCancelledPage() {
           </h1>
           <p className="text-muted-foreground">
             No charge was made. Close this tab whenever you&apos;re ready
-            — your FlashMind tab is still where you left it.
+            — your Huella tab is still where you left it.
           </p>
         </div>
         {!closing && (

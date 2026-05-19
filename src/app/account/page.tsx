@@ -45,7 +45,7 @@ export default function AccountPage() {
     });
 
     // Load saved settings from localStorage
-    const saved = localStorage.getItem("flashmind-settings");
+    const saved = localStorage.getItem("huella-settings");
     if (saved) {
       const settings = JSON.parse(saved);
       setTtsSpeed(settings.ttsSpeed || 1);
@@ -61,7 +61,7 @@ export default function AccountPage() {
 
   function saveSettings() {
     localStorage.setItem(
-      "flashmind-settings",
+      "huella-settings",
       JSON.stringify({
         ttsSpeed,
         defaultCards,
@@ -82,7 +82,7 @@ export default function AccountPage() {
     applyFontSize(size);
     // Save inline since setState is async
     localStorage.setItem(
-      "flashmind-settings",
+      "huella-settings",
       JSON.stringify({
         ttsSpeed,
         defaultCards,
@@ -102,10 +102,10 @@ export default function AccountPage() {
     // even before they hit Save.
     try {
       const saved = JSON.parse(
-        localStorage.getItem("flashmind-settings") || "{}"
+        localStorage.getItem("huella-settings") || "{}"
       );
       localStorage.setItem(
-        "flashmind-settings",
+        "huella-settings",
         JSON.stringify({ ...saved, ttsSpeed })
       );
     } catch {

@@ -2,10 +2,10 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
-  title: "Contact · FlashMind",
+  title: "Contact · Huella",
 };
 
-const SUPPORT_EMAIL = "support@flashmind.app";
+const SUPPORT_EMAIL = "support@huella.app";
 
 export default function ContactPage() {
   return (

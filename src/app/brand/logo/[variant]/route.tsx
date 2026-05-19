@@ -6,7 +6,7 @@ import { join } from "node:path";
 export const runtime = "nodejs";
 
 /**
- * Wordmark logo router. Renders the lightning bolt + the "FlashMind"
+ * Wordmark logo router. Renders the lightning bolt + the "Huella"
  * wordmark in the brand palette and serves the result as a PNG.
  * Save by visiting any URL and right-clicking the rendered image →
  * Save Image As.
@@ -127,7 +127,7 @@ async function renderSerif(v: SerifVariant) {
               fontWeight: weight,
             }}
           >
-            Flash
+            Hu
           </span>
           <span
             style={{
@@ -135,7 +135,7 @@ async function renderSerif(v: SerifVariant) {
               fontWeight: weight,
             }}
           >
-            Mind
+            ella
           </span>
         </div>
       </div>
@@ -310,8 +310,8 @@ function SansWordmark({
         lineHeight: 1,
       }}
     >
-      <span style={{ color: flashColor, fontStyle: "italic" }}>Flash</span>
-      <span style={{ color: mindColor }}>Mind</span>
+      <span style={{ color: flashColor, fontStyle: "italic" }}>Hu</span>
+      <span style={{ color: mindColor }}>ella</span>
     </div>
   );
 }

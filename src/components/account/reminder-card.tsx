@@ -210,7 +210,7 @@ export function ReminderCard() {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             Your browser doesn&apos;t support push notifications. On iPhone,
-            add FlashMind to your home screen to enable them.
+            add Huella to your home screen to enable them.
           </p>
         </CardContent>
       </Card>

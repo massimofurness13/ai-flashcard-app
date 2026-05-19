@@ -15,13 +15,14 @@ jobs:
     steps:
       - name: Fire cron endpoint
         env:
+          APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "::error::CRON_SECRET secret not set in repo settings"
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::APP_URL or CRON_SECRET secret not set in repo settings"
             exit 1
           fi
           curl -fsS -X POST \
             -H "x-cron-secret: $CRON_SECRET" \
             -w "\nstatus=%{http_code} time=%{time_total}s\n" \
-            https://flashmind-35q4.onrender.com/api/cron/push-reminders
+            "$APP_URL/api/cron/push-reminders"

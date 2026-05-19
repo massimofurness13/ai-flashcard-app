@@ -89,7 +89,7 @@ function LoginForm() {
           </form>
 
           <p className="text-center text-sm text-muted-foreground">
-            New to FlashMind?{" "}
+            New to Huella?{" "}
             <Link
               href="/auth/signup"
               className="text-primary hover:underline font-medium"

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: flashmind
+    name: huella
     runtime: node
     buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npm start

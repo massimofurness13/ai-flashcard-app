@@ -10,7 +10,7 @@
  * origin in priority order:
  *
  *   1. NEXT_PUBLIC_APP_URL — if set, this is the source of truth
- *      (e.g. https://flashmind-35q4.onrender.com or your custom
+ *      (e.g. https://huella-35q4.onrender.com or your custom
  *      domain once you point one). Trim trailing slashes.
  *   2. X-Forwarded-Proto + X-Forwarded-Host — what Render sends so
  *      apps behind its proxy can know the public origin.

@@ -2,12 +2,12 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
-  title: "Help · FlashMind",
+  title: "Help · Huella",
 };
 
 const FAQS: { q: string; a: string }[] = [
   {
-    q: "What is FlashMind?",
+    q: "What is Huella?",
     a: "A flashcard app that generates a unique AI illustration for every card, because we remember images far better than plain text. Built on proven spaced-repetition (SM-2) so the right card shows up at the right time.",
   },
   {

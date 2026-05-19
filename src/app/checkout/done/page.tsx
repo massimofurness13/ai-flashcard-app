@@ -52,7 +52,7 @@ export default function CheckoutDonePage() {
           </h1>
           <p className="text-muted-foreground">
             Your credits are being added now. You can close this tab and
-            head back to FlashMind — the new balance will be there
+            head back to Huella — the new balance will be there
             waiting.
           </p>
         </div>

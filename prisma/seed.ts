@@ -21,7 +21,7 @@ async function main() {
     update: {},
     create: {
       id: SEED_USER_ID,
-      email: "seed@flashmind.dev",
+      email: "seed@huella.dev",
       name: "Seed User",
     },
   });

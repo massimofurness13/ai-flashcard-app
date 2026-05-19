@@ -19,7 +19,7 @@
 #
 # Secrets required (Settings → Secrets and variables → Actions):
 #   - APP_URL: the canonical production origin, e.g.
-#     https://flashmind.app  (no trailing slash)
+#     https://huella.app  (no trailing slash)
 #   - CRON_SECRET: must match the CRON_SECRET set on Vercel/Render
 #     so the cron route accepts the call.
 

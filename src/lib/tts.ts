@@ -131,7 +131,7 @@ const DEFAULT_TTS_SPEED = 1.2;
 
 function getSettings(): { ttsSpeed: number } {
   try {
-    const saved = localStorage.getItem("flashmind-settings");
+    const saved = localStorage.getItem("huella-settings");
     if (saved) {
       const s = JSON.parse(saved);
       return { ttsSpeed: s.ttsSpeed || DEFAULT_TTS_SPEED };

@@ -71,7 +71,7 @@ export default function GlobalError({
               margin: "0 0 1.5rem",
             }}
           >
-            FlashMind crashed. Your data is safe — we&apos;ve reported
+            Huella crashed. Your data is safe — we&apos;ve reported
             the issue. Please reload the page.
           </p>
           <button

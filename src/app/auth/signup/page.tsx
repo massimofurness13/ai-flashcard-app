@@ -87,7 +87,7 @@ export default function SignUpPage() {
           <div className="text-4xl mb-2">{"🧠"}</div>
           <CardTitle className="text-2xl">{APP_NAME}</CardTitle>
           <p className="text-muted-foreground text-sm mt-1">
-            Join FlashMind and start learning smarter today.
+            Join Huella and start learning smarter today.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
