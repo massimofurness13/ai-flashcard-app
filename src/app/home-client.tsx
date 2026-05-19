@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CreateMenu } from "@/components/home/create-menu";
 import { FolderGroup } from "@/components/home/folder-group";
@@ -15,6 +15,12 @@ interface Deck {
   emoji: string | null;
   _count: { cards: number };
   grade: string;
+  /** ISO timestamps (server pre-serialises Dates so client-side
+   *  sort + relative-time math don't need to construct Date
+   *  objects twice). lastStudiedAt is null for never-studied packs. */
+  createdAt: string;
+  updatedAt: string;
+  lastStudiedAt: string | null;
 }
 
 interface Folder {
@@ -23,6 +29,77 @@ interface Folder {
   emoji: string | null;
   color: string | null;
   decks: Deck[];
+}
+
+// ── Library sort ─────────────────────────────────────────────────
+// The home page lets the user pick how their packs are ordered.
+// Persisted to localStorage so a returning user keeps the choice
+// across sessions. Sort applies to BOTH the unfoldered list AND
+// each folder's internal deck list — folders are just containers,
+// it'd be confusing if their internals followed a different rule.
+
+type SortKey =
+  | "modified-desc"
+  | "modified-asc"
+  | "reviewed-desc"
+  | "reviewed-asc"
+  | "name-asc"
+  | "name-desc";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  "modified-desc": "Recently modified",
+  "modified-asc": "Oldest modified",
+  "reviewed-desc": "Recently reviewed",
+  "reviewed-asc": "Oldest reviewed",
+  "name-asc": "Name (A → Z)",
+  "name-desc": "Name (Z → A)",
+};
+
+const SORT_STORAGE_KEY = "huella-home-sort";
+
+function compareDates(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  direction: "asc" | "desc",
+): number {
+  // Nulls always sort last regardless of direction — a never-reviewed
+  // pack appearing at the top of "oldest reviewed" would be a UX
+  // surprise (the user expected real "oldest" results).
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const at = new Date(a).getTime();
+  const bt = new Date(b).getTime();
+  return direction === "asc" ? at - bt : bt - at;
+}
+
+function sortDecks(decks: Deck[], key: SortKey): Deck[] {
+  const sorted = [...decks];
+  switch (key) {
+    case "name-asc":
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+      break;
+    case "name-desc":
+      sorted.sort((a, b) => b.name.localeCompare(a.name));
+      break;
+    case "reviewed-desc":
+      sorted.sort((a, b) =>
+        compareDates(a.lastStudiedAt, b.lastStudiedAt, "desc"),
+      );
+      break;
+    case "reviewed-asc":
+      sorted.sort((a, b) =>
+        compareDates(a.lastStudiedAt, b.lastStudiedAt, "asc"),
+      );
+      break;
+    case "modified-desc":
+      sorted.sort((a, b) => compareDates(a.updatedAt, b.updatedAt, "desc"));
+      break;
+    case "modified-asc":
+      sorted.sort((a, b) => compareDates(a.updatedAt, b.updatedAt, "asc"));
+      break;
+  }
+  return sorted;
 }
 
 interface HomePageProps {
@@ -109,6 +186,48 @@ export function HomePage({
     setGreeting(getGreeting());
     setToday(getTodayLabel());
   }, []);
+
+  // Library sort order. SSR-safe — default to "modified-desc" which
+  // matches the server's existing orderBy so the first paint stays
+  // identical for new users and we hydrate to the user's preference
+  // once localStorage is readable.
+  const [sortKey, setSortKey] = useState<SortKey>("modified-desc");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SORT_STORAGE_KEY);
+      if (saved && saved in SORT_LABELS) {
+        setSortKey(saved as SortKey);
+      }
+    } catch {
+      // localStorage blocked (private mode, storage quota) — silently
+      // fall back to the default sort order.
+    }
+  }, []);
+  function updateSort(next: SortKey) {
+    setSortKey(next);
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, next);
+    } catch {
+      // Same as above — non-fatal if persistence fails.
+    }
+  }
+
+  // Apply the sort to every list the user can scan: the unfoldered
+  // packs at the bottom of the library AND each folder's internal
+  // deck list. Wrapping in useMemo keeps the result stable when only
+  // unrelated state changes (e.g. greeting hydration above).
+  const sortedUnfoldered = useMemo(
+    () => sortDecks(unfolderedDecks, sortKey),
+    [unfolderedDecks, sortKey],
+  );
+  const sortedFolders = useMemo(
+    () =>
+      folders.map((folder) => ({
+        ...folder,
+        decks: sortDecks(folder.decks, sortKey),
+      })),
+    [folders, sortKey],
+  );
 
   // Brand-new user → tutorial-style welcome. Only triggers if the
   // user has NEVER been through onboarding. A user who skipped the
@@ -353,23 +472,43 @@ export function HomePage({
             className="reveal space-y-8"
             style={{ "--delay": "160ms" } as React.CSSProperties}
           >
-            <div className="flex items-baseline justify-between border-b border-border pb-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border pb-3">
               <h2 className="font-editorial text-2xl font-medium text-foreground">
                 Library
               </h2>
-              <p className="label-caps">
-                {folders.filter((f) => f.decks.length > 0).length +
-                  (unfolderedDecks.length > 0 ? 1 : 0)}{" "}
-                {folders.filter((f) => f.decks.length > 0).length +
-                  (unfolderedDecks.length > 0 ? 1 : 0) ===
-                1
-                  ? "section"
-                  : "sections"}
-              </p>
+              <div className="flex items-center gap-3">
+                {/* Sort dropdown — applies to both the unfoldered
+                 *  list and each folder's contents. Choice persists
+                 *  to localStorage via updateSort(). */}
+                <label className="flex items-center gap-2 text-xs">
+                  <span className="label-caps">Sort</span>
+                  <select
+                    value={sortKey}
+                    onChange={(e) => updateSort(e.target.value as SortKey)}
+                    className="rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground transition-colors hover:border-[color:var(--primary)]/40 focus:border-[color:var(--primary)] focus:outline-none"
+                    aria-label="Sort library by"
+                  >
+                    {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                      <option key={key} value={key}>
+                        {SORT_LABELS[key]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="label-caps shrink-0">
+                  {sortedFolders.filter((f) => f.decks.length > 0).length +
+                    (sortedUnfoldered.length > 0 ? 1 : 0)}{" "}
+                  {sortedFolders.filter((f) => f.decks.length > 0).length +
+                    (sortedUnfoldered.length > 0 ? 1 : 0) ===
+                  1
+                    ? "section"
+                    : "sections"}
+                </p>
+              </div>
             </div>
 
             <div className="space-y-10">
-              {folders.map(
+              {sortedFolders.map(
                 (folder) =>
                   folder.decks.length > 0 && (
                     <FolderGroup
@@ -382,9 +521,9 @@ export function HomePage({
                   )
               )}
 
-              {unfolderedDecks.length > 0 && (
+              {sortedUnfoldered.length > 0 && (
                 <div className="space-y-4">
-                  {folders.some((f) => f.decks.length > 0) && (
+                  {sortedFolders.some((f) => f.decks.length > 0) && (
                     <div className="flex items-baseline gap-3">
                       <p className="label-caps">Uncategorised</p>
                       <div className="h-px flex-1 bg-border" />
@@ -395,7 +534,7 @@ export function HomePage({
                    *  which lets a long pack name blow past the viewport
                    *  on iPhone and create a horizontal scroll. */}
                   <div className="flex w-full min-w-0 flex-col gap-2">
-                    {unfolderedDecks.map((deck, i) => (
+                    {sortedUnfoldered.map((deck, i) => (
                       <div
                         key={deck.id}
                         className="reveal w-full min-w-0"
@@ -411,6 +550,8 @@ export function HomePage({
                           emoji={deck.emoji}
                           cardCount={deck._count.cards}
                           grade={deck.grade}
+                          lastStudiedAt={deck.lastStudiedAt}
+                          createdAt={deck.createdAt}
                         />
                       </div>
                     ))}
