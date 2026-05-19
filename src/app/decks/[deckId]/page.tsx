@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { prisma } from "@/lib/db";
 import { ensureUser } from "@/lib/auth";
-import { isProUser } from "@/lib/subscription";
+import { isProUser, canViewAiImages } from "@/lib/subscription";
 import { notFound } from "next/navigation";
 import { DeckView } from "./deck-view";
 import { masteryLevel, letterGrade } from "@/lib/sm2";
@@ -53,7 +53,10 @@ export default async function DeckPage({
     gradeDistribution[letterGrade(cm.mastery)]++;
   }
 
-  const isPro = await isProUser(userId);
+  const [isPro, canView] = await Promise.all([
+    isProUser(userId),
+    canViewAiImages(userId),
+  ]);
 
   return (
     <Suspense>
@@ -63,6 +66,7 @@ export default async function DeckPage({
         avgMastery={avgMastery}
         gradeDistribution={gradeDistribution}
         isPro={isPro}
+        canViewAiImages={canView}
       />
     </Suspense>
   );

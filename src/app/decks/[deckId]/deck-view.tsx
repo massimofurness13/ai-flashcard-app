@@ -44,9 +44,20 @@ interface DeckViewProps {
   avgMastery: number;
   gradeDistribution: GradeDistribution;
   isPro?: boolean;
+  /** Drives whether AI illustrations render unblurred. True for
+   *  active Pro users AND for non-Pro users still in their 30-day
+   *  free trial. Computed server-side via canViewAiImages(). */
+  canViewAiImages?: boolean;
 }
 
-export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, isPro = false }: DeckViewProps) {
+export function DeckView({
+  deck,
+  overallGrade,
+  avgMastery,
+  gradeDistribution,
+  isPro = false,
+  canViewAiImages = false,
+}: DeckViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [generationActive, setGenerationActive] = useState(false);
@@ -437,19 +448,34 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
                 </div>
                 {card.imageUrl && (
                   <div className="mb-3 flex justify-center">
-                    {/* Always show the illustration. Free users who
-                     *  spent their 25 lifetime credits paid for these,
-                     *  Pro users earned them through subscription —
-                     *  either way, the image is theirs and is never
-                     *  blurred. (The previous lapsed-Pro "Resubscribe
-                     *  to view" overlay has been retired in favour of
-                     *  a friendlier "you own what you generated" model.) */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={card.imageUrl}
-                      alt=""
-                      className="max-h-28 max-w-full object-contain rounded-lg"
-                    />
+                    {canViewAiImages ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={card.imageUrl}
+                        alt=""
+                        className="max-h-28 max-w-full object-contain rounded-lg"
+                      />
+                    ) : (
+                      // Free trial expired (or Pro lapsed) — blur
+                      // the AI illustration but keep it in the DOM so
+                      // upgrade-to-view is instant. Image bytes never
+                      // leave the user's storage; only the *view*
+                      // entitlement is paywalled.
+                      <div className="relative w-full max-h-28 rounded-lg overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={card.imageUrl}
+                          alt=""
+                          aria-hidden
+                          className="w-full max-h-28 object-contain blur-2xl scale-110 opacity-70"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/30 backdrop-blur-sm">
+                          <div className="rounded bg-background/85 px-2 py-1 text-[10px] font-medium shadow">
+                            AI image locked
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 <p className="font-medium text-sm line-clamp-2">{card.front}</p>
