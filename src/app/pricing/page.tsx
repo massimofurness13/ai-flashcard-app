@@ -10,32 +10,36 @@ import { openStripeCheckout } from "@/lib/stripe-checkout";
 
 type Plan = "monthly" | "yearly";
 
-const features = {
-  free: [
-    "Create unlimited decks and cards",
-    "Spaced repetition with proven SM-2 algorithm",
-    "Progress tracking and mastery statistics",
-    "Import from CSV, TSV, XML, and more",
-    "Upload your own images to cards",
-    "Text-to-speech with language options",
-    "Light and dark themes",
-  ],
-  pro: [
-    "Everything in Free, plus:",
-    "AI-powered flashcard generation",
-    "AI illustration generation for cards",
-    "Anki .apkg import and export",
-    "Priority support from our team",
-  ],
-};
+// Feature buckets ordered for skimming, not for selling. Lift any
+// line up if user research shows it's the conversion driver.
+const FREE_FEATURES = [
+  "Unlimited decks and cards",
+  "AI-powered card generation from any text",
+  "Spaced repetition with proven SM-2 algorithm",
+  "Progress tracking and mastery statistics",
+  "Anki .apkg import and export — no lock-in",
+  "Upload your own images to cards",
+  "Text-to-speech with native voices in 9+ languages",
+  "25 AI image credits + 30-day viewing window",
+  "Light and dark themes",
+];
+
+// What you actually pay for. Everything in Free works on Pro too —
+// the differentiator is the image allowance and the indefinite
+// viewing entitlement.
+const PRO_FEATURES = [
+  "Everything in Free, plus:",
+  "AI illustrations stay visible forever (no 30-day blur)",
+  "Generate from any pack, any time",
+  "Priority support from our team",
+];
 
 export default function PricingPage() {
   const router = useRouter();
-  const [plan, setPlan] = useState<Plan>("monthly");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<Plan | null>(null);
 
-  async function handleUpgrade() {
-    setLoading(true);
+  async function handleUpgrade(plan: Plan) {
+    setLoading(plan);
     try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
@@ -51,88 +55,237 @@ export default function PricingPage() {
     } catch {
       alert("Something went wrong. Please try again.");
     }
-    setLoading(false);
+    setLoading(null);
   }
 
-  // Math we want users to actually see — yearly is "three months free."
-  // Monthly equivalent of yearly: $79.99 / 12 = $6.66/mo
-  const monthlyPriceLabel = plan === "yearly" ? "$6.66" : "$8.99";
-  const billingLabel =
-    plan === "yearly"
-      ? "$79.99 billed once a year"
-      : "billed monthly";
-  const ctaLabel = loading
-    ? "Opening checkout…"
-    : plan === "yearly"
-      ? "Get yearly Pro · $79.99"
-      : "Get monthly Pro · $8.99";
+  // Maths the user benefits from seeing. Yearly is the same per-month
+  // headline a Pro user pays divided across 12 months, plus the bulk
+  // credits — that's the story we want to lead with.
+  const YEARLY_TOTAL = 79.99;
+  const MONTHLY_PRICE = 8.99;
+  const YEARLY_EQUIV_PER_MONTH = (YEARLY_TOTAL / 12).toFixed(2); // "6.67"
+  const YEARLY_SAVINGS = (MONTHLY_PRICE * 12 - YEARLY_TOTAL).toFixed(2); // "27.89"
+  const YEARLY_SAVINGS_PCT = Math.round(
+    ((MONTHLY_PRICE * 12 - YEARLY_TOTAL) / (MONTHLY_PRICE * 12)) * 100,
+  ); // 26
 
   return (
-    <div className="max-w-4xl mx-auto py-8 space-y-8">
-      <div className="text-center space-y-2">
+    <div className="max-w-6xl mx-auto py-8 space-y-10">
+      <div className="text-center space-y-3 max-w-2xl mx-auto">
         <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
-          {APP_NAME} Pricing
+          {APP_NAME} pricing
         </h1>
         <p className="text-muted-foreground">
-          Start for free with no commitment. Upgrade whenever you&apos;re ready
-          for more.
+          Start for free. Upgrade when you&apos;re ready to illustrate at scale.
         </p>
       </div>
 
-      {/* Monthly / Yearly toggle. Sits above the cards so the user
-       * sees one clear price decision rather than two parallel CTAs. */}
-      <div className="flex justify-center">
-        <div className="inline-flex items-center rounded-full border border-border bg-card p-1 text-sm">
-          <button
-            type="button"
-            onClick={() => setPlan("monthly")}
-            className={`rounded-full px-4 py-1.5 transition-colors ${
-              plan === "monthly"
-                ? "bg-primary text-primary-foreground shadow"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Monthly
-          </button>
-          <button
-            type="button"
-            onClick={() => setPlan("yearly")}
-            className={`flex items-center gap-2 rounded-full px-4 py-1.5 transition-colors ${
-              plan === "yearly"
-                ? "bg-primary text-primary-foreground shadow"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Yearly
-            <span
-              className={`text-[10px] font-bold uppercase tracking-wide rounded-full px-1.5 py-0.5 ${
-                plan === "yearly"
-                  ? "bg-primary-foreground/20 text-primary-foreground"
-                  : "bg-[color:var(--glow)]/20 text-[color:var(--glow)]"
-              }`}
-            >
-              3 months free
-            </span>
-          </button>
-        </div>
-      </div>
+      {/*
+        Three-column lineup. Yearly is the recommended plan: same
+        total credits as a year of monthly (500 × 12 = 6,000) but
+        ALL unlocked on day one, so a user migrating from Anki or
+        bulk-generating a whole library doesn't have to wait twelve
+        billing cycles. That's the conversion story; the card itself
+        is widened, ringed in primary, and lifted with a "Best
+        value" eyebrow chip.
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Free Tier */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="font-editorial text-xl">Free</span>
-              <span className="font-editorial text-2xl">$0</span>
+        Mobile order intentionally puts Yearly first (most important
+        recommendation), then Monthly, then Free at the bottom. On
+        desktop the visual order is Free → Monthly → Yearly so the
+        eye walks left-to-right into the recommended pick.
+      */}
+      <div className="grid gap-6 md:grid-cols-3 md:items-start">
+        {/* ── Yearly Pro — featured ─────────────────────────────── */}
+        <Card className="order-1 md:order-3 border-2 border-primary relative overflow-visible md:scale-[1.02] shadow-xl">
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow whitespace-nowrap">
+            ⭐ Best value · Save ${YEARLY_SAVINGS}/yr
+          </div>
+          <CardHeader className="pt-6">
+            <CardTitle className="flex items-baseline justify-between gap-2">
+              <span className="font-editorial text-xl">Pro · Yearly</span>
+              <div className="text-right">
+                <span className="font-editorial text-2xl">
+                  ${YEARLY_EQUIV_PER_MONTH}
+                </span>
+                <span className="text-sm text-muted-foreground">/mo</span>
+              </div>
             </CardTitle>
-            <p className="text-sm text-muted-foreground">Forever free</p>
+            <p className="text-sm text-muted-foreground">
+              ${YEARLY_TOTAL.toFixed(2)} billed once a year — ~{YEARLY_SAVINGS_PCT}% off monthly
+            </p>
           </CardHeader>
           <CardContent>
+            {/* The whole reason yearly exists: not "cheaper per month"
+             * — that's a footnote. The headline is "all 6,000 credits
+             * available on day one", so an Anki migrator or someone
+             * pre-illustrating a whole textbook can binge in week one
+             * and not bump into a monthly cap. */}
+            <div className="mb-4 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-sm">
+              <p className="font-editorial text-lg font-medium leading-tight">
+                6,000 image credits.
+                <br />
+                <span className="italic text-[color:var(--primary)]">
+                  All unlocked on day one.
+                </span>
+              </p>
+              <p className="text-muted-foreground text-xs mt-2 leading-relaxed">
+                Illustrate your entire library in one weekend — no monthly
+                ceiling, no waiting twelve cycles. Equivalent to{" "}
+                <span className="text-foreground font-medium">
+                  1,200 Premium illustrations
+                </span>{" "}
+                or{" "}
+                <span className="text-foreground font-medium">
+                  6,000 Quick illustrations
+                </span>
+                . Top-up bundles purchased on top stack and never expire.
+              </p>
+            </div>
+
             <ul className="space-y-3">
-              {features.free.map((f) => (
+              {PRO_FEATURES.map((f) => (
                 <li key={f} className="flex items-start gap-2 text-sm">
-                  <svg className="h-5 w-5 text-[color:var(--glow)] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  <svg
+                    className="h-5 w-5 text-primary shrink-0 mt-0.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  <span
+                    className={f.startsWith("Everything") ? "font-medium" : ""}
+                  >
+                    {f}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <Button
+              className="w-full mt-6"
+              onClick={() => handleUpgrade("yearly")}
+              disabled={loading !== null}
+            >
+              {loading === "yearly"
+                ? "Opening checkout…"
+                : `Get yearly Pro · $${YEARLY_TOTAL.toFixed(2)}`}
+            </Button>
+            <p className="mt-3 text-[11px] text-muted-foreground text-center leading-relaxed">
+              You&apos;ll be redirected to Stripe to complete payment securely.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* ── Monthly Pro ────────────────────────────────────────── */}
+        <Card className="order-2 md:order-2 relative overflow-hidden">
+          <CardHeader>
+            <CardTitle className="flex items-baseline justify-between gap-2">
+              <span className="font-editorial text-xl">Pro · Monthly</span>
+              <div className="text-right">
+                <span className="font-editorial text-2xl">
+                  ${MONTHLY_PRICE}
+                </span>
+                <span className="text-sm text-muted-foreground">/mo</span>
+              </div>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">Billed every month</p>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 rounded-xl border border-border bg-muted/30 p-4 text-sm">
+              <p className="font-medium">500 image credits per month</p>
+              <p className="text-muted-foreground text-xs mt-2 leading-relaxed">
+                Refreshes every billing cycle. Equivalent to 100 Premium or 500
+                Quick illustrations. Unused credits don&apos;t roll over, but
+                top-up bundles purchased on top stack and never expire.
+              </p>
+            </div>
+
+            <ul className="space-y-3">
+              {PRO_FEATURES.map((f) => (
+                <li key={f} className="flex items-start gap-2 text-sm">
+                  <svg
+                    className="h-5 w-5 text-primary shrink-0 mt-0.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  <span
+                    className={f.startsWith("Everything") ? "font-medium" : ""}
+                  >
+                    {f}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <Button
+              variant="outline"
+              className="w-full mt-6"
+              onClick={() => handleUpgrade("monthly")}
+              disabled={loading !== null}
+            >
+              {loading === "monthly"
+                ? "Opening checkout…"
+                : `Get monthly Pro · $${MONTHLY_PRICE}`}
+            </Button>
+            <p className="mt-3 text-[11px] text-muted-foreground text-center leading-relaxed">
+              You&apos;ll be redirected to Stripe to complete payment securely.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* ── Free ───────────────────────────────────────────────── */}
+        <Card className="order-3 md:order-1">
+          <CardHeader>
+            <CardTitle className="flex items-baseline justify-between gap-2">
+              <span className="font-editorial text-xl">Free</span>
+              <div className="text-right">
+                <span className="font-editorial text-2xl">$0</span>
+                <span className="text-sm text-muted-foreground">/forever</span>
+              </div>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              The whole app — try every Pro feature for 30 days
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 rounded-xl border border-border bg-muted/30 p-4 text-sm">
+              <p className="font-medium">25 starter image credits</p>
+              <p className="text-muted-foreground text-xs mt-2 leading-relaxed">
+                Enough for 5 Premium or 25 Quick illustrations. AI illustrations
+                you generate stay visible for the first 30 days, then blur
+                until you upgrade — your data is never deleted.
+              </p>
+            </div>
+
+            <ul className="space-y-3">
+              {FREE_FEATURES.map((f) => (
+                <li key={f} className="flex items-start gap-2 text-sm">
+                  <svg
+                    className="h-5 w-5 text-[color:var(--glow)] shrink-0 mt-0.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                   {f}
                 </li>
@@ -145,76 +298,6 @@ export default function PricingPage() {
             >
               Current Plan
             </Button>
-          </CardContent>
-        </Card>
-
-        {/* Pro Tier */}
-        <Card className="border-primary relative overflow-hidden">
-          <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-lg">
-            POPULAR
-          </div>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="font-editorial text-xl">Pro</span>
-              <div className="text-right">
-                <span className="font-editorial text-2xl">
-                  {monthlyPriceLabel}
-                </span>
-                <span className="text-sm text-muted-foreground">/mo</span>
-              </div>
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">{billingLabel}</p>
-          </CardHeader>
-          <CardContent>
-            {/* Plan-specific credit allowance callout — most important
-             * info on the page once the user has decided on Pro. */}
-            <div className="mb-4 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              {plan === "yearly" ? (
-                <>
-                  <p className="font-medium">
-                    6,000 AI image credits — all unlocked upfront
-                  </p>
-                  <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
-                    Migrating from Anki? Burst-illustrate your whole library on
-                    day one. Unused credits expire at the end of the year, but
-                    any top-up bundles you buy on top stack and never expire.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium">
-                    500 AI image credits per month
-                  </p>
-                  <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
-                    Refreshes every billing cycle. Top-up bundles you buy on top
-                    stack and never expire.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <ul className="space-y-3">
-              {features.pro.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-sm">
-                  <svg className="h-5 w-5 text-primary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className={f.startsWith("Everything") ? "font-medium" : ""}>
-                    {f}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <Button
-              className="w-full mt-6"
-              onClick={handleUpgrade}
-              disabled={loading}
-            >
-              {ctaLabel}
-            </Button>
-            <p className="mt-3 text-[11px] text-muted-foreground text-center leading-relaxed">
-              You&apos;ll be redirected to Stripe to complete payment securely.
-            </p>
           </CardContent>
         </Card>
       </div>
