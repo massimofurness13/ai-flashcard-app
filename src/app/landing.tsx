@@ -136,7 +136,7 @@ const faq = [
   },
   {
     q: "What happens if I cancel?",
-    a: "Your text cards stay forever. AI images you created during Pro stay viewable while you're subscribed; if you cancel, they get a 'Resubscribe to view' overlay. Study progress and decks are never deleted.",
+    a: "Everything you create stays yours. Text cards, study progress, and any AI illustrations you generated (whether on the free tier with your starter credits or on Pro) stay viewable forever, even after a Pro subscription is cancelled. Decks are never deleted.",
   },
   {
     q: "Is there a free trial of Pro?",

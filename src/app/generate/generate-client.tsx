@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UpgradeBanner } from "@/components/subscription/upgrade-banner";
 import { ImageTierSlider } from "@/components/generate/image-tier-slider";
 import { estimateImageGenTime } from "@/lib/utils";
 import { VOICE_CATALOG, getVoiceGroups } from "@/lib/voice-catalog";
@@ -211,13 +210,10 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
 
     // Anki: hand off entirely to the import endpoint. The AI flow is
     // skipped — Anki decks already have well-formed cards and SM-2
-    // history we want to preserve.
+    // history we want to preserve. Free to all authenticated users
+    // ("no lock-in" / "your data, your app" — only AI image generation
+    // costs credits).
     if (isAnki) {
-      if (!isPro) {
-        setError("Anki import is a Pro feature. Upgrade to import .apkg files.");
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
       setAnkiFileName(file.name);
       setAnkiImporting(true);
       setAnkiResult(null);
@@ -750,20 +746,11 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
           ? "generating"
           : "input";
 
-  if (!isPro) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Create a Pack</h1>
-          <p className="text-muted-foreground mt-1">
-            Paste material, upload a file, or describe what you want to study —
-            we&apos;ll do the rest.
-          </p>
-        </div>
-        <UpgradeBanner feature="AI card generation" />
-      </div>
-    );
-  }
+  // No early-return paywall: AI text card generation is free for
+  // everyone now. The `isPro` prop is still threaded through to
+  // child components (image generator, etc.) where it nudges
+  // affordances rather than blocking access. Image generation
+  // itself is gated by the credit-quota system, not isPro.
 
   return (
     <div className="space-y-6">

@@ -4,7 +4,6 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UpgradeBanner } from "@/components/subscription/upgrade-banner";
 
 interface ImportResult {
   decksCreated: number;
@@ -60,9 +59,10 @@ export function AnkiImport({ isPro }: AnkiImportProps) {
     }
   }
 
-  if (!isPro) {
-    return <UpgradeBanner feature="Anki import" />;
-  }
+  // Anki import is free for all authenticated users — "no lock-in"
+  // is a load-bearing promise. The previous paywall has been
+  // removed; the `isPro` prop is still threaded through callers but
+  // unused here.
 
   return (
     <Card>

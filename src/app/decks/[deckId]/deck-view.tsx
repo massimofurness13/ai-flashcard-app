@@ -437,31 +437,19 @@ export function DeckView({ deck, overallGrade, avgMastery, gradeDistribution, is
                 </div>
                 {card.imageUrl && (
                   <div className="mb-3 flex justify-center">
-                    {isPro ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={card.imageUrl}
-                        alt=""
-                        className="max-h-28 max-w-full object-contain rounded-lg"
-                      />
-                    ) : (
-                      // Lapsed Pro user — blur the AI illustration but
-                      // keep it in the DOM so resubscribe is instant.
-                      <div className="relative w-full max-h-28 rounded-lg overflow-hidden">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={card.imageUrl}
-                          alt=""
-                          aria-hidden
-                          className="w-full max-h-28 object-contain blur-2xl scale-110 opacity-70"
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center bg-background/30 backdrop-blur-sm">
-                          <div className="rounded bg-background/85 px-2 py-1 text-[10px] font-medium shadow">
-                            AI image locked
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    {/* Always show the illustration. Free users who
+                     *  spent their 25 lifetime credits paid for these,
+                     *  Pro users earned them through subscription —
+                     *  either way, the image is theirs and is never
+                     *  blurred. (The previous lapsed-Pro "Resubscribe
+                     *  to view" overlay has been retired in favour of
+                     *  a friendlier "you own what you generated" model.) */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={card.imageUrl}
+                      alt=""
+                      className="max-h-28 max-w-full object-contain rounded-lg"
+                    />
                   </div>
                 )}
                 <p className="font-medium text-sm line-clamp-2">{card.front}</p>
