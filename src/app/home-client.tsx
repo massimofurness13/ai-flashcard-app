@@ -34,6 +34,13 @@ interface HomePageProps {
   dailyGoal: number;
   streak: number;
   goalHitCelebrationShown: boolean;
+  /** True once the user has clicked through the FirstTimeWelcome
+   *  flow at least once (either accepting the starter pack or
+   *  skipping it). Once true, we never re-show the multi-step
+   *  welcome — even if the user has zero decks — because otherwise
+   *  a user who picked "I'd rather build my own" gets dropped back
+   *  into the welcome on the next render and is stuck in a loop. */
+  onboardingCompleted: boolean;
 }
 
 function getGreeting(): string {
@@ -89,6 +96,7 @@ export function HomePage({
   dailyGoal,
   streak,
   goalHitCelebrationShown,
+  onboardingCompleted,
 }: HomePageProps) {
   const hasDecks =
     folders.some((f) => f.decks.length > 0) || unfolderedDecks.length > 0;
@@ -102,15 +110,45 @@ export function HomePage({
     setToday(getTodayLabel());
   }, []);
 
-  // Brand-new user → tutorial-style welcome. Bypasses the rest of
-  // the home page entirely; once they create their first pack they
-  // get the full experience on next load. Must come AFTER all hook
-  // calls so React's rules of hooks aren't violated by the early
-  // return path.
-  if (!hasDecks) {
+  // Brand-new user → tutorial-style welcome. Only triggers if the
+  // user has NEVER been through onboarding. A user who skipped the
+  // starter pack (cloneStarterPack: false) has onboardingCompleted
+  // === true even with zero decks; without this guard they'd be
+  // bounced back into FirstTimeWelcome by router.refresh, see the
+  // stuck "Setting up your library…" button, and have no way to
+  // escape. Must come AFTER all hook calls so React's rules of
+  // hooks aren't violated by the early return path.
+  if (!onboardingCompleted) {
     return (
       <div className="space-y-6 sm:space-y-8">
         <FirstTimeWelcome userName={userName || "there"} />
+      </div>
+    );
+  }
+
+  // Onboarded but empty library — happens when the user picked
+  // "I'd rather build my own" on the welcome flow, or when an
+  // established user deletes every deck. Show a warm empty-state
+  // with the CreateMenu front and centre so they can make their
+  // first pack without bouncing back through the welcome.
+  if (!hasDecks) {
+    return (
+      <div className="reveal min-h-[60vh] flex items-center justify-center px-4 py-12">
+        <div className="max-w-xl text-center space-y-6">
+          <div className="text-5xl" aria-hidden>📚</div>
+          <h1 className="font-editorial text-3xl font-medium leading-tight text-foreground sm:text-4xl">
+            Your library&apos;s ready,{" "}
+            <span className="italic text-[color:var(--primary)]">{userName}</span>.
+          </h1>
+          <p className="text-base leading-relaxed text-muted-foreground">
+            Drop in your first pack and you&apos;ll be studying inside a minute.
+            Paste any text, upload a file, pick a topic, or import from Anki —
+            whatever&apos;s easiest.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <CreateMenu />
+          </div>
+        </div>
       </div>
     );
   }
