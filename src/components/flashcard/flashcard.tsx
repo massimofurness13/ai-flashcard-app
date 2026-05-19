@@ -35,10 +35,16 @@ interface FlashcardProps {
    *  it gets cancelled. Going from paused → unpaused does NOT replay
    *  audio for the same side — the user has already heard it. */
   paused?: boolean;
-  /** When false, AI-generated images are blurred behind a "Resubscribe
-   *  to view" overlay. Lapsed Pro users keep their text + audio but lose
-   *  visibility on illustrations until they renew. */
+  /** Legacy prop, kept for callers that thread it through but no
+   *  longer used for visibility gating here. Pricing/affordance hints
+   *  elsewhere may still want it. */
   isPro?: boolean;
+  /** When false, AI-generated images are blurred behind a "Subscribe
+   *  to view" overlay. True for active Pro users AND non-Pro users
+   *  still inside their 30-day free image-viewing trial. Computed
+   *  via canViewAiImages() server-side or read from QuotaState
+   *  client-side. */
+  canViewAiImages?: boolean;
   className?: string;
 }
 
@@ -59,8 +65,13 @@ export function Flashcard({
   onAudioEnd,
   paused = false,
   isPro = true,
+  canViewAiImages = true,
   className,
 }: FlashcardProps) {
+  // Suppress unused-var lint while still accepting the prop for API
+  // compatibility — see prop docs above.
+  void isPro;
+
   // Prevent the flip animation from playing on initial render
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -145,7 +156,7 @@ export function Flashcard({
               <FlashcardImage
                 imageUrl={imageUrl}
                 cardText={front}
-                isPro={isPro}
+                canViewAiImages={canViewAiImages}
                 imageTier={imageTier}
               />
             </div>
@@ -169,7 +180,7 @@ export function Flashcard({
               <FlashcardImage
                 imageUrl={imageUrl}
                 cardText={front}
-                isPro={isPro}
+                canViewAiImages={canViewAiImages}
                 imageTier={imageTier}
               />
             </div>

@@ -135,13 +135,15 @@ export function StudySession({
       },
   );
 
-  // Pro status drives whether AI illustrations show in clear or
-  // behind a "Resubscribe to view" blur. Hook is shared with the
-  // credits pill / quota checks so only one /api/images/quota fetch
-  // happens during the session. Default to true while loading so we
-  // don't briefly flash the blur on an active Pro user.
+  // Image-view entitlement drives whether AI illustrations show in
+  // clear or behind a "Subscribe to view" blur. It's true for Pro
+  // users AND for non-Pro users still inside their 30-day free
+  // image-viewing trial. Default to true while loading so we don't
+  // briefly flash the blur for an entitled user — the next quota
+  // poll corrects it within ~1s if they're not actually entitled.
   const { quota } = useCreditBalance();
   const isPro = quota?.isPro ?? true;
+  const canViewAiImages = quota?.canViewAiImages ?? true;
 
 
   // Pre-compute each card's initial orientation ONCE at session start.
@@ -406,6 +408,7 @@ export function StudySession({
           isFlipped={isFlipped}
           onFlip={handleFlip}
           isPro={isPro}
+          canViewAiImages={canViewAiImages}
           frontVoice={frontVoiceName}
           backVoice={backVoiceName}
           frontLanguageCode={
