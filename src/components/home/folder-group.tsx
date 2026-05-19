@@ -10,6 +10,9 @@ interface Deck {
   _count: { cards: number };
   grade: string;
   lastStudiedAt?: string | null;
+  /** Deck birth date as an ISO string. Drives the "created Nd ago"
+   *  bit of the metadata row inside DeckCard. */
+  createdAt?: string | null;
 }
 
 interface FolderGroupProps {
@@ -72,6 +75,7 @@ export function FolderGroup({
               grade={deck.grade}
               folderColor={color}
               lastStudiedAt={deck.lastStudiedAt}
+              createdAt={deck.createdAt}
             />
           ))}
         </div>

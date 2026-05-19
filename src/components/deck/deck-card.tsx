@@ -10,9 +10,21 @@ interface DeckCardProps {
   cardCount: number;
   grade: string;
   folderColor?: string | null;
+  /** ISO timestamp of the most recent review of any card in this
+   *  pack. Null when the pack has never been studied. */
   lastStudiedAt?: string | null;
+  /** ISO timestamp of when the pack was first created. Shown in the
+   *  metadata row as "created Nd ago". Optional so older call sites
+   *  (and the few tests that hand-roll deck props) keep working. */
+  createdAt?: string | null;
 }
 
+/**
+ * Compact relative-time formatter. Short units ("3d", "2w", "6mo")
+ * fit comfortably on the second metadata row of a deck card without
+ * pushing layout to two-line wrapping. Tradeoff: less natural to
+ * read out loud than "3 days ago" but visually denser.
+ */
 function formatRelative(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60_000);
@@ -30,10 +42,12 @@ function formatRelative(iso: string): string {
 }
 
 /**
- * Single-line pack card. Compact by design so the user sees as many
- * packs per screen as possible — emoji, title, card count, and grade
- * status are all on one row. Replaces the old two-zone card whose
- * header/footer split wasted vertical space.
+ * Two-line pack card. Title + grade indicator on top row; card
+ * count, last-reviewed, and created-at on a metadata row beneath.
+ * The metadata row earns the extra vertical space by giving users
+ * the "should I study this next?" context they need to scan their
+ * library — without it they had to click into every pack to see
+ * when they'd last reviewed it.
  */
 export function DeckCard({
   id,
@@ -43,6 +57,7 @@ export function DeckCard({
   grade,
   folderColor,
   lastStudiedAt,
+  createdAt,
 }: DeckCardProps) {
   const isStudied = grade !== "New";
   const gradeLabel = isStudied ? grade : "New";
@@ -54,7 +69,7 @@ export function DeckCard({
     // min-width still respects content width — caused the home page
     // to scroll horizontally on iPhone width.
     <Link href={`/decks/${id}`} className="block w-full min-w-0">
-      <article className="editorial-card group relative flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3 py-2.5 transition-colors hover:border-[color:var(--primary)]/40 sm:px-4">
+      <article className="editorial-card group relative w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card px-3 py-2.5 transition-colors hover:border-[color:var(--primary)]/40 sm:px-4">
         {/* Folder-color spine */}
         {folderColor && (
           <div
@@ -64,41 +79,51 @@ export function DeckCard({
           />
         )}
 
-        {/* Emoji — fixed-width slot so titles align across rows */}
-        <span
-          aria-hidden
-          className="shrink-0 text-lg leading-none opacity-80 transition-opacity group-hover:opacity-100"
-        >
-          {emoji || "📚"}
-        </span>
-
-        {/* Title — takes all remaining space, truncates on overflow */}
-        <h3 className="min-w-0 flex-1 truncate font-editorial text-base font-medium leading-tight text-card-foreground transition-colors group-hover:text-[color:var(--primary)]">
-          {name}
-        </h3>
-
-        {/* Meta — right-aligned, all inline. Mobile shows just the
-         *  count + grade dot to keep the row from breaking on iPhone
-         *  width. Tablet+ adds the grade letter and last-studied. */}
-        <div className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
-          {lastStudiedAt && (
-            <>
-              <span className="hidden md:inline">
-                {formatRelative(lastStudiedAt)}
-              </span>
-              <span
-                aria-hidden
-                className="hidden h-1 w-1 rounded-full bg-muted-foreground/40 md:inline-block"
-              />
-            </>
-          )}
-          <span>{cardCount}</span>
+        {/* Title row — emoji + name + grade indicator on the right. */}
+        <div className="flex w-full min-w-0 items-center gap-3">
           <span
             aria-hidden
-            className="h-1.5 w-1.5 rounded-full"
-            style={{ backgroundColor: gradeColor(grade as LetterGrade) }}
-          />
-          <span className="hidden sm:inline">{gradeLabel}</span>
+            className="shrink-0 text-lg leading-none opacity-80 transition-opacity group-hover:opacity-100"
+          >
+            {emoji || "📚"}
+          </span>
+
+          <h3 className="min-w-0 flex-1 truncate font-editorial text-base font-medium leading-tight text-card-foreground transition-colors group-hover:text-[color:var(--primary)]">
+            {name}
+          </h3>
+
+          <div className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
+            <span
+              aria-hidden
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: gradeColor(grade as LetterGrade) }}
+            />
+            <span className="hidden sm:inline">{gradeLabel}</span>
+          </div>
+        </div>
+
+        {/* Metadata row — card count, last-reviewed, created. Each
+         *  piece is interpunct-separated so a deck never studied
+         *  reads "12 cards · never reviewed · created 3d ago"
+         *  rather than dropping fields and shifting alignment.
+         *  Indented to align with the title so the eye reads it as
+         *  a continuation of the row above, not a sibling block. */}
+        <div className="mt-1.5 flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 pl-[28px] text-[11px] text-muted-foreground/85">
+          <span>
+            {cardCount} {cardCount === 1 ? "card" : "cards"}
+          </span>
+          <span aria-hidden className="opacity-50">·</span>
+          <span>
+            {lastStudiedAt
+              ? `reviewed ${formatRelative(lastStudiedAt)}`
+              : "never reviewed"}
+          </span>
+          {createdAt && (
+            <>
+              <span aria-hidden className="opacity-50">·</span>
+              <span>created {formatRelative(createdAt)}</span>
+            </>
+          )}
         </div>
       </article>
     </Link>

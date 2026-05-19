@@ -82,12 +82,19 @@ export default async function Home({
     lastReviewedRows.map((r) => [r.deckId, r.lastAt])
   );
 
+  // Pre-serialise Date columns to ISO strings so they survive the
+  // server → client component boundary. Prisma hands back Date
+  // instances but a client component receiving Date over the wire
+  // gets a plain object — sorting and `new Date(value)` work either
+  // way, but typing is cleaner if we standardise here.
   const foldersWithGrades = await Promise.all(
     folders.map(async (folder) => ({
       ...folder,
       decks: await Promise.all(
         folder.decks.map(async (deck) => ({
           ...deck,
+          createdAt: deck.createdAt.toISOString(),
+          updatedAt: deck.updatedAt.toISOString(),
           grade: await computeDeckGrade(deck.id),
           lastStudiedAt: lastReviewedMap.get(deck.id)?.toISOString() ?? null,
         }))
@@ -98,6 +105,8 @@ export default async function Home({
   const unfolderedWithGrades = await Promise.all(
     unfolderedDecks.map(async (deck) => ({
       ...deck,
+      createdAt: deck.createdAt.toISOString(),
+      updatedAt: deck.updatedAt.toISOString(),
       grade: await computeDeckGrade(deck.id),
       lastStudiedAt: lastReviewedMap.get(deck.id)?.toISOString() ?? null,
     }))
