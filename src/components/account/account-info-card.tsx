@@ -50,11 +50,36 @@ export function AccountInfoCard() {
   const [info, setInfo] = useState<AccountInfo | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Re-fetch on mount AND when the tab regains focus / becomes
+  // visible. Critical for the post-checkout UX: Stripe opens in a
+  // new tab, the user pays, that tab auto-closes, the user looks
+  // back at this tab — without these listeners the card stays
+  // stuck on "Upgrade to Pro" because useEffect with [] only fires
+  // once. With them, the card refreshes the moment the user
+  // returns and shows their new Pro state.
   useEffect(() => {
-    fetch("/api/user/me")
-      .then((r) => r.json())
-      .then(setInfo)
-      .catch(() => setInfo(null));
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch("/api/user/me", { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled) setInfo(data);
+      } catch {
+        if (!cancelled) setInfo(null);
+      }
+    }
+    load();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    const onFocus = () => load();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   // "Upgrade to Pro" now sends the user to /pricing instead of
