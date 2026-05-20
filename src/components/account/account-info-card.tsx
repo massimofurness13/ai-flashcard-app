@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   openStripeCheckout,
+  dismissPreparedCheckout,
   prepareStripeCheckout,
 } from "@/lib/stripe-checkout";
 
@@ -66,11 +67,11 @@ export function AccountInfoCard() {
       if (data.url) {
         openStripeCheckout(data.url, prepared);
       } else {
-        prepared?.close();
+        dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
         alert(data.error || "Could not start checkout. Please try again.");
       }
     } catch {
-      prepared?.close();
+      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
       alert("Could not start checkout. Please try again.");
     } finally {
       setLoading(false);
@@ -88,11 +89,11 @@ export function AccountInfoCard() {
       if (data.url) {
         openStripeCheckout(data.url, prepared);
       } else {
-        prepared?.close();
+        dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
         alert(data.error || "Could not open the billing portal.");
       }
     } catch {
-      prepared?.close();
+      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
       alert("Could not open the billing portal.");
     } finally {
       setLoading(false);

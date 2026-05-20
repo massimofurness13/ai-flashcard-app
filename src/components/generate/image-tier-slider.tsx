@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CREDIT_BUNDLES } from "@/components/subscription/quota-exceeded-dialog";
 import {
   openStripeCheckout,
+  dismissPreparedCheckout,
   prepareStripeCheckout,
 } from "@/lib/stripe-checkout";
 import {
@@ -130,11 +131,11 @@ export function ImageTierSlider({
       if (data.url) {
         openStripeCheckout(data.url, prepared);
       } else {
-        prepared?.close();
+        dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
         alert(data.error || "Could not start checkout. Please try again.");
       }
     } catch {
-      prepared?.close();
+      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
       alert("Network error. Please try again.");
     } finally {
       setPurchasing(null);

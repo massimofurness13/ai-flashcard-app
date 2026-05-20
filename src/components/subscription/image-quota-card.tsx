@@ -8,6 +8,7 @@ import { formatRelativeDate } from "@/lib/utils";
 import { CREDIT_BUNDLES } from "./quota-exceeded-dialog";
 import {
   openStripeCheckout,
+  dismissPreparedCheckout,
   prepareStripeCheckout,
 } from "@/lib/stripe-checkout";
 
@@ -40,11 +41,11 @@ export function ImageQuotaCard() {
       if (data.url) {
         openStripeCheckout(data.url, prepared);
       } else {
-        prepared?.close();
+        dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
         alert(data.error || "Could not start checkout.");
       }
     } catch {
-      prepared?.close();
+      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
       alert("Network error.");
     } finally {
       setPurchasing(null);
@@ -228,11 +229,11 @@ export function ImageQuotaCard() {
                       if (data.url) {
                         openStripeCheckout(data.url, prepared);
                       } else {
-                        prepared?.close();
+                        dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
                         alert(data.error || "Could not start checkout.");
                       }
                     } catch {
-                      prepared?.close();
+                      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
                       alert("Could not start checkout. Please try again.");
                     }
                   }}
@@ -266,11 +267,11 @@ export function ImageQuotaCard() {
                   if (data.url) {
                     openStripeCheckout(data.url, prepared);
                   } else {
-                    prepared?.close();
+                    dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
                     alert(data.error || "Could not start checkout.");
                   }
                 } catch {
-                  prepared?.close();
+                  dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
                   alert("Could not start checkout. Please try again.");
                 }
               }}

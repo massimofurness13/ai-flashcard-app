@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   openStripeCheckout,
+  dismissPreparedCheckout,
   prepareStripeCheckout,
 } from "@/lib/stripe-checkout";
 
@@ -30,9 +31,9 @@ export function UpgradeBanner({ feature = "this feature" }: { feature?: string }
       // No URL came back — close the empty tab so the user doesn't
       // see a phantom about:blank window, then fall through to
       // pricing so they can pick a plan manually.
-      prepared?.close();
+      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
     } catch {
-      prepared?.close();
+      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
     }
     setLoading(false);
     router.push("/pricing");

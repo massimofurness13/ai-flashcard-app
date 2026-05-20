@@ -6,6 +6,7 @@ import type { QuotaState } from "@/lib/image-quota";
 import { formatRelativeDate } from "@/lib/utils";
 import {
   openStripeCheckout,
+  dismissPreparedCheckout,
   prepareStripeCheckout,
 } from "@/lib/stripe-checkout";
 
@@ -80,11 +81,11 @@ export function QuotaExceededDialog({ open, quota, onClose }: QuotaExceededDialo
       if (data.url) {
         openStripeCheckout(data.url, prepared);
       } else {
-        prepared?.close();
+        dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
         alert(data.error || "Could not start checkout. Please try again.");
       }
     } catch {
-      prepared?.close();
+      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
       alert("Network error. Please try again.");
     } finally {
       setPurchasing(null);
