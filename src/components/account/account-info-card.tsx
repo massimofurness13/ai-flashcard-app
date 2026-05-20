@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { openStripeCheckout } from "@/lib/stripe-checkout";
+import {
+  openStripeCheckout,
+  prepareStripeCheckout,
+} from "@/lib/stripe-checkout";
 
 interface AccountInfo {
   createdAt: string | null;
@@ -52,23 +55,45 @@ export function AccountInfoCard() {
   }, []);
 
   async function handleUpgrade() {
+    // Open the placeholder tab BEFORE the await so it counts as a
+    // user-initiated popup. See src/lib/stripe-checkout.ts for the
+    // full rationale.
+    const prepared = prepareStripeCheckout();
     setLoading(true);
     try {
       const res = await fetch("/api/stripe/checkout", { method: "POST" });
       const data = await res.json();
-      if (data.url) openStripeCheckout(data.url);
+      if (data.url) {
+        openStripeCheckout(data.url, prepared);
+      } else {
+        prepared?.close();
+        alert(data.error || "Could not start checkout. Please try again.");
+      }
+    } catch {
+      prepared?.close();
+      alert("Could not start checkout. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
   async function handleManage() {
+    // Stripe Customer Portal also opens externally — same IAP
+    // rationale, same popup-blocker fix.
+    const prepared = prepareStripeCheckout();
     setLoading(true);
     try {
       const res = await fetch("/api/stripe/portal", { method: "POST" });
       const data = await res.json();
-      // Stripe Customer Portal also opens externally — same IAP rationale.
-      if (data.url) openStripeCheckout(data.url);
+      if (data.url) {
+        openStripeCheckout(data.url, prepared);
+      } else {
+        prepared?.close();
+        alert(data.error || "Could not open the billing portal.");
+      }
+    } catch {
+      prepared?.close();
+      alert("Could not open the billing portal.");
     } finally {
       setLoading(false);
     }

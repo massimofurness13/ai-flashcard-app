@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import type { QuotaState } from "@/lib/image-quota";
 import { formatRelativeDate } from "@/lib/utils";
 import { CREDIT_BUNDLES } from "./quota-exceeded-dialog";
-import { openStripeCheckout } from "@/lib/stripe-checkout";
+import {
+  openStripeCheckout,
+  prepareStripeCheckout,
+} from "@/lib/stripe-checkout";
 
 export function ImageQuotaCard() {
   const [quota, setQuota] = useState<QuotaState | null>(null);
@@ -24,6 +27,8 @@ export function ImageQuotaCard() {
   }, []);
 
   async function handleBuy(bundle: string) {
+    // Pre-open the tab inside the user gesture — popup-blocker fix.
+    const prepared = prepareStripeCheckout();
     setPurchasing(bundle);
     try {
       const res = await fetch("/api/stripe/credits", {
@@ -33,14 +38,15 @@ export function ImageQuotaCard() {
       });
       const data = await res.json();
       if (data.url) {
-        openStripeCheckout(data.url);
-        setPurchasing(null);
+        openStripeCheckout(data.url, prepared);
       } else {
+        prepared?.close();
         alert(data.error || "Could not start checkout.");
-        setPurchasing(null);
       }
     } catch {
+      prepared?.close();
       alert("Network error.");
+    } finally {
       setPurchasing(null);
     }
   }
@@ -211,14 +217,24 @@ export function ImageQuotaCard() {
                 <Button
                   size="sm"
                   onClick={async () => {
-                    const res = await fetch("/api/stripe/checkout", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ plan: "yearly" }),
-                    });
-                    const data = await res.json();
-                    if (data.url) openStripeCheckout(data.url);
-                    else alert(data.error || "Could not start checkout.");
+                    const prepared = prepareStripeCheckout();
+                    try {
+                      const res = await fetch("/api/stripe/checkout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ plan: "yearly" }),
+                      });
+                      const data = await res.json();
+                      if (data.url) {
+                        openStripeCheckout(data.url, prepared);
+                      } else {
+                        prepared?.close();
+                        alert(data.error || "Could not start checkout.");
+                      }
+                    } catch {
+                      prepared?.close();
+                      alert("Could not start checkout. Please try again.");
+                    }
                   }}
                 >
                   Switch to yearly — $79.99
@@ -241,9 +257,22 @@ export function ImageQuotaCard() {
             <Button
               size="sm"
               onClick={async () => {
-                const res = await fetch("/api/stripe/checkout", { method: "POST" });
-                const data = await res.json();
-                if (data.url) openStripeCheckout(data.url);
+                const prepared = prepareStripeCheckout();
+                try {
+                  const res = await fetch("/api/stripe/checkout", {
+                    method: "POST",
+                  });
+                  const data = await res.json();
+                  if (data.url) {
+                    openStripeCheckout(data.url, prepared);
+                  } else {
+                    prepared?.close();
+                    alert(data.error || "Could not start checkout.");
+                  }
+                } catch {
+                  prepared?.close();
+                  alert("Could not start checkout. Please try again.");
+                }
               }}
             >
               Upgrade to Pro

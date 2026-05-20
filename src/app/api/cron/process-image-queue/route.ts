@@ -59,6 +59,10 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
   processed: number;
   succeeded: number;
   failed: number;
+  /** Cards we declined to process because their owner ran out of
+   *  credits. Surfaced in the response so the GH cron log shows
+   *  "drained" instead of looping over the same set forever. */
+  noCredits: number;
   remaining: number;
   reason: "drained" | "deadline" | "no_work";
 }> {
@@ -70,6 +74,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
+  let noCredits = 0;
 
   // Pull a slate of candidates. We over-pull (maxCards) and then
   // attempt to atomically claim each one — losers (claimed by a
@@ -105,7 +110,14 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
   });
 
   if (candidates.length === 0) {
-    return { processed: 0, succeeded: 0, failed: 0, remaining: 0, reason: "no_work" };
+    return {
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      noCredits: 0,
+      remaining: 0,
+      reason: "no_work",
+    };
   }
 
   // Worker-pool pattern. Each worker claims-then-processes one card at
@@ -140,11 +152,25 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
 
     const consumed = await consumeImageCredit(userId, tier);
     if (!consumed.ok) {
-      // No credits left for this user. Don't burn an attempt — the user
-      // can top up and we'll try again. Just release the lock.
+      // No credits left for this user. Previously we only released
+      // the lock and returned, which left the card on the queue
+      // forever — every cron tick re-claimed it, released it again,
+      // and reported processed:N succeeded:0 failed:0. That made the
+      // GH Action exit-code-1 on the "no_work" grep and burned
+      // Render compute. We now drop the card OUT of the queue by
+      // clearing imageTier (the queue filter is `imageTier: { not:
+      // null }`). The card keeps its text + audio; the user can
+      // re-trigger image generation from the deck UI once they have
+      // credits. imageGenError is set so the UI can surface a
+      // "credits needed" hint next to the card if we ever want it.
+      noCredits++;
       await prisma.card.updateMany({
         where: { id: card.id },
-        data: { imageGenLockedAt: null },
+        data: {
+          imageGenLockedAt: null,
+          imageTier: null,
+          imageGenError: "Insufficient image credits — top up to generate.",
+        },
       });
       return;
     }
@@ -211,6 +237,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
     processed,
     succeeded,
     failed,
+    noCredits,
     remaining,
     reason: deadlineHit ? "deadline" : "drained",
   };

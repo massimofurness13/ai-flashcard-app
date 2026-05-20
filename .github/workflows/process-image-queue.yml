@@ -75,9 +75,14 @@ jobs:
                 continue
               }
             echo "Attempt $attempt: $response"
-            # Bail out as soon as the queue reports empty.
+            # Bail out as soon as the queue reports empty. The `|| true`
+            # tail keeps a no-match grep from propagating exit-code-1
+            # to the whole job — set -e considers the last command of
+            # the loop iteration as a script-failure signal, so without
+            # this the entire workflow goes red on a successful "still
+            # work to do" tick. Independent of the grep's actual result.
             echo "$response" | grep -q '"reason":"no_work"' && {
               echo "Queue drained, stopping."
               break
-            }
+            } || true
           done
