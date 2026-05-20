@@ -74,14 +74,19 @@ export function DeckView({
 
   // On mount, decide whether to start the queue-drain polling loop.
   //
-  // Three triggering paths:
+  // Two triggering paths — both require the user to have explicitly
+  // opted in to image generation:
   //   1. Arrived with ?generating=true (from the generate page) — fresh
   //      session, set the expiry and start polling.
-  //   2. Stored sessionStorage flag from an earlier visit still valid.
-  //   3. Stranded cards exist on this deck (cardsWithoutImages > 0) —
-  //      auto-resume so cards left over from a previous session
-  //      (e.g. tab closed mid-flight, Vercel cron failing on hobby
-  //      plan) get drained the next time the user opens the deck.
+  //   2. Stored sessionStorage flag from an earlier visit still valid
+  //      (refresh during an active generation shouldn't lose progress).
+  //
+  // What we DON'T do anymore: silent auto-resume for "Pro user with
+  // stranded cards". That used to fire on every deck-view mount and
+  // sent users' newly-purchased credits into a generation they never
+  // approved — a real user-reported bug ("I didn't authorise this!").
+  // Stranded cards now show an explicit "Generate the rest" CTA below
+  // instead of starting automatically.
   useEffect(() => {
     const fromGenerate = searchParams.get("generating") === "true";
     if (fromGenerate) {
@@ -106,20 +111,27 @@ export function DeckView({
       sessionStorage.removeItem(generationKey);
       sessionStorage.removeItem(generationTotalKey);
     }
-
-    // Stranded-cards auto-resume. Pro users with cards still missing
-    // images get the polling loop kicked off automatically — drives
-    // the per-user queue-tick endpoint until everything has an image
-    // or quota runs out. No explicit "Resume" button needed.
-    if (cardsWithoutImages > 0 && isPro) {
-      const expiresAt = Date.now() + 10 * 60 * 1000;
-      sessionStorage.setItem(generationKey, String(expiresAt));
-      sessionStorage.setItem(generationTotalKey, String(cardsWithoutImages));
-      setInitialPending(cardsWithoutImages);
-      setGenerationActive(true);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Halt an in-flight generation. Clears imageTier on every pending
+  // card in this deck (server-side), tears down the local polling
+  // loop, then refreshes so the UI flips back to the idle state.
+  const [stopping, setStopping] = useState(false);
+  async function handleStop() {
+    setStopping(true);
+    try {
+      await fetch(`/api/decks/${deck.id}/stop-image-generation`, {
+        method: "POST",
+      });
+      sessionStorage.removeItem(generationKey);
+      sessionStorage.removeItem(generationTotalKey);
+      setGenerationActive(false);
+      router.refresh();
+    } finally {
+      setStopping(false);
+    }
+  }
 
   // Poll every ~12s while generation is active. Each tick:
   //   1. Calls /api/images/queue-tick — drains a small batch of the
@@ -312,10 +324,45 @@ export function DeckView({
                   />
                 </div>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleStop}
+                disabled={stopping}
+              >
+                {stopping ? "Stopping…" : "Stop"}
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              ✨ Feel free to keep working — edit cards, delete some, or navigate anywhere in the app. Images are generating on our server and will appear as they&apos;re ready (estimated time remaining: <span className="font-medium text-foreground">{estimateImageGenTime(cardsWithoutImages)}</span>). AI image generation is still in its infancy and takes a moment per card. Thank you for your patience.
+              ✨ Feel free to keep working — edit cards, delete some, or navigate anywhere in the app. Images are generating on our server and will appear as they&apos;re ready (estimated time remaining: <span className="font-medium text-foreground">{estimateImageGenTime(cardsWithoutImages)}</span>). Click <strong>Stop</strong> any time to halt the remaining cards and save your credits.
             </p>
+          </CardContent>
+        </CardUI>
+      )}
+
+      {/* Stranded-cards CTA. Shown when the deck has cards without
+       * images AND no generation is currently active. Sends the user
+       * to the Edit cards page where the existing ImageTierSlider
+       * lets them pick how many Quick vs Premium they want and starts
+       * generation on their explicit click — no surprise spends. */}
+      {!generationActive && cardsWithoutImages > 0 && deck.cards.length > 0 && (
+        <CardUI>
+          <CardContent className="pt-6 flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">
+                {cardsWithoutImages} {cardsWithoutImages === 1 ? "card" : "cards"} without illustrations
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                Generate AI illustrations for them whenever you&apos;re
+                ready — you choose how many Quick (1 credit each) or
+                Premium (5 credits each) on the next screen.
+              </p>
+            </div>
+            <Link href={`/decks/${deck.id}/cards/edit`}>
+              <Button size="sm" variant="outline">
+                Generate the rest →
+              </Button>
+            </Link>
           </CardContent>
         </CardUI>
       )}
