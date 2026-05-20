@@ -75,9 +75,26 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: session.url, plan });
   } catch (err) {
-    const message =
+    const raw =
       err instanceof Error ? err.message : "Stripe checkout failed.";
     console.error("[stripe/checkout] failed:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+
+    // Translate common Stripe misconfiguration errors to a message
+    // the dev or end user can actually act on. The raw Stripe error
+    // "No such price: 'price_…'" looks scary in an alert dialog but
+    // almost always means one of two things: (1) the API key is in
+    // test mode but the price was created in live mode (or vice
+    // versa), or (2) the env var on Render points at a price from
+    // a different Stripe account. Surface both possibilities.
+    if (/No such price/i.test(raw)) {
+      return NextResponse.json(
+        {
+          error:
+            "Checkout couldn't start — the Stripe price ID configured for this plan doesn't exist in your Stripe account. This usually means the STRIPE_SECRET_KEY mode (test vs live) doesn't match the mode the price was created in. Open the Stripe Dashboard, switch to the matching mode, and copy the correct price ID into STRIPE_PRICE_ID (or STRIPE_PRICE_ID_YEARLY) on Render.",
+        },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ error: raw }, { status: 500 });
   }
 }
