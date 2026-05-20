@@ -4,7 +4,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CREDIT_BUNDLES } from "@/components/subscription/quota-exceeded-dialog";
-import { openStripeCheckout } from "@/lib/stripe-checkout";
+import {
+  openStripeCheckout,
+  prepareStripeCheckout,
+} from "@/lib/stripe-checkout";
 import {
   CreditBalance,
   useCreditBalance,
@@ -115,6 +118,7 @@ export function ImageTierSlider({
       : Math.min(total, Math.floor(budget / PREMIUM_COST));
 
   async function handleBuy(bundle: string) {
+    const prepared = prepareStripeCheckout();
     setPurchasing(bundle);
     try {
       const res = await fetch("/api/stripe/credits", {
@@ -124,14 +128,15 @@ export function ImageTierSlider({
       });
       const data = await res.json();
       if (data.url) {
-        openStripeCheckout(data.url);
-        setPurchasing(null);
+        openStripeCheckout(data.url, prepared);
       } else {
+        prepared?.close();
         alert(data.error || "Could not start checkout. Please try again.");
-        setPurchasing(null);
       }
     } catch {
+      prepared?.close();
       alert("Network error. Please try again.");
+    } finally {
       setPurchasing(null);
     }
   }

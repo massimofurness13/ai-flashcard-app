@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuickPremiumComparison } from "@/components/subscription/quick-premium-comparison";
 import { APP_NAME } from "@/lib/constants";
-import { openStripeCheckout } from "@/lib/stripe-checkout";
+import {
+  openStripeCheckout,
+  prepareStripeCheckout,
+} from "@/lib/stripe-checkout";
 
 type Plan = "monthly" | "yearly";
 
@@ -39,6 +42,11 @@ export default function PricingPage() {
   const [loading, setLoading] = useState<Plan | null>(null);
 
   async function handleUpgrade(plan: Plan) {
+    // Pre-open the popup synchronously inside the click handler.
+    // Without this, popup blockers silently swallow the open after
+    // the fetch resolves and the upgrade button looks dead.
+    // See src/lib/stripe-checkout.ts for the full rationale.
+    const prepared = prepareStripeCheckout();
     setLoading(plan);
     try {
       const res = await fetch("/api/stripe/checkout", {
@@ -48,11 +56,13 @@ export default function PricingPage() {
       });
       const data = await res.json();
       if (data.url) {
-        openStripeCheckout(data.url);
+        openStripeCheckout(data.url, prepared);
       } else {
+        prepared?.close();
         alert(data.error || "Could not start checkout. Please try again.");
       }
     } catch {
+      prepared?.close();
       alert("Something went wrong. Please try again.");
     }
     setLoading(null);

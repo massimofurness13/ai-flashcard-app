@@ -3,23 +3,37 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { openStripeCheckout } from "@/lib/stripe-checkout";
+import {
+  openStripeCheckout,
+  prepareStripeCheckout,
+} from "@/lib/stripe-checkout";
 
 export function UpgradeBanner({ feature = "this feature" }: { feature?: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   async function handleUpgrade() {
+    // Synchronous popup BEFORE any await — keeps the browser
+    // treating this as a user-initiated open. Without this step,
+    // popup blockers silently swallow the open after the fetch
+    // resolves and the upgrade button looks dead.
+    const prepared = prepareStripeCheckout();
     setLoading(true);
     try {
       const res = await fetch("/api/stripe/checkout", { method: "POST" });
       const data = await res.json();
       if (data.url) {
-        openStripeCheckout(data.url);
+        openStripeCheckout(data.url, prepared);
         setLoading(false);
         return;
       }
-    } catch {}
+      // No URL came back — close the empty tab so the user doesn't
+      // see a phantom about:blank window, then fall through to
+      // pricing so they can pick a plan manually.
+      prepared?.close();
+    } catch {
+      prepared?.close();
+    }
     setLoading(false);
     router.push("/pricing");
   }
