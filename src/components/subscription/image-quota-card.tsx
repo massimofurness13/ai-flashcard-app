@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { QuotaState } from "@/lib/image-quota";
@@ -13,6 +14,7 @@ import {
 } from "@/lib/stripe-checkout";
 
 export function ImageQuotaCard() {
+  const router = useRouter();
   const [quota, setQuota] = useState<QuotaState | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
@@ -251,32 +253,12 @@ export function ImageQuotaCard() {
               free credits to try AI images.
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Upgrade to Pro for 500 AI image credits every month — up to 500
-              Quick ✨ images or 100 Premium 🎨 images, plus unlimited AI text
-              generation and Anki import/export.
+              Pro unlocks 500 AI image credits per month — or 6,000 a year
+              unlocked upfront on the yearly plan — plus indefinite image
+              visibility past the 30-day free-trial window.
             </p>
-            <Button
-              size="sm"
-              onClick={async () => {
-                const prepared = prepareStripeCheckout();
-                try {
-                  const res = await fetch("/api/stripe/checkout", {
-                    method: "POST",
-                  });
-                  const data = await res.json();
-                  if (data.url) {
-                    openStripeCheckout(data.url, prepared);
-                  } else {
-                    dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
-                    alert(data.error || "Could not start checkout.");
-                  }
-                } catch {
-                  dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
-                  alert("Could not start checkout. Please try again.");
-                }
-              }}
-            >
-              Upgrade to Pro
+            <Button size="sm" onClick={() => router.push("/pricing")}>
+              See plans
             </Button>
           </div>
         )}
