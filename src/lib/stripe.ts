@@ -28,7 +28,15 @@ export const stripe = new Proxy({} as Stripe, {
 // + native-speaker TTS is a genuine moat. Once a user has 500+
 // illustrated cards they've built mastery on, churning back to plain
 // text flashcards has real switching cost.
-export const PRICE_ID = process.env.STRIPE_PRICE_ID || "";
+//
+// Two env-var names are accepted for the monthly price ID:
+//   - STRIPE_PRICE_ID_MONTHLY  (preferred — symmetric with _YEARLY)
+//   - STRIPE_PRICE_ID          (legacy — set this way pre-yearly)
+// The first one set wins. Either alone is enough.
+export const PRICE_ID =
+  process.env.STRIPE_PRICE_ID_MONTHLY ||
+  process.env.STRIPE_PRICE_ID ||
+  "";
 export const PRO_PRICE = 8.99;
 
 // Yearly Pro subscription — $79.99/yr (~26% off monthly, "three months free")
