@@ -8,6 +8,7 @@ import { QuickPremiumComparison } from "@/components/subscription/quick-premium-
 import { APP_NAME } from "@/lib/constants";
 import {
   openStripeCheckout,
+  dismissPreparedCheckout,
   prepareStripeCheckout,
 } from "@/lib/stripe-checkout";
 
@@ -58,11 +59,11 @@ export default function PricingPage() {
       if (data.url) {
         openStripeCheckout(data.url, prepared);
       } else {
-        prepared?.close();
+        dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
         alert(data.error || "Could not start checkout. Please try again.");
       }
     } catch {
-      prepared?.close();
+      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
       alert("Something went wrong. Please try again.");
     }
     setLoading(null);

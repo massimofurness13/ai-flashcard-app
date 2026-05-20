@@ -22,8 +22,12 @@
  *   2. Do your async work (fetch the Stripe URL).
  *   3. On success, call `openStripeCheckout(url, prepared)` — we
  *      just navigate the prepared window to the real URL.
- *   4. On failure (no URL, exception), call `prepared?.close()` to
- *      dismiss the empty tab.
+ *   4. On failure (no URL, exception), call
+ *      `dismissPreparedCheckout(prepared, fallbackUrl)` to navigate
+ *      the empty tab somewhere meaningful (typically /pricing).
+ *      Browsers refuse `.close()` on programmatically-opened tabs,
+ *      so a navigation is the only reliable way to dismiss the
+ *      about:blank stub the user sees.
  *
  * If `prepareStripeCheckout()` itself was blocked (very aggressive
  * popup blocker, or programmatic invocation outside a user gesture),
@@ -46,6 +50,38 @@ export function prepareStripeCheckout(): PreparedCheckout {
     return window.open("about:blank", "_blank");
   } catch {
     return null;
+  }
+}
+
+/**
+ * If the async work failed and we have no checkout URL to navigate
+ * to, redirect the prepared tab somewhere meaningful (or close it
+ * if we can't). Browsers vary in whether window.close() is honoured
+ * on tabs opened programmatically — Chrome and Firefox often refuse,
+ * stranding the user on about:blank if we don't navigate first.
+ *
+ * Pass a same-origin fallback URL (typically `${origin}/pricing`).
+ * We can navigate cross-origin freely, but staying same-origin
+ * keeps the user inside our app.
+ */
+export function dismissPreparedCheckout(
+  prepared: PreparedCheckout,
+  fallbackUrl?: string,
+): void {
+  if (!prepared) return;
+  if (fallbackUrl) {
+    try {
+      prepared.location.href = fallbackUrl;
+      return;
+    } catch {
+      // Cross-origin lock or window already closed — fall through.
+    }
+  }
+  try {
+    prepared.close();
+  } catch {
+    // Browser refused programmatic close. Nothing we can do —
+    // the user has to dismiss it manually.
   }
 }
 
