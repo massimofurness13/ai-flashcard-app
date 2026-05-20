@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +46,7 @@ function formatSyncTime(iso: string | null): string {
  * subscription state with the appropriate action (Upgrade / Manage).
  */
 export function AccountInfoCard() {
+  const router = useRouter();
   const [info, setInfo] = useState<AccountInfo | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -55,28 +57,11 @@ export function AccountInfoCard() {
       .catch(() => setInfo(null));
   }, []);
 
-  async function handleUpgrade() {
-    // Open the placeholder tab BEFORE the await so it counts as a
-    // user-initiated popup. See src/lib/stripe-checkout.ts for the
-    // full rationale.
-    const prepared = prepareStripeCheckout();
-    setLoading(true);
-    try {
-      const res = await fetch("/api/stripe/checkout", { method: "POST" });
-      const data = await res.json();
-      if (data.url) {
-        openStripeCheckout(data.url, prepared);
-      } else {
-        dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
-        alert(data.error || "Could not start checkout. Please try again.");
-      }
-    } catch {
-      dismissPreparedCheckout(prepared, `${window.location.origin}/pricing`);
-      alert("Could not start checkout. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  // "Upgrade to Pro" now sends the user to /pricing instead of
+  // firing checkout with monthly assumed. They get to see Monthly
+  // vs Yearly side-by-side (yearly is the recommended plan with
+  // 6,000 credits unlocked upfront) before Stripe enters the
+  // picture. Pricing page handles the actual checkout.
 
   async function handleManage() {
     // Stripe Customer Portal also opens externally — same IAP
@@ -175,11 +160,16 @@ export function AccountInfoCard() {
               <div>
                 <p className="font-medium">Free Plan</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Upgrade for AI generation, AI images, and Anki import/export
+                  Pick a plan to get more AI image credits and keep your
+                  illustrations visible past the 30-day trial.
                 </p>
               </div>
-              <Button size="sm" onClick={handleUpgrade} disabled={loading}>
-                Upgrade to Pro
+              <Button
+                size="sm"
+                onClick={() => router.push("/pricing")}
+                disabled={loading}
+              >
+                See plans
               </Button>
             </div>
           )}
