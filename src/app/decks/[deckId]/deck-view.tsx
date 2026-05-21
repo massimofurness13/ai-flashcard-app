@@ -340,27 +340,36 @@ export function DeckView({
         </CardUI>
       )}
 
-      {/* Stranded-cards CTA. Shown when the deck has cards without
-       * images AND no generation is currently active. Sends the user
-       * to the Edit cards page where the existing ImageTierSlider
-       * lets them pick how many Quick vs Premium they want and starts
-       * generation on their explicit click — no surprise spends. */}
+      {/* Stranded-cards prompt. Shown when the deck has cards without
+       * images AND no generation is currently active. Wording is
+       * deliberately conversational ("would you like to add them?")
+       * rather than instructional — feels less like a system status
+       * and more like the app helping you pick up a half-finished
+       * task. The CTA routes to /cards/edit, where the existing
+       * ImageTierSlider lets the user pick Quick vs Premium counts
+       * and start generation on an explicit click — no surprise
+       * spends. */}
       {!generationActive && cardsWithoutImages > 0 && deck.cards.length > 0 && (
-        <CardUI>
+        <CardUI className="border-primary/30 bg-primary/5">
           <CardContent className="pt-6 flex items-center gap-3 flex-wrap">
+            <div className="text-2xl shrink-0" aria-hidden>
+              {"🎨"}
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">
-                {cardsWithoutImages} {cardsWithoutImages === 1 ? "card" : "cards"} without illustrations
+                {cardsWithoutImages} of these {deck._count.cards} cards
+                {cardsWithoutImages === 1 ? " doesn't" : " don't"} have an
+                illustration yet.
               </p>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Generate AI illustrations for them whenever you&apos;re
-                ready — you choose how many Quick (1 credit each) or
-                Premium (5 credits each) on the next screen.
+                Would you like to add them now? You&apos;ll pick how many
+                Quick (1 credit each) or Premium (5 credits each) on the
+                next screen — no spending until you confirm.
               </p>
             </div>
             <Link href={`/decks/${deck.id}/cards/edit`}>
-              <Button size="sm" variant="outline">
-                Generate the rest →
+              <Button size="sm">
+                Add images now →
               </Button>
             </Link>
           </CardContent>
