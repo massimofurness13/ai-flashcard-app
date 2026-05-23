@@ -47,6 +47,14 @@ interface PersistedDefaults {
   defaultAutoFlip?: number;
   defaultAutoAdvance?: number;
   defaultOrientation?: "front" | "back" | "mixed";
+  /** Which packs the user last selected on this screen. We
+   *  re-apply this on next visit so a returning user doesn't have
+   *  to re-uncheck the same packs every session. Saved as an array
+   *  of deck IDs; on hydration we filter out any IDs that no
+   *  longer exist (deleted/archived) and never auto-add NEW packs
+   *  the user has created since — those start unticked so the user
+   *  consciously opts them into rotation. */
+  defaultDeckIds?: string[];
 }
 
 /**
@@ -115,6 +123,16 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
   const preselectedDeckIds = searchParams.get("deckIds")?.split(",").filter(Boolean);
   const preselectedFilter = searchParams.get("filter") as StudyFilter | null;
 
+  // Initial deck selection priority:
+  //   1. URL `?deckIds=` param (deep-link from a deck page / home CTA)
+  //   2. Saved selection from previous visit (PersistedDefaults)
+  //   3. All decks (first-time user, no saved preference)
+  //
+  // The useState initializer runs once on mount AND must be SSR-safe
+  // — it can't touch localStorage on the server. So we start with the
+  // URL/all-decks fallback and rehydrate to the saved selection
+  // inside the useEffect below. A brief tick where everything looks
+  // selected is acceptable; checkbox state corrects on the next paint.
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>(
     preselectedDeckIds && preselectedDeckIds.length > 0
       ? preselectedDeckIds
@@ -174,6 +192,24 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
     ) {
       setOrientation(d.defaultOrientation);
     }
+    // Deck selection rehydrate — only when the URL didn't already
+    // pin a selection (deep-link context wins). We intersect with
+    // the current `decks` list so deleted/archived packs disappear
+    // gracefully instead of becoming ghost IDs the user can't see
+    // or untick. If after that intersection the saved list is
+    // empty (e.g. user deleted everything they had selected), fall
+    // through to the default "all decks" and let them re-pick.
+    if (
+      !preselectedDeckIds?.length &&
+      Array.isArray(d.defaultDeckIds) &&
+      d.defaultDeckIds.length > 0
+    ) {
+      const liveIds = new Set(decks.map((deck) => deck.id));
+      const filtered = d.defaultDeckIds.filter((id) => liveIds.has(id));
+      if (filtered.length > 0) {
+        setSelectedDeckIds(filtered);
+      }
+    }
     // Intentional: only run once on mount. searchParams listening here
     // would re-hydrate mid-edit and stomp the user's choices.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,19 +255,29 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Persist the deck selection on every change so the user doesn't
+  // have to re-uncheck the same packs every study session. Centralised
+  // so toggleDeck + applyRecencyPreset both go through it.
+  function updateSelectedDeckIds(next: string[]) {
+    setSelectedDeckIds(next);
+    writeDefaults({ defaultDeckIds: next });
+  }
+
   function toggleDeck(deckId: string) {
-    setSelectedDeckIds((prev) =>
-      prev.includes(deckId) ? prev.filter((id) => id !== deckId) : [...prev, deckId]
+    updateSelectedDeckIds(
+      selectedDeckIds.includes(deckId)
+        ? selectedDeckIds.filter((id) => id !== deckId)
+        : [...selectedDeckIds, deckId],
     );
   }
 
   function applyRecencyPreset(preset: RecencyPreset) {
     if (preset === "all") {
-      setSelectedDeckIds(decks.map((d) => d.id));
+      updateSelectedDeckIds(decks.map((d) => d.id));
       return;
     }
     if (preset === "none") {
-      setSelectedDeckIds([]);
+      updateSelectedDeckIds([]);
       return;
     }
     const days = parseInt(preset, 10);
@@ -244,7 +290,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
           new Date(d.lastReviewedAt).getTime() >= cutoff
       )
       .map((d) => d.id);
-    setSelectedDeckIds(active);
+    updateSelectedDeckIds(active);
   }
 
   function startStudy() {
