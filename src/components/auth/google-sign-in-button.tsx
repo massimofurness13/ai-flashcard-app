@@ -52,9 +52,33 @@ export function OAuthSignInButton({
     const origin = window.location.origin;
     const callbackUrl = `${origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`;
 
+    // Force the provider to show an account picker every time. By
+    // default Google (and Microsoft, similarly) will silently
+    // re-authenticate if the user has exactly one account signed
+    // into the browser AND has already authorized our app — so
+    // "Sign in with Google" after Sign Out feels like it ignored
+    // the sign-out and just re-used the last identity, with no
+    // way to pick a different Google account.
+    //
+    // Provider-specific param names:
+    //   Google     → prompt=select_account
+    //   Microsoft  → prompt=select_account (same OIDC name)
+    //   Apple      → no equivalent; Apple's Sign In dialog
+    //                always lets you choose between IDs / Hide My
+    //                Email, so the silent re-auth UX doesn't bite.
+    //
+    // Supabase forwards options.queryParams onto the provider's
+    // /authorize URL verbatim, so this works for any OIDC provider
+    // that respects RFC 6749's `prompt` parameter.
+    const providerQueryParams: Record<string, string> | undefined =
+      provider === "apple" ? undefined : { prompt: "select_account" };
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: callbackUrl },
+      options: {
+        redirectTo: callbackUrl,
+        ...(providerQueryParams && { queryParams: providerQueryParams }),
+      },
     });
 
     if (error) {
