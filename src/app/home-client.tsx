@@ -230,14 +230,26 @@ export function HomePage({
   );
 
   // Brand-new user → tutorial-style welcome. Only triggers if the
-  // user has NEVER been through onboarding. A user who skipped the
-  // starter pack (cloneStarterPack: false) has onboardingCompleted
-  // === true even with zero decks; without this guard they'd be
-  // bounced back into FirstTimeWelcome by router.refresh, see the
-  // stuck "Setting up your library…" button, and have no way to
-  // escape. Must come AFTER all hook calls so React's rules of
-  // hooks aren't violated by the early return path.
-  if (!onboardingCompleted) {
+  // user has NEVER been through onboarding AND has zero decks.
+  //
+  // Two guards (both must hold) instead of just `!onboardingCompleted`:
+  //   1. Catches users created BEFORE the onboardingCompletedAt
+  //      column existed — their timestamp is null but they obviously
+  //      shouldn't be greeted as new. (Reported in production: a
+  //      user with 8 packs kept seeing "Lovely to meet you, Massi"
+  //      on every sign-in.) A backfill migration also fixes the
+  //      historical rows, but defending in code keeps us safe if a
+  //      future code path forgets to set the timestamp.
+  //   2. !onboardingCompleted alone would bounce the "I'd rather
+  //      build my own" user back into the welcome flow after
+  //      router.refresh (stuck "Setting up your library…" button
+  //      with no escape). That fix still holds — the !hasDecks half
+  //      of the AND below ensures they land on the empty-library
+  //      hero instead.
+  //
+  // Must come AFTER all hook calls so React's rules of hooks aren't
+  // violated by the early return path.
+  if (!onboardingCompleted && !hasDecks) {
     return (
       <div className="space-y-6 sm:space-y-8">
         <FirstTimeWelcome userName={userName || "there"} />
