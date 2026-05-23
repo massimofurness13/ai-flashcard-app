@@ -56,11 +56,15 @@ function getPersistentAudio(): HTMLAudioElement {
 
 // Tracks the most recent set of callbacks bound to the audio element
 // so cancel() can detach them cleanly when a new speak() takes over.
+// `pooledAudio` is set when the active play is using a pre-decoded
+// pool element rather than the shared persistent element — cancelAll
+// needs that reference to pause the right thing.
 let activeCallbacks: {
   ended: (() => void)[];
   error: (() => void)[];
   endedListener?: () => void;
   errorListener?: () => void;
+  pooledAudio?: HTMLAudioElement | null;
 } | null = null;
 
 // ── Client-side URL cache ───────────────────────────────────────────
@@ -68,6 +72,80 @@ let activeCallbacks: {
 // Key = `${languageCode}|${normalised text}`. Values are Supabase public
 // URLs (string), never null — we don't cache misses.
 const urlCache = new Map<string, string>();
+
+// ── Decoded audio-element pool ──────────────────────────────────────
+// Pre-decoded clips so a card flip doesn't have to wait for the MP3
+// decode pipeline. The urlCache above eliminates the /api/tts round
+// trip and warms the HTTP cache for the MP3 bytes, but the browser
+// still pays a 50-150ms tax to decode MP3 → PCM the first time it
+// hands those bytes to an <audio> element. That tax is what made
+// the audio feel like it lagged the flip animation by a beat.
+//
+// Each pool entry is a real <audio> element with its `src` already
+// set. Setting src triggers the browser to start downloading +
+// decoding immediately (preload="auto" by default). When speak()
+// later wants that URL, we play THIS element rather than swapping
+// the src on the shared persistent element — the decoded buffer is
+// already in memory, play() resolves on the next animation frame.
+//
+// Pool size capped at 8 (covers a typical "current card + next 3"
+// × front/back), LRU eviction so long sessions don't grow it
+// unbounded. Modern browsers handle ~50 hidden <audio> elements
+// without trouble — 8 leaves enough headroom for the persistent
+// element + browser internals.
+const POOL_MAX = 8;
+const audioPool = new Map<string, HTMLAudioElement>(); // url → audio
+
+function poolGet(url: string): HTMLAudioElement | null {
+  const entry = audioPool.get(url);
+  if (!entry) return null;
+  // Touch — move to the end of insertion order so LRU eviction
+  // doesn't kick a clip we just used.
+  audioPool.delete(url);
+  audioPool.set(url, entry);
+  return entry;
+}
+
+function poolPut(url: string, audio: HTMLAudioElement): void {
+  audioPool.set(url, audio);
+  while (audioPool.size > POOL_MAX) {
+    // Map iteration is insertion order — the first key is the LRU.
+    const oldest = audioPool.keys().next().value;
+    if (!oldest) break;
+    const evicted = audioPool.get(oldest);
+    audioPool.delete(oldest);
+    // Detach the element from any in-flight buffering so the browser
+    // can reclaim memory immediately.
+    if (evicted) {
+      try {
+        evicted.src = "";
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+/**
+ * Pre-create + pre-decode an <audio> element for a URL. Cheap and
+ * idempotent — if the pool already has this URL, no-op. Caller
+ * doesn't need to await; the decode happens in the browser in the
+ * background and the result is ready by the time speak() asks.
+ */
+function preloadAudioElement(url: string): void {
+  if (typeof window === "undefined") return;
+  if (audioPool.has(url)) return;
+  try {
+    const a = new Audio();
+    a.preload = "auto";
+    a.src = url;
+    a.load(); // explicit kick so decoding starts now, not on first play
+    poolPut(url, a);
+  } catch {
+    // Audio not supported — fall back path in playAudioUrl will
+    // still work (slower, but functional).
+  }
+}
 
 function cacheKey(text: string, languageCode: string): string {
   return `${languageCode}|${text.trim().toLowerCase()}`;
@@ -111,27 +189,30 @@ export async function preloadAudio(
 
     urlCache.set(key, data.audioUrl);
 
-    // Warm browser HTTP cache. fetch() without reading the body still
-    // causes the browser to store the response — same mechanism <audio>
-    // would use, minus the decode step. The Supabase public bucket
-    // serves CORS headers so this works cross-origin.
+    // Warm browser HTTP cache for the MP3 bytes…
     void fetch(data.audioUrl, { mode: "cors", cache: "force-cache" }).catch(
-      () => {}
+      () => {},
     );
+
+    // …and pre-create + pre-decode an <audio> element so the eventual
+    // play() doesn't have to wait for MP3-to-PCM decode. Without this
+    // the user feels a 50-150ms gap between the card flip and the
+    // audio actually starting. With it, play() resolves on the next
+    // animation frame.
+    preloadAudioElement(data.audioUrl);
   } catch {
     // Silent — real play will retry via the on-demand path.
   }
 }
 
-// Default TTS speed. Was 1.2 (then 1.4) — user feedback during the
-// pre-launch run still flagged playback as too slow for rapid-fire
-// study. Bumped to 1.5 which is the upper edge of "still natural-
-// sounding" for Google's Chirp 3 HD voices; anything above ~1.6
-// starts to chipmunk on the consonant-cluster languages (German,
-// Polish, Czech) and listening fatigue spikes. Users can still
-// override in settings (the per-user ttsSpeed in localStorage
-// `huella-settings` wins over this default).
-const DEFAULT_TTS_SPEED = 1.5;
+// Default TTS playback speed. 1.0 is "broadcast standard" but
+// Google's Neural2 / Chirp 3 HD voices have natural breath pauses
+// that make 1.0 feel slow during rapid-fire study. 1.2 is the
+// sweet spot — clearly faster than 1.0, still natural. Don't bump
+// this any higher without a UI for it — past feedback rounds have
+// confirmed 1.2 reads as "comfortable", anything more chipmunks
+// the consonant-cluster languages.
+const DEFAULT_TTS_SPEED = 1.2;
 
 function getSettings(): { ttsSpeed: number } {
   try {
@@ -147,19 +228,24 @@ function getSettings(): { ttsSpeed: number } {
 }
 
 function cancelAll() {
-  if (persistentAudio) {
-    persistentAudio.pause();
+  // Pause whichever element is currently playing: the pooled one
+  // (when the active play came from a pre-decoded pool element) or
+  // the shared persistent element (when the pool missed).
+  const target = activeCallbacks?.pooledAudio ?? persistentAudio;
+  if (target) {
+    target.pause();
     // We DON'T set src="" here — that destroys the element's autoplay
     // trust and forces a fresh gesture for the next play. Just pausing
-    // is enough; the next play() will swap in a new src and resume.
+    // is enough; the next play() will set a fresh src or pick a
+    // different pool element and resume.
   }
   if (activeCallbacks) {
-    if (persistentAudio) {
+    if (target) {
       if (activeCallbacks.endedListener) {
-        persistentAudio.removeEventListener("ended", activeCallbacks.endedListener);
+        target.removeEventListener("ended", activeCallbacks.endedListener);
       }
       if (activeCallbacks.errorListener) {
-        persistentAudio.removeEventListener("error", activeCallbacks.errorListener);
+        target.removeEventListener("error", activeCallbacks.errorListener);
       }
     }
     activeCallbacks = null;
@@ -249,15 +335,33 @@ function playAudioUrl(url: string): SpeakHandle {
     error: [],
   };
 
-  // Detach any callbacks from the previous play and pause the element.
-  // The element itself stays alive so its autoplay grant carries over.
+  // Detach any callbacks from the previous play and pause whatever
+  // element was active.
   cancelAll();
-  const audio = getPersistentAudio();
-  audio.src = url;
+
+  // Prefer a pre-decoded element from the pool — its decode pipeline
+  // already ran during preload, so play() resolves on the next
+  // animation frame instead of waiting for an MP3 decode. Falls back
+  // to the persistent element (load + decode now) when the pool
+  // misses, which is what happens for the very first card of a
+  // session before the preloader has settled.
+  const pooled = poolGet(url);
+  const audio = pooled ?? getPersistentAudio();
+  if (!pooled) {
+    audio.src = url;
+    audio.load();
+  } else {
+    // Pooled element is already loaded. Reset playhead in case it
+    // was previously played (e.g. user pressed the manual speaker
+    // button on the same card before flipping).
+    try {
+      audio.currentTime = 0;
+    } catch {
+      /* ignore — some browsers throw if currentTime is set before
+         metadata is ready. The .play() call below still works. */
+    }
+  }
   audio.playbackRate = getSettings().ttsSpeed;
-  // Explicitly load() so the new src starts buffering immediately
-  // even if the previous play was paused mid-stream.
-  audio.load();
 
   const endedListener = () => callbacks.ended.forEach((cb) => cb());
   const errorListener = () => callbacks.error.forEach((cb) => cb());
@@ -269,6 +373,7 @@ function playAudioUrl(url: string): SpeakHandle {
     error: callbacks.error,
     endedListener,
     errorListener,
+    pooledAudio: pooled,
   };
 
   void audio.play().catch(() => {
