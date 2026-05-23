@@ -90,23 +90,17 @@ export function FlashcardImage({
           alt="Card illustration"
           className="w-full max-h-72 sm:max-h-80 object-contain rounded-lg"
         />
-        {imageTier && (
-          <span
-            className={`absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide backdrop-blur-sm shadow-sm ${
-              imageTier === "premium"
-                ? "bg-primary/85 text-primary-foreground"
-                : "bg-card/85 text-foreground border border-border"
-            }`}
-            title={
-              imageTier === "premium"
-                ? "Premium illustration · 5 credits"
-                : "Quick illustration · 1 credit"
-            }
-          >
-            <span aria-hidden>{imageTier === "premium" ? "🎨" : "✨"}</span>
-            <span>{imageTier === "premium" ? "Premium" : "Quick"}</span>
-          </span>
-        )}
+        {/* Tier badge intentionally removed (user feedback,
+         *  May 2026): plastering "Premium" / "Quick" on the
+         *  illustration itself reads as a marketing watermark.
+         *  The visual difference between tiers is supposed to
+         *  speak for itself; if it doesn't, the answer is to
+         *  improve the cheap tier, not label the expensive one.
+         *  Tier metadata still lives on the Card row and drives
+         *  the regenerate-at-same-tier flow — we just don't
+         *  display it on the rendered card. The imageTier prop
+         *  is kept in the type so callers can keep threading it
+         *  without breaking. */}
       </div>
     );
   }
