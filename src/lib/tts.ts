@@ -205,14 +205,17 @@ export async function preloadAudio(
   }
 }
 
-// Default TTS playback speed. 1.0 is "broadcast standard" but
-// Google's Neural2 / Chirp 3 HD voices have natural breath pauses
-// that make 1.0 feel slow during rapid-fire study. 1.2 is the
-// sweet spot — clearly faster than 1.0, still natural. Don't bump
-// this any higher without a UI for it — past feedback rounds have
-// confirmed 1.2 reads as "comfortable", anything more chipmunks
-// the consonant-cluster languages.
-const DEFAULT_TTS_SPEED = 1.2;
+// Default TTS playback speed. Was bumped to 1.2 in an earlier
+// round on the theory that Google's Chirp 3 HD voices had natural
+// breath pauses making 1.0 feel slow. User feedback after the
+// pre-decode-pool change made audio start instantly: combined,
+// the perceived effect was "everything's playing faster". Reset
+// to 1.0 (broadcast standard) so the playback rate matches what
+// the account-page slider defaults to AND what most users
+// expect. Anyone who wants faster can drag the slider in
+// /account → Text-to-Speech and their personal value wins over
+// this default.
+const DEFAULT_TTS_SPEED = 1.0;
 
 function getSettings(): { ttsSpeed: number } {
   try {

@@ -106,55 +106,27 @@ export function ImageQuotaCard() {
               </p>
             </div>
 
-            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm space-y-1">
-              <p className="font-medium mb-1">You currently have enough for:</p>
-              <p className="text-muted-foreground">
-                ✨ up to <span className="text-foreground font-medium">{quickCount.toLocaleString()}</span> Quick images
-              </p>
-              <p className="text-muted-foreground">
-                🎨 up to <span className="text-foreground font-medium">{premiumCount.toLocaleString()}</span> Premium images
-              </p>
+            <p className="text-xs text-muted-foreground">
+              Enough for{" "}
+              <span className="text-foreground font-medium">
+                ~{premiumCount.toLocaleString()} Premium
+              </span>{" "}
+              or{" "}
+              <span className="text-foreground font-medium">
+                {quickCount.toLocaleString()} Quick
+              </span>{" "}
+              images
               {quota.credits > 0 && (
-                <p className="text-xs text-muted-foreground pt-1">
-                  Includes {quota.credits} purchased credits (never expire)
-                </p>
+                <>
+                  {" "}
+                  · includes {quota.credits} purchased credits (never expire)
+                </>
               )}
-            </div>
+              .
+            </p>
 
-            <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground leading-relaxed space-y-2">
-              <p className="font-medium text-foreground text-sm">
-                Quick ✨ vs Premium 🎨
-              </p>
-              <p>
-                <span className="text-foreground font-medium">Quick</span>{" "}
-                images cost 1 credit each — clean and simple. They&apos;re
-                fine if you&apos;re running out of credits and want to
-                populate packs quickly and cheaply.
-              </p>
-              <p>
-                That said, we&apos;d definitely recommend{" "}
-                <span className="text-foreground font-medium">Premium</span>{" "}
-                (5 credits each). They&apos;re much higher quality and way
-                more memorable — and memorable is the whole point. If
-                you&apos;re serious about your learning and want cards that
-                actually stick in your mind, Premium is what we&apos;d pick.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Top up anytime</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Generating great AI images is genuinely expensive — each
-                  one is a real render — but once your pack is illustrated,
-                  those images are yours forever. And unlike the monthly
-                  Pro allowance, top-up credits never expire.
-                </p>
-                <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                  Estimates below assume premium images (5 credits each)
-                  and decks of 50 cards.
-                </p>
-              </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Top up</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {CREDIT_BUNDLES.map((bundle) => (
                   <button
@@ -194,28 +166,12 @@ export function ImageQuotaCard() {
             </div>
 
             {quota.plan === "monthly" && (
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <p className="text-sm font-medium">
-                    Or unlock a year&apos;s worth of credits today
-                  </p>
-                  <span className="text-[10px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
-                    Best value
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  On monthly, your 500 credits trickle in — fine for steady
-                  study, slow if you want to illustrate a whole library now.
-                  The yearly plan ($79.99) drops all{" "}
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-xs text-muted-foreground leading-snug min-w-0 flex-1">
                   <span className="font-medium text-foreground">
-                    6,000 credits
+                    Switch to yearly
                   </span>{" "}
-                  into your account immediately — enough for about{" "}
-                  <span className="font-medium text-foreground">
-                    24 illustrated packs of 50
-                  </span>{" "}
-                  with no throttling. Roughly three months free vs paying
-                  monthly, plus your purchased top-ups still stack on top.
+                  · all 6,000 credits unlocked upfront, ~3 months free
                 </p>
                 <Button
                   size="sm"
@@ -251,11 +207,6 @@ export function ImageQuotaCard() {
               You have{" "}
               <span className="font-semibold">{quota.lifetimeFreeRemaining}</span>{" "}
               free credits to try AI images.
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Pro unlocks 500 AI image credits per month — or 6,000 a year
-              unlocked upfront on the yearly plan — plus indefinite image
-              visibility past the 30-day free-trial window.
             </p>
             <Button size="sm" onClick={() => router.push("/pricing")}>
               See plans

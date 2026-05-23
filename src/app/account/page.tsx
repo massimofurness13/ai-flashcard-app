@@ -134,42 +134,43 @@ export default function AccountPage() {
   const avatarUrl = user?.user_metadata?.avatar_url;
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <h1 className="font-editorial text-3xl font-medium sm:text-4xl">Account & Settings</h1>
+    <div className="space-y-4 max-w-2xl">
+      <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
+        Account &amp; settings
+      </h1>
 
-      {/* User Profile */}
+      {/* Identity row — avatar + name + email + sign-out in a single
+       *  compact bar so the user can scan past it in one glance. The
+       *  old layout had a full Card with header/content padding for
+       *  what was really just "you're logged in as X". */}
       {user && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-4">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={displayName}
-                  className="h-16 w-16 rounded-full"
-                />
-              ) : (
-                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
-                  {displayName[0]?.toUpperCase()}
-                </div>
-              )}
-              <div>
-                <p className="text-lg font-semibold">{displayName}</p>
-                <p className="text-sm text-muted-foreground">{user.email}</p>
-              </div>
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              className="h-10 w-10 rounded-full shrink-0"
+            />
+          ) : (
+            <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-base font-bold text-primary">
+              {displayName[0]?.toUpperCase()}
             </div>
-            <Button
-              variant="outline"
-              className="text-destructive hover:text-destructive"
-              onClick={handleLogout}
-            >
-              Sign Out
-            </Button>
-          </CardContent>
-        </Card>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold truncate">{displayName}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {user.email}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive shrink-0"
+            onClick={handleLogout}
+          >
+            Sign out
+          </Button>
+        </div>
       )}
 
       {/* Subscription + sync + member-since */}
@@ -306,25 +307,21 @@ export default function AccountPage() {
         </CardContent>
       </Card>
 
-      {/* TTS Settings — voices are now set per-pack (front & back language
-          on each Pack's Edit page), so this section only hosts the global
-          speed slider that applies across every pack. */}
+      {/* TTS speed only — voices are set per pack on the Edit Pack
+       *  screen. The long explanation about that has been moved to
+       *  Help; this section is just the slider + test button. */}
       <Card>
         <CardHeader>
-          <CardTitle>Text-to-Speech</CardTitle>
+          <CardTitle>Audio</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Voices are configured per pack. Open any pack → Edit Pack and set
-            the <strong>Front language</strong> and <strong>Back language</strong>{" "}
-            there — we&apos;ll use the right native-speaker voice for each side
-            automatically.
-          </p>
-
+        <CardContent className="space-y-3">
           <div>
-            <label className="text-sm font-medium mb-2 block">
-              Speed: {ttsSpeed}x
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">Playback speed</label>
+              <span className="text-sm tabular-nums text-muted-foreground">
+                {ttsSpeed.toFixed(1)}×
+              </span>
+            </div>
             <input
               type="range"
               min={0.5}
@@ -337,13 +334,9 @@ export default function AccountPage() {
               }}
               className="w-full"
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              Applies across all packs, for both cloud and device voices.
-            </p>
           </div>
-
-          <Button variant="outline" onClick={testVoice}>
-            Test speed with a sample
+          <Button variant="outline" size="sm" onClick={testVoice}>
+            Test
           </Button>
         </CardContent>
       </Card>

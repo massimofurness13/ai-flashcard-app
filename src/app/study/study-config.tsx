@@ -55,6 +55,14 @@ interface PersistedDefaults {
    *  the user has created since — those start unticked so the user
    *  consciously opts them into rotation. */
   defaultDeckIds?: string[];
+  /** Last-used filter (due / random / recent / etc.). User picks
+   *  a filter once and expects it to stick — the previous version
+   *  was always resetting back to "due" on next visit. */
+  defaultFilter?: StudyFilter;
+  /** Last-used tag selection. Same rationale as deck IDs — we
+   *  filter to tags that still exist on the user's cards so a
+   *  rename/delete doesn't leave dead chips on the next visit. */
+  defaultTags?: string[];
 }
 
 /**
@@ -210,8 +218,16 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
         setSelectedDeckIds(filtered);
       }
     }
+    // Filter persistence — URL still wins so a deep-link from
+    // "Today's session" can pin filter=due regardless of saved
+    // preference. Otherwise honour what the user last picked.
+    if (!preselectedFilter && d.defaultFilter) {
+      setFilter(d.defaultFilter);
+    }
     // Intentional: only run once on mount. searchParams listening here
-    // would re-hydrate mid-edit and stomp the user's choices.
+    // would re-hydrate mid-edit and stomp the user's choices. Tag
+    // hydration runs in its own useEffect (it depends on
+    // availableTags being fetched first).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [availableTags, setAvailableTags] = useState<{ name: string; count: number }[]>([]);
@@ -223,16 +239,36 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
   useEffect(() => {
     fetch("/api/user/tags")
       .then((r) => r.json())
-      .then((data: { tags: { name: string; count: number }[] }) =>
-        setAvailableTags(data.tags || [])
-      )
+      .then((data: { tags: { name: string; count: number }[] }) => {
+        const tags = data.tags || [];
+        setAvailableTags(tags);
+        // Tag hydration runs here (rather than in the main
+        // hydration useEffect) because we need to know which tags
+        // actually exist on the user's cards — otherwise a deleted/
+        // renamed tag would survive in the saved list and silently
+        // narrow the query to zero matches. URL still wins so a
+        // deep-link can override.
+        if (!searchParams.get("tags")) {
+          const saved = readDefaults().defaultTags;
+          if (Array.isArray(saved) && saved.length > 0) {
+            const liveTagNames = new Set(tags.map((t) => t.name));
+            const filtered = saved.filter((t) => liveTagNames.has(t));
+            if (filtered.length > 0) setSelectedTags(filtered);
+          }
+        }
+      })
       .catch(() => setAvailableTags([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function toggleTag(tag: string) {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
+    setSelectedTags((prev) => {
+      const next = prev.includes(tag)
+        ? prev.filter((t) => t !== tag)
+        : [...prev, tag];
+      writeDefaults({ defaultTags: next });
+      return next;
+    });
   }
 
   const totalCards = decks
@@ -387,7 +423,11 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
         <CardContent className="space-y-3">
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value as StudyFilter)}
+            onChange={(e) => {
+              const next = e.target.value as StudyFilter;
+              setFilter(next);
+              writeDefaults({ defaultFilter: next });
+            }}
             className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {FILTER_OPTIONS.map((opt) => (
@@ -410,7 +450,10 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
               {selectedTags.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setSelectedTags([])}
+                  onClick={() => {
+                    setSelectedTags([]);
+                    writeDefaults({ defaultTags: [] });
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Clear
