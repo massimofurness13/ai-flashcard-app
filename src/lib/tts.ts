@@ -123,11 +123,15 @@ export async function preloadAudio(
   }
 }
 
-// Default TTS speed. 1.0 is "broadcast standard" but Google's Neural2
-// voices have natural breath pauses that make 1.0 feel slow during
-// rapid-fire study. 1.2 splits the difference — clearer than 1.5,
-// noticeably brisker than 1.0. Users can still override in settings.
-const DEFAULT_TTS_SPEED = 1.2;
+// Default TTS speed. Was 1.2 (then 1.4) — user feedback during the
+// pre-launch run still flagged playback as too slow for rapid-fire
+// study. Bumped to 1.5 which is the upper edge of "still natural-
+// sounding" for Google's Chirp 3 HD voices; anything above ~1.6
+// starts to chipmunk on the consonant-cluster languages (German,
+// Polish, Czech) and listening fatigue spikes. Users can still
+// override in settings (the per-user ttsSpeed in localStorage
+// `huella-settings` wins over this default).
+const DEFAULT_TTS_SPEED = 1.5;
 
 function getSettings(): { ttsSpeed: number } {
   try {
