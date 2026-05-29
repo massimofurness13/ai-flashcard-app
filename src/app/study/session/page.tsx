@@ -23,6 +23,10 @@ function StudySessionContent() {
   const [loading, setLoading] = useState(true);
   const [completed, setCompleted] = useState(false);
   const [stats, setStats] = useState<StudyStats | null>(null);
+  // Onboarding learning language — drives the voice fallback for
+  // decks with no explicit language code (so we never use the
+  // robotic device voice).
+  const [learningLanguage, setLearningLanguage] = useState<string | null>(null);
 
   const deckIds = searchParams.get("deckIds") || "";
   const limit = searchParams.get("limit") || "25";
@@ -46,6 +50,7 @@ function StudySessionContent() {
       .then((res) => res.json())
       .then((data) => {
         setCards(data.cards);
+        setLearningLanguage(data.learningLanguage ?? null);
         setLoading(false);
       });
   }, [deckIds, limit, filter, tags]);
@@ -129,6 +134,7 @@ function StudySessionContent() {
   return (
     <StudySession
       initialCards={cards}
+      learningLanguage={learningLanguage}
       autoFlipSeconds={autoFlip}
       autoAdvanceSeconds={autoAdvance}
       orientation={orientation}

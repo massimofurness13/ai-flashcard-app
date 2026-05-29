@@ -138,7 +138,22 @@ export async function GET(request: NextRequest) {
 
   const totalAvailable = await prisma.card.count({ where });
 
-  return NextResponse.json({ cards, totalDue: totalAvailable, total: totalAvailable });
+  // The user's onboarding learning language drives the voice
+  // fallback for any deck that has no explicit front/back language
+  // code (e.g. an AI-generated pack where the language picker was
+  // skipped). The study session maps this to a BCP-47 code so we
+  // never drop to the robotic device voice.
+  const user = await prisma.user.findUnique({
+    where: { id: auth.userId },
+    select: { learningLanguage: true },
+  });
+
+  return NextResponse.json({
+    cards,
+    totalDue: totalAvailable,
+    total: totalAvailable,
+    learningLanguage: user?.learningLanguage ?? null,
+  });
 }
 
 // POST /api/review — submit a review rating (SM-2 update)

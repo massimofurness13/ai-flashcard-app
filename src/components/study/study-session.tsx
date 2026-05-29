@@ -12,6 +12,7 @@ import { ImagePreloader } from "./image-preloader";
 import { VoicePreloader, type VoicePreloadItem } from "./voice-preloader";
 import { useCreditBalance } from "@/components/subscription/credit-balance";
 import { CountdownWheel } from "./countdown-wheel";
+import { fallbackVoiceCodes } from "@/lib/language-codes";
 
 const PRELOAD_AHEAD = 5;
 // Voice preload window is tighter than image preload (3 vs 5) because
@@ -44,6 +45,10 @@ interface StudySessionProps {
   autoAdvanceSeconds?: number;
   orientation: "front" | "back" | "mixed";
   onComplete: (stats: StudyStats) => void;
+  /** The user's onboarding learning language ("es", "fr", …). Used
+   *  to pick a native-speaker voice for any deck that has no explicit
+   *  language code, so we never drop to the robotic device voice. */
+  learningLanguage?: string | null;
 }
 
 export interface StudyStats {
@@ -130,6 +135,7 @@ function readResumeSnapshot(cards: Card[]): StudyResumeSnapshot | null {
 
 export function StudySession({
   initialCards,
+  learningLanguage,
   autoFlipSeconds,
   autoAdvanceSeconds = 0,
   orientation,
@@ -204,6 +210,20 @@ export function StudySession({
   const progress = total > 0 ? currentIndex / total : 0;
   const showBackFirst = showBackFirstPerCard[currentIndex];
 
+  // Voice fallback for decks with no explicit language code. front
+  // falls back to the user's learning language (best guess for the
+  // foreign side), back to English. Resolved once per render. A deck
+  // that DOES have codes uses them; only the gaps get filled. This is
+  // what guarantees the device voice is never used.
+  const voiceFallback = useMemo(
+    () => fallbackVoiceCodes(learningLanguage),
+    [learningLanguage],
+  );
+  const effFront = (code: string | null | undefined) =>
+    code || voiceFallback.front;
+  const effBack = (code: string | null | undefined) =>
+    code || voiceFallback.back;
+
   // Identifies the audio currently expected to be playing. The
   // Flashcard fires onAudioEnd, we stamp this key into lastAudioKey,
   // and audioFinished becomes true. Changing card/side automatically
@@ -234,15 +254,23 @@ export function StudySession({
     const items: VoicePreloadItem[] = [];
     const slice = cards.slice(currentIndex, currentIndex + VOICE_PRELOAD_AHEAD + 1);
     for (const c of slice) {
-      if (c.deck.frontLanguageCode && c.front) {
-        items.push({ text: c.front, languageCode: c.deck.frontLanguageCode });
+      // Preload against the EFFECTIVE codes (deck code or fallback)
+      // so the fallback-language clips are warm too — otherwise the
+      // first card on a code-less deck would hit the slow path.
+      const front = effFront(c.deck.frontLanguageCode);
+      const back = effBack(c.deck.backLanguageCode);
+      if (front && c.front) {
+        items.push({ text: c.front, languageCode: front });
       }
-      if (c.deck.backLanguageCode && c.back) {
-        items.push({ text: c.back, languageCode: c.deck.backLanguageCode });
+      if (back && c.back) {
+        items.push({ text: c.back, languageCode: back });
       }
     }
     return items;
-  }, [cards, currentIndex]);
+    // effFront/effBack are derived from voiceFallback (stable per
+    // learningLanguage); listing voiceFallback covers them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, currentIndex, voiceFallback]);
 
   // Auto-flip is driven by the CountdownWheel's onComplete in the JSX
   // below — same pattern as auto-advance. The wheel itself only ticks
@@ -453,10 +481,14 @@ export function StudySession({
           frontVoice={frontVoiceName}
           backVoice={backVoiceName}
           frontLanguageCode={
-            showBackFirst ? currentCard.deck.backLanguageCode : currentCard.deck.frontLanguageCode
+            showBackFirst
+              ? effBack(currentCard.deck.backLanguageCode)
+              : effFront(currentCard.deck.frontLanguageCode)
           }
           backLanguageCode={
-            showBackFirst ? currentCard.deck.frontLanguageCode : currentCard.deck.backLanguageCode
+            showBackFirst
+              ? effFront(currentCard.deck.frontLanguageCode)
+              : effBack(currentCard.deck.backLanguageCode)
           }
           autoPlayVoice
           paused={isPaused}

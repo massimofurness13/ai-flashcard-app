@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card as CardUI, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
-import { AnkiExportButton } from "@/components/export/anki-export-button";
 import { type LetterGrade, gradeColor } from "@/lib/sm2";
 import { estimateImageGenTime } from "@/lib/utils";
 
@@ -43,6 +42,9 @@ interface DeckViewProps {
   overallGrade: LetterGrade;
   avgMastery: number;
   gradeDistribution: GradeDistribution;
+  /** Accepted for call-site compatibility (the deck page still
+   *  passes it) but no longer used here — Anki export is free now,
+   *  so the export action doesn't gate on Pro. */
   isPro?: boolean;
   /** Drives whether AI illustrations render unblurred. True for
    *  active Pro users AND for non-Pro users still in their 30-day
@@ -55,7 +57,6 @@ export function DeckView({
   overallGrade,
   avgMastery,
   gradeDistribution,
-  isPro = false,
   canViewAiImages = false,
 }: DeckViewProps) {
   const router = useRouter();
@@ -118,6 +119,38 @@ export function DeckView({
   // card in this deck (server-side), tears down the local polling
   // loop, then refreshes so the UI flips back to the idle state.
   const [stopping, setStopping] = useState(false);
+  // Anki export (.apkg). Free for everyone (the Pro gate was removed
+  // in the free-tier unlock). Lives in the ⋯ menu now rather than as
+  // a prominent button — it's a "your data is yours" escape hatch,
+  // not part of the daily loop, so it shouldn't tempt the user out
+  // of the app on every deck view.
+  const [exporting, setExporting] = useState(false);
+  async function handleExport() {
+    if (deck._count.cards === 0 || exporting) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/export/anki?deckId=${deck.id}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Export failed. Please try again.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${deck.name.replace(/[^a-zA-Z0-9-_ ]/g, "_")}.apkg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function handleStop() {
     setStopping(true);
     try {
@@ -219,18 +252,21 @@ export function DeckView({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
+      {/* min-w-0 on the title column + shrink-0 on the action column
+       *  so a long pack name wraps within its own space instead of
+       *  pushing the Study button off the edge / overlapping it. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             {deck.folder && (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground truncate">
                 {deck.folder.emoji} {deck.folder.name} /
               </span>
             )}
           </div>
-          <h1 className="font-editorial text-3xl font-medium sm:text-4xl flex items-center gap-2">
-            <span className="text-3xl">{deck.emoji || "\ud83d\udcda"}</span>
-            {deck.name}
+          <h1 className="font-editorial text-3xl font-medium sm:text-4xl flex items-start gap-2">
+            <span className="text-3xl shrink-0">{deck.emoji || "\ud83d\udcda"}</span>
+            <span className="min-w-0 break-words">{deck.name}</span>
           </h1>
           {deck.description && (
             <p className="text-muted-foreground mt-1">{deck.description}</p>
@@ -240,7 +276,7 @@ export function DeckView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* The old Quick (N) / Premium (5N) buttons were confusing —
            * users read "97" as "97 credits remaining" rather than
            * "97 cards × 1 credit each." Image generation now lives
@@ -266,6 +302,11 @@ export function DeckView({
             <DropdownItem onClick={() => router.push(`/decks/${deck.id}/edit`)}>
               Edit Pack Settings
             </DropdownItem>
+            {deck.cards.length > 0 && (
+              <DropdownItem onClick={handleExport}>
+                {exporting ? "Exporting…" : "Export to Anki (.apkg)"}
+              </DropdownItem>
+            )}
             <DropdownItem onClick={handleArchive}>
               Archive Pack
             </DropdownItem>
@@ -295,12 +336,22 @@ export function DeckView({
             </Button>
           </Link>
         )}
-        <AnkiExportButton
-          deckId={deck.id}
-          deckName={deck.name}
-          isPro={isPro}
-          cardCount={deck._count.cards}
-        />
+        {/* Pack settings (name, emoji, folder, and crucially the
+         *  front/back voice language) deserves a first-class button,
+         *  not just a buried dropdown item — setting the language is
+         *  how a user gets native-speaker audio. The Export-as-Anki
+         *  button was removed from this row: it pulls the user OUT of
+         *  the app and isn't part of the core loop. Anki export still
+         *  exists for anyone who wants it in the ⋯ menu above. */}
+        <Link href={`/decks/${deck.id}/edit`}>
+          <Button variant="outline">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Pack settings
+          </Button>
+        </Link>
       </div>
 
       {generationActive && (
@@ -447,9 +498,9 @@ export function DeckView({
         <div className="space-y-4">
           <div className="text-center py-6">
             <span className="text-4xl">{"\ud83c\udccf"}</span>
-            <h2 className="font-editorial text-xl font-medium mt-3">Let's add some cards</h2>
+            <h2 className="font-editorial text-xl font-medium mt-3">Let&apos;s add some cards</h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Choose how you'd like to fill your new pack
+              Choose how you&apos;d like to fill your new pack
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
