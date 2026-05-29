@@ -365,6 +365,13 @@ export default function AccountPage() {
 
       {/* Danger zone (delete account) */}
       <DangerZoneCard />
+
+      {/* Build stamp — lets the user (and support) confirm which
+       *  deployed version they're actually running, which matters
+       *  when a cached PWA might be serving an old bundle. */}
+      <p className="text-center text-[11px] text-muted-foreground/60 pt-2">
+        Huella · build {process.env.NEXT_PUBLIC_BUILD_SHA}
+      </p>
     </div>
   );
 }

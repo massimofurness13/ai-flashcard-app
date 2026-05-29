@@ -12,7 +12,12 @@ export function Footer() {
   return (
     <footer className="border-t border-border/60 mt-12 hidden md:block">
       <div className="mx-auto max-w-7xl px-4 py-6 flex items-center justify-between text-xs text-muted-foreground">
-        <p>© {year} Huella</p>
+        <p>
+          © {year} Huella
+          <span className="ml-2 opacity-50">
+            build {process.env.NEXT_PUBLIC_BUILD_SHA}
+          </span>
+        </p>
         <nav className="flex items-center gap-4">
           <Link href="/privacy" className="hover:text-foreground transition-colors">
             Privacy
