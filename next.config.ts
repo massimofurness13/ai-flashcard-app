@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // Expose the deployed commit SHA to the client so the UI can show
+  // a tiny build stamp. Lets us (and the user) tell at a glance
+  // which version is actually loaded — invaluable when a PWA is
+  // serving a stale page and "did my fix deploy?" is ambiguous.
+  // Render sets RENDER_GIT_COMMIT at build time; locally it's
+  // undefined so we fall back to "dev".
+  env: {
+    NEXT_PUBLIC_BUILD_SHA: (process.env.RENDER_GIT_COMMIT || "dev").slice(0, 7),
+  },
   images: {
     remotePatterns: [
       {
