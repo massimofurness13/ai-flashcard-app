@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { LANGUAGE_TO_BCP47 } from "@/lib/language-codes";
 
 /**
  * Finalises the onboarding flow:
@@ -24,17 +25,6 @@ const RequestSchema = z.object({
   cloneStarterPack: z.boolean().optional().default(true),
 });
 
-const LANGUAGE_TO_BCP47: Record<string, { front: string; back: string }> = {
-  es: { front: "es-ES", back: "en-GB" },
-  fr: { front: "fr-FR", back: "en-GB" },
-  de: { front: "de-DE", back: "en-GB" },
-  it: { front: "it-IT", back: "en-GB" },
-  pt: { front: "pt-PT", back: "en-GB" },
-  ja: { front: "ja-JP", back: "en-GB" },
-  ko: { front: "ko-KR", back: "en-GB" },
-  zh: { front: "cmn-CN", back: "en-GB" },
-  en: { front: "en-GB", back: "en-GB" },
-};
 
 export async function POST(request: Request) {
   const auth = await requireAuth();
