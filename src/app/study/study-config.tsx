@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import {
   CARDS_PER_SESSION_OPTIONS,
   AUTO_FLIP_MAX,
+  RECOMMENDED_AUTO_TIMING,
   CARD_ORIENTATION_OPTIONS,
 } from "@/lib/constants";
 
@@ -533,9 +534,25 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
           </div>
 
           <div>
-            <label className="text-sm font-medium mb-2 block">
-              Auto-flip timer: {autoFlip === 0 ? "Off" : `${autoFlip.toFixed(1)}s`}
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">
+                Auto-flip timer: {autoFlip === 0 ? "Off" : `${autoFlip.toFixed(1)}s`}
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setAutoFlip(RECOMMENDED_AUTO_TIMING);
+                  writeDefaults({ defaultAutoFlip: RECOMMENDED_AUTO_TIMING });
+                }}
+                className={`text-[11px] rounded-full px-2 py-0.5 transition-colors ${
+                  autoFlip === RECOMMENDED_AUTO_TIMING
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                ★ Recommended: {RECOMMENDED_AUTO_TIMING}s
+              </button>
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground">Off</span>
               <input
@@ -556,9 +573,25 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
           </div>
 
           <div>
-            <label className="text-sm font-medium mb-2 block">
-              Auto-advance timer: {autoAdvance === 0 ? "Off" : `${autoAdvance.toFixed(1)}s`}
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">
+                Auto-advance timer: {autoAdvance === 0 ? "Off" : `${autoAdvance.toFixed(1)}s`}
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setAutoAdvance(RECOMMENDED_AUTO_TIMING);
+                  writeDefaults({ defaultAutoAdvance: RECOMMENDED_AUTO_TIMING });
+                }}
+                className={`text-[11px] rounded-full px-2 py-0.5 transition-colors ${
+                  autoAdvance === RECOMMENDED_AUTO_TIMING
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                ★ Recommended: {RECOMMENDED_AUTO_TIMING}s
+              </button>
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground">Off</span>
               <input

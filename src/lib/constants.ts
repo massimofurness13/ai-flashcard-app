@@ -6,8 +6,14 @@ export const CARDS_PER_SESSION_OPTIONS = [10, 25, 50, 100, 200] as const;
 export const DEFAULT_CARDS_PER_SESSION = 10;
 
 export const AUTO_FLIP_MIN = 1;
-export const AUTO_FLIP_MAX = 10;
+// Capped at 5s — user feedback: 10s was dead time, nobody used the
+// upper half of the range. 1s is the sweet spot for both auto-flip
+// and auto-advance (it reads fast and keeps momentum), surfaced as
+// a "Recommended" hint in the study UI.
+export const AUTO_FLIP_MAX = 5;
 export const DEFAULT_AUTO_FLIP = 0;
+/** The timing we recommend in the UI for auto-flip / auto-advance. */
+export const RECOMMENDED_AUTO_TIMING = 1;
 
 export const CARD_ORIENTATION_OPTIONS = [
   { label: "Front first", value: "front" },
