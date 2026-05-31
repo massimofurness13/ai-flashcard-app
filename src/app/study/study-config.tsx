@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { unlockAudio } from "@/lib/tts";
 import {
   CARDS_PER_SESSION_OPTIONS,
   AUTO_FLIP_MAX,
@@ -331,6 +332,10 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
   }
 
   function startStudy() {
+    // Unlock audio NOW, inside this tap, so the session's get-ready
+    // countdown doesn't outlive the browser's autoplay-gesture window
+    // and leave every card silent. See unlockAudio() in lib/tts.
+    unlockAudio();
     const params = new URLSearchParams({
       deckIds: selectedDeckIds.join(","),
       limit: String(cardsPerSession),
