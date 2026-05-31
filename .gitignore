@@ -49,3 +49,17 @@ next-env.d.ts
 
 /src/generated/prisma
 tests/fixtures/provider-comparison/
+
+# ── Capacitor / iOS native build artifacts ──────────────────────
+# The Xcode project itself (ios/App/App.xcodeproj, AppDelegate, etc.)
+# IS committed so the native shell is reproducible. But build output,
+# user-specific Xcode state, and dependency caches are not.
+ios/App/Pods/
+ios/App/build/
+ios/App/DerivedData/
+ios/App/Podfile.lock
+ios/App/App/public/
+ios/App/*.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+**/.DS_Store
