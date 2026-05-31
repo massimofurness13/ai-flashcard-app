@@ -8,13 +8,22 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "ios:icons": "node scripts/gen-app-icons.mjs && npx @capacitor/assets generate --ios",
+    "ios:sync": "npx cap sync ios",
+    "ios:open": "npx cap open ios"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@fal-ai/client": "^1.9.5",
     "@google-cloud/text-to-speech": "^6.4.0",
     "@prisma/adapter-pg": "^7.7.0",
