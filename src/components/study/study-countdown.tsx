@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { preloadAudio } from "@/lib/tts";
+import { preloadAudio, unlockAudio } from "@/lib/tts";
 import { fallbackVoiceCodes } from "@/lib/language-codes";
 
 interface CountdownCard {
@@ -61,6 +61,15 @@ export function StudyCountdown({
     onComplete();
   }
 
+  // Tap-to-skip path. The tap is a fresh user gesture, so re-unlock
+  // audio here too — covers the case where the entry tap's unlock
+  // somehow didn't take (e.g. the user reached the session by a
+  // route that didn't call unlockAudio).
+  function skip() {
+    unlockAudio();
+    finish();
+  }
+
   // Preload the opening cards' audio once on mount.
   useEffect(() => {
     const fallback = fallbackVoiceCodes(learningLanguage);
@@ -88,7 +97,7 @@ export function StudyCountdown({
   return (
     <button
       type="button"
-      onClick={finish}
+      onClick={skip}
       className="flex min-h-[70vh] w-full flex-col items-center justify-center gap-6 text-center"
       aria-label="Get ready — tap to start now"
     >

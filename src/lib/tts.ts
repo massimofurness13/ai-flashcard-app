@@ -55,6 +55,82 @@ function getPersistentAudio(): HTMLAudioElement {
   return persistentAudio;
 }
 
+// A tiny silent WAV, generated once and cached. Built in JS (rather
+// than a hand-typed base64 string) so it's guaranteed to be a valid
+// file every browser will accept. Used only by unlockAudio().
+let silentUnlockUrl: string | null = null;
+function getSilentUnlockUrl(): string {
+  if (silentUnlockUrl) return silentUnlockUrl;
+  const sampleRate = 8000;
+  const numSamples = 400; // ~50ms of 16-bit PCM silence
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+  const writeStr = (off: number, s: string) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+  };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, "data");
+  view.setUint32(40, numSamples * 2, true);
+  // Sample bytes are already zero → silence.
+  silentUnlockUrl = URL.createObjectURL(
+    new Blob([buffer], { type: "audio/wav" }),
+  );
+  return silentUnlockUrl;
+}
+
+/**
+ * Grant the persistent audio element autoplay permission for the
+ * rest of the SPA session. MUST be called synchronously inside a
+ * user gesture (a tap/click handler) — playing the element within a
+ * gesture is what the browser's autoplay policy requires to trust
+ * subsequent non-gesture plays.
+ *
+ * Why this exists: the study "get ready" countdown introduces a few
+ * seconds between the tap that starts a session and the first card's
+ * audio. That delay outlives the browser's gesture-activation window
+ * (~5s), so without this pre-unlock the first auto-play — and every
+ * one after it, since the element never earned trust — gets silently
+ * blocked. Call this in the same click that navigates into a study
+ * session. It plays a ~50ms silent clip and pauses; the trust it
+ * earns persists because `persistentAudio` is module-level and
+ * survives client-side navigation.
+ */
+export function unlockAudio(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const audio = getPersistentAudio();
+    audio.src = getSilentUnlockUrl();
+    audio.muted = false;
+    audio.load();
+    const p = audio.play();
+    if (p && typeof p.then === "function") {
+      p.then(() => {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch {
+          /* ignore */
+        }
+      }).catch(() => {
+        // Even a rejected play() inside a gesture usually still
+        // grants activation; nothing to do on failure.
+      });
+    }
+  } catch {
+    /* best effort */
+  }
+}
+
 // Tracks the callbacks bound to the audio element so cancel() can
 // detach them cleanly when a new speak() takes over.
 let activeCallbacks: {
