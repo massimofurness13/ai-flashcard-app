@@ -1,8 +1,9 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { StudySession, type StudyStats } from "@/components/study/study-session";
+import { StudyCountdown } from "@/components/study/study-countdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -13,7 +14,13 @@ interface StudyCard {
   imageUrl: string | null;
   imageTier: string | null;
   hint: string | null;
-  deck: { id: string; name: string; emoji: string | null };
+  deck: {
+    id: string;
+    name: string;
+    emoji: string | null;
+    frontLanguageCode?: string | null;
+    backLanguageCode?: string | null;
+  };
 }
 
 function StudySessionContent() {
@@ -27,6 +34,20 @@ function StudySessionContent() {
   // decks with no explicit language code (so we never use the
   // robotic device voice).
   const [learningLanguage, setLearningLanguage] = useState<string | null>(null);
+  // Gate the session behind a short "get ready" countdown. While it
+  // runs we preload the opening cards' audio so the session starts
+  // with zero delay instead of the user waiting on card 1.
+  //
+  // EXCEPT when resuming mid-session: if the user edited a card and
+  // is coming straight back to where they were (a "study-session-
+  // resume" snapshot is waiting in sessionStorage — key owned by
+  // study-session.tsx), skip the countdown. They were already in
+  // the flow; a fresh 3·2·1 would be jarring.
+  const [prepared, setPrepared] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem("study-session-resume") !== null;
+  });
+  const handlePrepared = useCallback(() => setPrepared(true), []);
 
   const deckIds = searchParams.get("deckIds") || "";
   const limit = searchParams.get("limit") || "25";
@@ -128,6 +149,18 @@ function StudySessionContent() {
           </Button>
         </div>
       </div>
+    );
+  }
+
+  // Cards are loaded but the user hasn't passed the get-ready
+  // countdown yet — show it (and preload the opening audio behind it).
+  if (!prepared) {
+    return (
+      <StudyCountdown
+        cards={cards}
+        learningLanguage={learningLanguage}
+        onComplete={handlePrepared}
+      />
     );
   }
 

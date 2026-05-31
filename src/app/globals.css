@@ -196,6 +196,25 @@ body.font-xlarge { font-size: 20px; }
   animation: card-enter 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Get-ready countdown digit pop. Each digit re-mounts (keyed on the
+ * number) so this fires once per tick. Global keyframe so the
+ * StudyCountdown component's Tailwind `animate-[count-pop...]` finds
+ * it (scoped styled-jsx keyframes wouldn't be visible to Tailwind). */
+@keyframes count-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* ── Home page reveal choreography ──────────────────────────────────
  * Staggered fade-in + slight rise of page sections on first paint.
  * Uses CSS custom property --delay on each element so we can author
