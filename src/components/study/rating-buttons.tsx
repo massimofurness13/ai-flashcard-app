@@ -26,7 +26,6 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
       >
         <div className="text-center">
           <div className="font-semibold">Again</div>
-          <div className="text-xs opacity-75">1</div>
         </div>
       </Button>
 
@@ -38,7 +37,6 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
       >
         <div className="text-center">
           <div className="font-semibold">Hard</div>
-          <div className="text-xs opacity-75">2</div>
         </div>
       </Button>
 
@@ -50,7 +48,6 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
       >
         <div className="text-center">
           <div className="font-semibold">Good</div>
-          <div className="text-xs opacity-75">3</div>
         </div>
       </Button>
 
@@ -62,7 +59,6 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
       >
         <div className="text-center">
           <div className="font-semibold">Easy</div>
-          <div className="text-xs opacity-75">4</div>
         </div>
       </Button>
     </div>

@@ -67,23 +67,35 @@ export function CalendarMonth({ data }: CalendarMonthProps) {
           if (!cell) return <div key={i} className="aspect-square" />;
           const isToday = cell.date === today;
           const day = parseLocalDate(cell.date).getDate();
+          const strong = cell.count > maxCount * 0.5;
           return (
             <div
               key={cell.date}
-              className={`aspect-square rounded flex items-center justify-center text-xs transition-colors ${cellBg(
+              className={`relative aspect-square rounded transition-colors ${cellBg(
                 cell.count
               )} ${isToday ? "ring-2 ring-primary" : ""}`}
               title={`${cell.date}: ${cell.count} review${cell.count === 1 ? "" : "s"}`}
             >
+              {/* Date number — small, tucked in the top-left corner so the
+                  card count can be the prominent figure. */}
               <span
-                className={
-                  cell.count > maxCount * 0.5
-                    ? "text-primary-foreground font-medium"
-                    : "text-foreground/80"
-                }
+                className={`absolute top-0.5 left-1 text-[9px] leading-none ${
+                  strong ? "text-primary-foreground/70" : "text-muted-foreground"
+                }`}
               >
                 {day}
               </span>
+              {/* Review count — the number the user actually cares about,
+                  centred and bold. Hidden on zero-activity days. */}
+              {cell.count > 0 && (
+                <span
+                  className={`absolute inset-0 flex items-center justify-center text-sm font-semibold ${
+                    strong ? "text-primary-foreground" : "text-foreground"
+                  }`}
+                >
+                  {cell.count}
+                </span>
+              )}
             </div>
           );
         })}

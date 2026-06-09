@@ -6,6 +6,11 @@ interface KeyboardNavOptions {
   onFlip?: () => void;
   onNext?: () => void;
   onPrev?: () => void;
+  /**
+   * Accepted for backwards-compat with existing call sites, but no
+   * longer wired to any key. Huella is a touch-first app — rating is
+   * done by tapping the Again/Hard/Good/Easy buttons, not number keys.
+   */
   onRate?: (quality: number) => void;
   enabled?: boolean;
 }
@@ -14,7 +19,6 @@ export function useKeyboardNav({
   onFlip,
   onNext,
   onPrev,
-  onRate,
   enabled = true,
 }: KeyboardNavOptions) {
   useEffect(() => {
@@ -43,30 +47,10 @@ export function useKeyboardNav({
           event.preventDefault();
           onPrev?.();
           break;
-        case "Digit1":
-        case "Numpad1":
-          event.preventDefault();
-          onRate?.(1); // Again
-          break;
-        case "Digit2":
-        case "Numpad2":
-          event.preventDefault();
-          onRate?.(2); // Hard (new)
-          break;
-        case "Digit3":
-        case "Numpad3":
-          event.preventDefault();
-          onRate?.(3); // Good
-          break;
-        case "Digit4":
-        case "Numpad4":
-          event.preventDefault();
-          onRate?.(5); // Easy (SM-2 quality stays 5)
-          break;
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onFlip, onNext, onPrev, onRate, enabled]);
+  }, [onFlip, onNext, onPrev, enabled]);
 }
