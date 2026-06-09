@@ -521,9 +521,6 @@ export function StudySession({
               How well did you know this?
             </p>
             <RatingButtons onRate={handleRate} disabled={isSubmitting} />
-            <p className="text-xs text-muted-foreground text-center">
-              Keyboard: 1 = Again, 2 = Good, 3 = Easy
-            </p>
           </div>
         )}
 

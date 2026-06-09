@@ -207,6 +207,19 @@ export function StatsClient() {
                     key={day.date}
                     className="flex-1 flex flex-col items-center gap-1.5 min-w-0"
                   >
+                    {/* Actual card count above each bar. Shown for the
+                        shorter periods (≤14 days) where bars are wide
+                        enough to read; on the 30/365-day views the bars
+                        are too thin, so the count stays in the tooltip. */}
+                    <span
+                      className={`text-[10px] font-medium leading-none h-3 ${
+                        isShortPeriod && day.count > 0
+                          ? "text-foreground"
+                          : "text-transparent"
+                      }`}
+                    >
+                      {day.count > 0 ? day.count : ""}
+                    </span>
                     <div
                       className={`w-full rounded-t-md transition-all duration-500 ${
                         day.count > 0
