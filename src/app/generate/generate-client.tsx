@@ -8,7 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageTierSlider } from "@/components/generate/image-tier-slider";
 import { estimateImageGenTime } from "@/lib/utils";
-import { VOICE_CATALOG, getVoiceGroups } from "@/lib/voice-catalog";
+import {
+  VOICE_CATALOG,
+  getVoiceGroups,
+  languageNameForCode,
+} from "@/lib/voice-catalog";
 
 interface GeneratedCard {
   front: string;
@@ -64,9 +68,9 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const preselectedDeckId = searchParams.get("deckId") || "";
 
   // Pack metadata — gathered up-front so the user can see at a glance
-  // what they're about to make. Front/back language pickers are
-  // deliberately deferred to the review screen, where the user can see
-  // an actual sample card and pick the right voice for each side.
+  // what they're about to make. Front/back languages are picked on this
+  // input step too (see frontLanguageCode/backLanguageCode) because they
+  // drive the translation direction the generator uses.
   const [packName, setPackName] = useState("");
   const [emoji, setEmoji] = useState(EMOJIS[0]);
   const [showCustomEmoji, setShowCustomEmoji] = useState(false);
@@ -89,6 +93,17 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   const [imageProgress, setImageProgress] = useState(0);
   const [imageTotalNeeded, setImageTotalNeeded] = useState(0);
   const [pendingImageIndices, setPendingImageIndices] = useState<Set<number>>(new Set());
+  // Warm "are you happy with the cards?" confirmation before we spend
+  // credits. Holds the affordable image cap from the slider while we
+  // wait for the user to confirm; null = no confirmation showing.
+  const [pendingImageGenCap, setPendingImageGenCap] = useState<number | null>(null);
+  // True while we're tearing down a cancelled run (clearing imageTier on
+  // the not-yet-generated cards so the background cron skips them).
+  const [cancellingImages, setCancellingImages] = useState(false);
+  // Set when the user cancels image generation. handleSave reads this to
+  // skip the background-generation handoff — otherwise the cron would
+  // happily finish the very images the user just cancelled.
+  const imageGenCancelledRef = useRef(false);
 
   // Auto-save bookkeeping. When the AI text-generation step finishes
   // we immediately POST /api/decks so the cards land in the user's
@@ -98,8 +113,10 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   // of trying to create a duplicate.
   const [autoSavedDeckId, setAutoSavedDeckId] = useState<string | null>(null);
 
-  // Language pickers live on the review screen now, so they're set
-  // alongside the cards rather than buried in a separate flow.
+  // Front/back language selection. Picked on the input step (drives the
+  // translation direction) and echoed on the review screen (where it
+  // also sets the read-aloud voice for each side). Same state, two
+  // surfaces, always in sync.
   const [frontLanguageCode, setFrontLanguageCode] = useState("");
   const [backLanguageCode, setBackLanguageCode] = useState("");
 
@@ -319,6 +336,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       setImageTotalNeeded(slice.length);
       setPendingImageIndices(new Set(slice.map((c) => c.index)));
       abortRef.current = false;
+      imageGenCancelledRef.current = false;
 
       for (let i = 0; i < slice.length; i++) {
         if (abortRef.current) break;
@@ -391,6 +409,57 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     []
   );
 
+  /**
+   * Cancel an in-progress image run and actually save the user credits.
+   *
+   * Two things have to happen for a cancel to be real:
+   *   1. Stop the in-tab loop (abortRef) so it queues no more requests.
+   *   2. Clear imageTier on every not-yet-generated card so the
+   *      background cron — which generates ANY card with imageTier set
+   *      and imageUrl null — skips them too. Without step 2 the cron
+   *      would quietly finish the exact images the user just cancelled.
+   * The one image already mid-flight when Cancel is pressed has been
+   * charged for and is allowed to finish.
+   */
+  const cancelImageGeneration = useCallback(async () => {
+    abortRef.current = true;
+    imageGenCancelledRef.current = true;
+    setCancellingImages(true);
+    try {
+      const remaining = cardsRef.current.filter((c) => c.id && !c.imageUrl);
+      await Promise.all(
+        remaining.map((c) =>
+          fetch(`/api/cards/${c.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageTier: null }),
+          }).catch(() => {})
+        )
+      );
+    } finally {
+      setCancellingImages(false);
+      setGeneratingImages(false);
+      setPendingImageIndices(new Set());
+    }
+  }, []);
+
+  // Slider "Generate" → show the warm confirmation instead of charging
+  // straight away. The cap is stashed until the user confirms.
+  function requestImageGen(cap: number) {
+    setPendingImageGenCap(cap);
+  }
+
+  function confirmImageGen() {
+    const cap = pendingImageGenCap;
+    setPendingImageGenCap(null);
+    if (cap == null) return;
+    void generateImagesForCards(
+      cards,
+      Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length),
+      cap
+    );
+  }
+
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
     setGenerating(true);
@@ -405,6 +474,11 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
         body: JSON.stringify({
           topic: packName.trim(),
           material: material.trim() || undefined,
+          // Drive translation direction from the language pickers. When
+          // the two sides differ, the generator translates instead of
+          // copying the source onto both sides.
+          frontLanguage: languageNameForCode(frontLanguageCode) || undefined,
+          backLanguage: languageNameForCode(backLanguageCode) || undefined,
         }),
       });
 
@@ -617,7 +691,13 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     // Whatever's left is still owed: max(0, premiumCount - imagedPremium).
     // The route picks up cards-without-imageUrl in createdAt order,
     // matching the order we just inserted them in.
-    const stillMissing = snapshot.filter((c) => !c.imageUrl).length;
+    // If the user cancelled image generation, honour it: don't hand the
+    // remaining cards to the background route. cancelImageGeneration
+    // already cleared their imageTier, so the cron skips them too —
+    // this just stops us re-queuing them on the way out.
+    const stillMissing = imageGenCancelledRef.current
+      ? 0
+      : snapshot.filter((c) => !c.imageUrl).length;
     if (stillMissing > 0) {
       const imagedPremium = snapshot
         .slice(0, premiumCount)
@@ -884,6 +964,65 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
               Anki .apkg files are imported directly with their study history
               preserved. Everything else is fed to the AI to generate cards.
             </p>
+          </div>
+
+          {/* Language of each side — drives BOTH the translation and the
+           * read-aloud voice. Picking two different languages tells the
+           * AI to translate (front in one, back in the other) instead of
+           * copying the same text onto both sides. Leave as-is for
+           * non-language packs (e.g. history, science Q&A). */}
+          <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-4">
+            <p className="text-sm font-medium">Languages (optional)</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Learning a language? Pick what goes on each side and we&apos;ll
+              translate for you — e.g. front in Spanish, back in English. We&apos;ll
+              also read each side aloud in a native-speaker voice. Leave both blank
+              for normal study cards.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  Front language
+                </label>
+                <select
+                  className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={frontLanguageCode}
+                  onChange={(e) => setFrontLanguageCode(e.target.value)}
+                >
+                  <option value="">Not set</option>
+                  {VOICE_GROUPS.map((group) => (
+                    <optgroup key={group} label={group}>
+                      {VOICE_CATALOG.filter((v) => v.group === group).map((v) => (
+                        <option key={v.code} value={v.code}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  Back language
+                </label>
+                <select
+                  className="flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={backLanguageCode}
+                  onChange={(e) => setBackLanguageCode(e.target.value)}
+                >
+                  <option value="">Not set</option>
+                  {VOICE_GROUPS.map((group) => (
+                    <optgroup key={group} label={group}>
+                      {VOICE_CATALOG.filter((v) => v.group === group).map((v) => (
+                        <option key={v.code} value={v.code}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
           {error && (
@@ -1171,23 +1310,68 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                   </span>
                   . You can edit cards and save while images continue generating. Thank you for your patience.
                 </p>
+                {/* Cancel — stops here and saves the rest of your credits.
+                 * Cards already illustrated keep their images; the one
+                 * mid-generation finishes (it's already paid for). */}
+                <div className="flex items-center gap-3 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={cancelImageGeneration}
+                    disabled={cancellingImages}
+                  >
+                    {cancellingImages ? "Stopping…" : "Cancel remaining"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Keeps the {imageProgress} done so far — stops the rest to save credits.
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Warm "happy with your cards?" check — shown the moment the
+           * user asks to generate images, before any credits are spent.
+           * Generating images is the expensive, hard-to-undo step, so we
+           * gently nudge them to proofread first. */}
+          {pendingImageGenCap !== null && (
+            <Card className="border-primary/40 bg-primary/5">
+              <CardContent className="pt-6 space-y-4">
+                <div className="space-y-2">
+                  <p className="font-editorial text-xl font-medium">
+                    Happy with your cards?
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Before we create the illustrations, it&apos;s worth a quick
+                    read through your cards — you might want to tweak the wording
+                    on a few. Images use your credits, so it&apos;s nicest to get
+                    the text just right first. No rush — your cards are already
+                    saved.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button onClick={confirmImageGen}>
+                    Yes, generate {pendingImageGenCap} image
+                    {pendingImageGenCap === 1 ? "" : "s"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setPendingImageGenCap(null)}
+                  >
+                    Let me check them first
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
 
           {/* AI Images — silver/gold tier slider. */}
-          {!generatingImages && cards.some((c) => !c.imageUrl) && (
+          {!generatingImages && pendingImageGenCap === null && cards.some((c) => !c.imageUrl) && (
             <ImageTierSlider
               total={cards.filter((c) => !c.imageUrl).length}
               premiumCount={Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length)}
               onChange={setPremiumCount}
-              onGenerate={(cap) =>
-                generateImagesForCards(
-                  cards,
-                  Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length),
-                  cap
-                )
-              }
+              onGenerate={requestImageGen}
             />
           )}
 
