@@ -10,6 +10,12 @@ export interface GenerateOptions {
   topic: string;
   count?: number;
   material?: string;
+  /** Language for the FRONT of each card, e.g. "Spanish (Spain)". */
+  frontLanguage?: string;
+  /** Language for the BACK of each card, e.g. "English (UK)". When this
+   *  differs from frontLanguage, the generator TRANSLATES rather than
+   *  copying the source text onto both sides. */
+  backLanguage?: string;
 }
 
 const SYSTEM_PROMPT = `You are a precise flashcard creator. Your job is to turn the user's material into flashcards.
@@ -64,21 +70,57 @@ export async function generateFlashcards(
   }
 
   const client = new Anthropic({ apiKey });
-  const { topic, material } = options;
+  const { topic, material, frontLanguage, backLanguage } = options;
 
   const hasMaterial = material && material.trim().length > 0;
 
-  const userMessage = hasMaterial
-    ? `Topic (context only — do NOT generate cards "about" this topic unless the material is pure prose): "${topic}"
+  // Translation mode: the user picked two DIFFERENT languages for the
+  // front and back, so they want language-learning cards — front in one
+  // language, back as the translation in the other. This OVERRIDES the
+  // system prompt's default "extraction = copy verbatim" behaviour,
+  // which was the bug that produced Spanish-on-both-sides cards.
+  const isTranslation =
+    !!frontLanguage &&
+    !!backLanguage &&
+    frontLanguage.trim().toLowerCase() !== backLanguage.trim().toLowerCase();
 
-The user has pasted the following material. Follow the EXTRACTION vs PEDAGOGICAL decision in your instructions.
+  // Block prepended to the user message in translation mode. Kept at the
+  // TOP so it dominates the system prompt's extraction rules.
+  const translationDirective = isTranslation
+    ? `LANGUAGE-LEARNING CARDS — TRANSLATION MODE (this overrides the default extraction rules).
+The learner studies ${frontLanguage} and wants the back of each card in ${backLanguage}.
+
+For every card:
+- "front": text in ${frontLanguage}. Prefer a complete, natural example SENTENCE in ${frontLanguage} (not a bare word). If the source gives a vocabulary word together with an example sentence, put the SENTENCE on the front.
+- "back": a faithful, natural ${backLanguage} translation of the front. The back MUST be written in ${backLanguage} — never repeat the ${frontLanguage} text or leave it untranslated.
+- "hint": if the source highlights a specific vocabulary word for the card, put that word here; otherwise omit it.
+
+Never put the same language on both sides. One source item = exactly one card.
+
+`
+    : "";
+
+  const userMessage = hasMaterial
+    ? `${translationDirective}Topic (context only — do NOT generate cards "about" this topic unless the material is pure prose): "${topic}"
+
+The user has pasted the following material.${
+        isTranslation
+          ? ` Turn each item into one translation card as instructed above.`
+          : " Follow the EXTRACTION vs PEDAGOGICAL decision in your instructions."
+      }
 
 <material>
 ${material}
 </material>
 
 Return the JSON array now.`
-    : `The user wants flashcards about this topic (no material provided — invent cards that cover it well):
+    : isTranslation
+      ? `${translationDirective}The learner wants ${frontLanguage} → ${backLanguage} cards about "${topic}" (no material provided — invent useful cards that cover it well).
+
+Generate 8-15 cards, progressing from simple to more advanced. Each "front" is a natural ${frontLanguage} sentence; each "back" is its ${backLanguage} translation.
+
+Return the JSON array now.`
+      : `The user wants flashcards about this topic (no material provided — invent cards that cover it well):
 
 "${topic}"
 

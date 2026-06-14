@@ -140,6 +140,22 @@ export function getVoiceEntry(code: string | null | undefined): VoiceEntry | nul
   return VOICE_CATALOG.find((v) => v.code === code) ?? null;
 }
 
+/**
+ * Human-readable language name for a voice code, with no gender suffix —
+ * "es-ES" → "Spanish (Spain)", "en-GB" → "English (UK)". Used to tell
+ * the card generator which language belongs on each side so it can
+ * translate (front in one language, back in the other) rather than
+ * copying the same language onto both sides. Returns null for unknown
+ * or empty codes.
+ */
+export function languageNameForCode(code: string | null | undefined): string | null {
+  const entry = getVoiceEntry(code);
+  if (!entry) return null;
+  // entry.label is e.g. "Spanish (Spain) — Female"; drop the " — Female"
+  // / " — Male" gender tail so we hand the model just the language.
+  return entry.label.split(" — ")[0];
+}
+
 export type ResolvedVoice = {
   provider: "google";
   voiceName: string;

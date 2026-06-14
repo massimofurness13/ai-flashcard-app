@@ -60,6 +60,12 @@ export const reviewSubmitSchema = z.object({
 export const generateSchema = z.object({
   topic: z.string().min(1, "Topic is required").max(500),
   material: z.string().max(20000).optional(),
+  // Human-readable language names (e.g. "Spanish (Spain)", "English
+  // (UK)") for the front and back of the cards. When both are present
+  // and differ, the generator translates — front in one language, back
+  // in the other — instead of copying the same language onto both sides.
+  frontLanguage: z.string().max(48).optional(),
+  backLanguage: z.string().max(48).optional(),
 });
 
 // ----- AI Image -----

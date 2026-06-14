@@ -27,12 +27,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const { topic, material } = parsed.data;
+  const { topic, material, frontLanguage, backLanguage } = parsed.data;
 
   try {
     const cards = await generateFlashcards({
       topic: topic.trim(),
       material: material?.trim(),
+      frontLanguage: frontLanguage?.trim() || undefined,
+      backLanguage: backLanguage?.trim() || undefined,
     });
 
     return NextResponse.json({ cards });
