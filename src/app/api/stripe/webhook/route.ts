@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { stripe, planFromPriceId } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
+import { recordLedger } from "@/lib/credit-ledger";
 import Stripe from "stripe";
 
 export async function POST(request: Request) {
@@ -71,6 +72,16 @@ export async function POST(request: Request) {
               where: { id: userId },
               data: { imageCredits: { increment: creditsAmount } },
             });
+          });
+          // Record the top-up in the credit ledger so it shows on the
+          // user's /usage history. Only runs on first delivery — a
+          // duplicate (P2002) throws above and skips this.
+          await recordLedger({
+            userId,
+            delta: creditsAmount,
+            kind: "purchase",
+            source: "credits",
+            note: `Top-up — ${bundle} credit bundle`,
           });
         } catch (err: unknown) {
           // P2002 = Prisma unique-constraint violation — we already
@@ -259,6 +270,15 @@ export async function POST(request: Request) {
             data: { imageCredits: newBalance },
           });
         }
+      });
+      // Mirror the reversal in the ledger so the user sees the refund
+      // in their /usage history.
+      await recordLedger({
+        userId: purchase.userId,
+        delta: -purchase.creditsAdded,
+        kind: "refund",
+        source: "credits",
+        note: `Refund — ${purchase.bundle} credit bundle purchase`,
       });
       break;
     }

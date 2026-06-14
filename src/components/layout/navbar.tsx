@@ -159,7 +159,7 @@ export function Navbar() {
           {user && (
             <CreditBalance
               variant="compact"
-              onClick={() => router.push("/account")}
+              onClick={() => router.push("/usage")}
             />
           )}
           <ThemeToggle />

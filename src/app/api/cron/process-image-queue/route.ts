@@ -103,7 +103,8 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       front: true,
       back: true,
       imageTier: true,
-      deck: { select: { userId: true } },
+      deckId: true,
+      deck: { select: { userId: true, name: true } },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: maxCards,
@@ -149,8 +150,13 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
     processed++;
     const tier: ImageTier = card.imageTier === "premium" ? "premium" : "quick";
     const userId = card.deck.userId;
+    const ledgerContext = {
+      deckId: card.deckId,
+      deckName: card.deck.name,
+      note: card.front.slice(0, 80),
+    };
 
-    const consumed = await consumeImageCredit(userId, tier);
+    const consumed = await consumeImageCredit(userId, tier, ledgerContext);
     if (!consumed.ok) {
       // No credits left for this user. Previously we only released
       // the lock and returned, which left the card on the queue
@@ -193,7 +199,10 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       });
       succeeded++;
     } catch (err) {
-      await refundImageCredit(userId, consumed.source, consumed.amountUsed);
+      await refundImageCredit(userId, consumed.source, consumed.amountUsed, {
+        tier,
+        ...ledgerContext,
+      });
       const message = err instanceof Error ? err.message : String(err);
       await prisma.card.updateMany({
         where: { id: card.id },
