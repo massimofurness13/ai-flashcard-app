@@ -52,6 +52,7 @@ model User {
   subscription      Subscription?
   purchases         CreditPurchase[]
   pushSubscriptions PushSubscription[]
+  creditLedger      CreditLedger[]
 }
 
 model PushSubscription {
@@ -82,6 +83,36 @@ model CreditPurchase {
   refundedAt             DateTime?
 
   @@index([userId])
+}
+
+// Append-only audit log of every credit movement, so users can see
+// exactly where their credits went — which pack, what tier, when.
+// The User row only stores running *balances*; this is the history.
+// deckName is snapshotted at spend time so deleting a pack later
+// doesn't erase the record of what it cost.
+model CreditLedger {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Signed credit movement: negative = spent, positive = added.
+  delta Int
+  // What happened: "spend" | "refund" | "purchase" | "grant"
+  kind  String
+  // Which balance bucket moved: "monthly" | "credits" | "free".
+  // Null for purchases/grants that don't draw from a specific bucket.
+  source String?
+  // Image tier for image spends/refunds: "premium" | "quick".
+  tier   String?
+
+  // Display context — captured at write time so it survives deletion.
+  deckId   String?
+  deckName String?
+  note     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Subscription {

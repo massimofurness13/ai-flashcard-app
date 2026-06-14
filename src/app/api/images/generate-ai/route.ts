@@ -30,7 +30,17 @@ export async function POST(request: Request) {
 
   const tier: ImageTier = body.tier === "premium" ? "premium" : "quick";
 
-  const consumed = await consumeImageCredit(auth.userId, tier);
+  const { front, back, customPrompt, deckId, deckName } = parsed.data;
+
+  // Ledger context — which pack this image was for, and a short label
+  // (the card front, or the custom prompt) so /usage reads meaningfully.
+  const ledgerContext = {
+    deckId: deckId ?? null,
+    deckName: deckName ?? null,
+    note: (front || customPrompt || "Image generation").slice(0, 80),
+  };
+
+  const consumed = await consumeImageCredit(auth.userId, tier, ledgerContext);
   if (!consumed.ok) {
     return NextResponse.json(
       { error: "out_of_quota", quota: consumed.state },
@@ -38,15 +48,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const { front, back, customPrompt } = parsed.data;
-
   try {
     const imageUrl = customPrompt
       ? await generateAndUploadFromPrompt(auth.userId, customPrompt, tier)
       : await generateAndUploadImage(auth.userId, front || "", back || "", tier);
     return NextResponse.json({ imageUrl, tier });
   } catch (error) {
-    await refundImageCredit(auth.userId, consumed.source, consumed.amountUsed);
+    await refundImageCredit(auth.userId, consumed.source, consumed.amountUsed, {
+      tier,
+      ...ledgerContext,
+    });
 
     const message = error instanceof Error ? error.message : "Image generation failed";
 

@@ -179,6 +179,23 @@ export default function AccountPage() {
       {/* AI image quota + credit top-ups */}
       <ImageQuotaCard />
 
+      {/* Credit usage history */}
+      <Link href="/usage" className="block">
+        <Card className="transition-colors hover:border-primary/50">
+          <CardContent className="flex items-center justify-between gap-3 py-4">
+            <div>
+              <p className="font-medium">Credit usage</p>
+              <p className="text-sm text-muted-foreground">
+                See where your credits went — by pack and date.
+              </p>
+            </div>
+            <span aria-hidden className="text-muted-foreground">
+              →
+            </span>
+          </CardContent>
+        </Card>
+      </Link>
+
       {/* Theme */}
       <Card>
         <CardHeader>

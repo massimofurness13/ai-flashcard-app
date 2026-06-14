@@ -318,7 +318,11 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     async (
       currentCards: GeneratedCard[],
       premiumCount: number = 0,
-      cap?: number
+      cap?: number,
+      // Pack context for the credit ledger. Passed in (not read from
+      // state) because this callback is memoised with empty deps — a
+      // direct state read here would capture stale values.
+      deckCtx?: { deckId?: string | null; deckName?: string | null }
     ) => {
       const needingImages = currentCards
         .map((c, i) => ({ front: c.front, back: c.back, index: i }))
@@ -360,6 +364,9 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                 front: card.front,
                 back: card.back,
                 tier,
+                // Pack context for the credit-usage ledger.
+                deckId: deckCtx?.deckId ?? undefined,
+                deckName: deckCtx?.deckName ?? undefined,
               }),
             });
             const data = await res.json();
@@ -456,7 +463,13 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     void generateImagesForCards(
       cards,
       Math.min(premiumCount, cards.filter((c) => !c.imageUrl).length),
-      cap
+      cap,
+      // Read current pack identity here (fresh state) and hand it to the
+      // memoised loop for the ledger.
+      {
+        deckId: autoSavedDeckId ?? targetDeckId ?? null,
+        deckName: packName.trim() || null,
+      }
     );
   }
 
@@ -736,7 +749,12 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       const res = await fetch("/api/images/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ front: card.front, back: card.back }),
+        body: JSON.stringify({
+          front: card.front,
+          back: card.back,
+          deckId: autoSavedDeckId ?? targetDeckId ?? undefined,
+          deckName: packName.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.imageUrl) {

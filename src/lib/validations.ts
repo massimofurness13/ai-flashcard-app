@@ -73,6 +73,10 @@ export const generateImageSchema = z.object({
   front: z.string().max(5000).optional(),
   back: z.string().max(5000).optional(),
   customPrompt: z.string().max(2000).optional(),
+  // Optional pack context, recorded in the credit ledger so the user
+  // can see which pack a spend was for on the /usage page.
+  deckId: z.string().max(64).optional(),
+  deckName: z.string().max(200).optional(),
 }).refine(
   (data) => data.front || data.customPrompt,
   { message: "Card front text or custom prompt is required" }

@@ -1,6 +1,15 @@
 import { prisma } from "@/lib/db";
 import { isProUser, FREE_IMAGE_VIEW_TRIAL_DAYS } from "@/lib/subscription";
 import type { ImageTier } from "@/lib/image-gen";
+import { recordLedger } from "@/lib/credit-ledger";
+
+/** Optional display context attached to a credit movement so the
+ *  /usage page can show which pack a spend was for. */
+export type CreditContext = {
+  deckId?: string | null;
+  deckName?: string | null;
+  note?: string | null;
+};
 
 /**
  * Unified credit system:
@@ -178,12 +187,33 @@ export type ConsumeResult =
  */
 export async function consumeImageCredit(
   userId: string,
-  tier: ImageTier = "quick"
+  tier: ImageTier = "quick",
+  context?: CreditContext
 ): Promise<ConsumeResult> {
   const cost = TIER_COSTS[tier];
   const now = new Date();
   const nextResetAt = new Date();
   nextResetAt.setMonth(nextResetAt.getMonth() + 1);
+
+  // Log the spend to the ledger (best-effort) and return the success
+  // result. Every successful spend path funnels through here so no
+  // movement goes unrecorded.
+  const spent = async (
+    source: "monthly" | "credits" | "free",
+    amountUsed: number
+  ): Promise<ConsumeResult> => {
+    await recordLedger({
+      userId,
+      delta: -amountUsed,
+      kind: "spend",
+      source,
+      tier,
+      deckId: context?.deckId ?? null,
+      deckName: context?.deckName ?? null,
+      note: context?.note ?? null,
+    });
+    return { ok: true, source, amountUsed };
+  };
 
   const isPro = await isProUser(userId);
 
@@ -204,7 +234,7 @@ export async function consumeImageCredit(
       },
     });
     if (initResult.count === 1) {
-      return { ok: true, source: "monthly", amountUsed: cost };
+      return spent("monthly", cost);
     }
 
     // Cycle expired — reset usage and charge in one atomic update.
@@ -216,7 +246,7 @@ export async function consumeImageCredit(
       },
     });
     if (resetResult.count === 1) {
-      return { ok: true, source: "monthly", amountUsed: cost };
+      return spent("monthly", cost);
     }
 
     // Normal in-cycle increment. The `monthlyImagesUsed: { lte: allowance - cost }`
@@ -233,7 +263,7 @@ export async function consumeImageCredit(
       data: { monthlyImagesUsed: { increment: cost } },
     });
     if (incResult.count === 1) {
-      return { ok: true, source: "monthly", amountUsed: cost };
+      return spent("monthly", cost);
     }
   }
 
@@ -243,7 +273,7 @@ export async function consumeImageCredit(
     data: { imageCredits: { decrement: cost } },
   });
   if (creditsResult.count === 1) {
-    return { ok: true, source: "credits", amountUsed: cost };
+    return spent("credits", cost);
   }
 
   // Lifetime free trial — non-Pro only.
@@ -256,7 +286,7 @@ export async function consumeImageCredit(
       data: { lifetimeFreeImagesUsed: { increment: cost } },
     });
     if (freeResult.count === 1) {
-      return { ok: true, source: "free", amountUsed: cost };
+      return spent("free", cost);
     }
   }
 
@@ -268,7 +298,8 @@ export async function consumeImageCredit(
 export async function refundImageCredit(
   userId: string,
   source: "monthly" | "credits" | "free",
-  amount: number
+  amount: number,
+  context?: CreditContext & { tier?: ImageTier | null }
 ): Promise<void> {
   if (source === "monthly") {
     await prisma.user.update({
@@ -286,12 +317,34 @@ export async function refundImageCredit(
       data: { lifetimeFreeImagesUsed: { decrement: amount } },
     });
   }
+
+  await recordLedger({
+    userId,
+    delta: amount,
+    kind: "refund",
+    source,
+    tier: context?.tier ?? null,
+    deckId: context?.deckId ?? null,
+    deckName: context?.deckName ?? null,
+    note: context?.note ?? "Refund — image generation failed",
+  });
 }
 
-export async function addCredits(userId: string, amount: number): Promise<void> {
+export async function addCredits(
+  userId: string,
+  amount: number,
+  note?: string
+): Promise<void> {
   await prisma.user.update({
     where: { id: userId },
     data: { imageCredits: { increment: amount } },
+  });
+  await recordLedger({
+    userId,
+    delta: amount,
+    kind: "grant",
+    source: "credits",
+    note: note ?? "Credits added",
   });
 }
 
