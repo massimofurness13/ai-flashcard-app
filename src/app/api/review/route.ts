@@ -136,6 +136,38 @@ export async function GET(request: NextRequest) {
     cards = cards.slice(0, limit);
   }
 
+  // Repeat-fill: when the user asks for MORE cards than exist (a custom
+  // count above the available pool, e.g. "study this 100-card pack 125
+  // times"), show every unique card once, then keep going with repeats
+  // until we reach the requested limit. So 100 unique + 25 repeats = 125.
+  // For "random" each repeat pass is reshuffled so the order varies and
+  // we avoid an immediate back-to-back duplicate at the seam.
+  if (cards.length > 0 && cards.length < limit) {
+    const unique = cards.slice();
+    const filled = unique.slice();
+    const shuffle = (arr: typeof unique) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+    while (filled.length < limit) {
+      let pass = unique.slice();
+      if (filter === "random") {
+        shuffle(pass);
+        // Avoid the last-of-previous-pass === first-of-this-pass seam.
+        if (pass.length > 1 && filled[filled.length - 1]?.id === pass[0].id) {
+          [pass[0], pass[1]] = [pass[1], pass[0]];
+        }
+      }
+      const room = limit - filled.length;
+      pass = pass.slice(0, room);
+      filled.push(...pass);
+    }
+    cards = filled;
+  }
+
   const totalAvailable = await prisma.card.count({ where });
 
   // The user's onboarding learning language drives the voice

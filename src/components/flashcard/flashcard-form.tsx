@@ -8,6 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { AiImageGenerator } from "@/components/flashcard/ai-image-generator";
 import { ImageFeedbackButton } from "@/components/flashcard/image-feedback-button";
 import { TagChipInput } from "@/components/flashcard/tag-chip-input";
+import {
+  patchStudyResumeCard,
+  removeStudyResumeCard,
+} from "@/lib/study-resume";
 
 interface FlashcardFormProps {
   deckId: string;
@@ -126,6 +130,20 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
         return;
       }
 
+      // If we came from a study session, apply this edit to the live
+      // session snapshot so the user lands back on the same card with
+      // the correction already showing — and their progress intact.
+      // No-op when there's no snapshot (normal deck-view edits).
+      if (mode === "edit" && initialData?.id) {
+        patchStudyResumeCard(initialData.id, {
+          front: front.trim(),
+          back: back.trim(),
+          hint: hint.trim() || null,
+          imageUrl: imageUrl || null,
+          imageTier: imageUrl ? imageTier : null,
+        });
+      }
+
       // Order matters: refresh the server cache for the deck view
       // FIRST so when we land there it shows the just-saved card,
       // then push the navigation. router.refresh is a no-op on the
@@ -155,6 +173,15 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
           // body wasn't JSON — keep the generic message
         }
         setSaveError(msg);
+        return;
+      }
+      // Deleting mid-study-session: drop the card from the live session
+      // snapshot and return to the session so it carries on with the
+      // remaining cards, instead of bouncing the user out to the deck.
+      if (returnTo && mode === "edit" && initialData?.id) {
+        removeStudyResumeCard(initialData.id);
+        router.refresh();
+        router.push(returnTo);
         return;
       }
       router.refresh();

@@ -13,6 +13,7 @@ import { VoicePreloader, type VoicePreloadItem } from "./voice-preloader";
 import { useCreditBalance } from "@/components/subscription/credit-balance";
 import { CountdownWheel } from "./countdown-wheel";
 import { fallbackVoiceCodes } from "@/lib/language-codes";
+import { writeStudyResume, type StudyResumeCard } from "@/lib/study-resume";
 
 const PRELOAD_AHEAD = 5;
 // Voice preload window is tighter than image preload (3 vs 5) because
@@ -49,6 +50,11 @@ interface StudySessionProps {
    *  to pick a native-speaker voice for any deck that has no explicit
    *  language code, so we never drop to the robotic device voice. */
   learningLanguage?: string | null;
+  /** Resume state, supplied by the page when returning from an edit.
+   *  Defaults start a fresh session at card 0. */
+  initialIndex?: number;
+  initialStats?: StudyStats;
+  initialFlipped?: boolean;
 }
 
 export interface StudyStats {
@@ -61,77 +67,12 @@ export interface StudyStats {
 // a card and seeing the next one's audio was noticeable.
 const DEAL_OUT_MS = 100;
 
-// Round-trip session state through sessionStorage when the user clicks
-// "Edit card." Without this, navigating to the edit page and back via
-// `?returnTo=` re-mounts StudySession at currentIndex=0, kicking the
-// user out of their session mid-flight.
-//
-// Snapshot stores the FULL ordered list of card IDs the user is
-// working through, plus their current position. On resume we compare
-// the new fetch by SET equality (does it contain the same card IDs?)
-// rather than position-sensitive `first.id + last.id`, then re-order
-// the new fetch to match the saved order. That fixes a second bug
-// (May 2026) where:
-//   - Random filter shuffles on every fetch → different first/last
-//     IDs on return → old fingerprint mismatched → resume discarded
-//   - User was on card 50/200, clicked Edit, saved, came back to 0
-// Set-equality + re-order survives both cases — random gets the
-// same set so it matches, due gets the same set in stable order so
-// it also matches.
-//
-// TTL guards against stale "yesterday's session" restores when the
-// user returns hours later.
-const STUDY_RESUME_KEY = "study-session-resume";
-const STUDY_RESUME_TTL_MS = 30 * 60 * 1000;
-
-interface StudyResumeSnapshot {
-  cardIds: string[]; // ordered — drives both the set check and the re-order
-  currentIndex: number;
-  stats: StudyStats;
-  isFlipped: boolean;
-  savedAt: number;
-}
-
-/**
- * Check whether the new fetch contains the same set of cards as the
- * snapshot, regardless of order. Both arrays are expected to be
- * smallish (≤ a few hundred) so the Set construction is cheap.
- */
-function sameCardSet(snapshotIds: string[], cards: Card[]): boolean {
-  if (snapshotIds.length !== cards.length) return false;
-  const live = new Set(cards.map((c) => c.id));
-  for (const id of snapshotIds) {
-    if (!live.has(id)) return false;
-  }
-  return true;
-}
-
-/**
- * Re-order `cards` to match the order in `snapshotIds`. Assumes
- * sameCardSet() already returned true. O(n).
- */
-function reorderToMatch(snapshotIds: string[], cards: Card[]): Card[] {
-  const byId = new Map(cards.map((c) => [c.id, c]));
-  return snapshotIds
-    .map((id) => byId.get(id))
-    .filter((c): c is Card => Boolean(c));
-}
-
-function readResumeSnapshot(cards: Card[]): StudyResumeSnapshot | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(STUDY_RESUME_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as StudyResumeSnapshot;
-    sessionStorage.removeItem(STUDY_RESUME_KEY); // consume once
-    if (Date.now() - parsed.savedAt > STUDY_RESUME_TTL_MS) return null;
-    if (!Array.isArray(parsed.cardIds)) return null;
-    if (!sameCardSet(parsed.cardIds, cards)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
+// Resume across "Edit card" navigation is handled by the page (which
+// owns the sessionStorage snapshot) and passed back in as initialIndex
+// / initialStats / initialFlipped. The full card list lives in the
+// snapshot too, so the page hands us the SAME cards (already edited /
+// with the deleted card removed) — no re-fetch, no progress reset.
+// See src/lib/study-resume.ts.
 
 export function StudySession({
   initialCards,
@@ -140,29 +81,19 @@ export function StudySession({
   autoAdvanceSeconds = 0,
   orientation,
   onComplete,
+  initialIndex = 0,
+  initialStats,
+  initialFlipped = false,
 }: StudySessionProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Resolve the resume snapshot BEFORE we freeze `cards` into state.
-  // If the user just came back from editing a card, the snapshot's
-  // card-ID list drives both the resume check (set equality with the
-  // new fetch) AND the order — we re-order `initialCards` to match
-  // the saved order so currentIndex still points at the same card,
-  // even if the server's filter shuffled or moved things on re-fetch.
-  const resumeSnapshot = useMemo(
-    () => readResumeSnapshot(initialCards),
-    [initialCards],
-  );
-  const [cards] = useState<Card[]>(() =>
-    resumeSnapshot
-      ? reorderToMatch(resumeSnapshot.cardIds, initialCards)
-      : initialCards,
-  );
-  const [currentIndex, setCurrentIndex] = useState(
-    resumeSnapshot?.currentIndex ?? 0,
-  );
-  const [isFlipped, setIsFlipped] = useState(resumeSnapshot?.isFlipped ?? false);
+  // The page hands us the exact card list to use (a fresh fetch, or the
+  // resumed snapshot's cards after an edit/delete). We freeze it into
+  // state so mid-session re-renders never swap it out.
+  const [cards] = useState<Card[]>(initialCards);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [isFlipped, setIsFlipped] = useState(initialFlipped);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dealingOut, setDealingOut] = useState(false);
   // Tracks which (card-id, side) combination has finished playing
@@ -176,7 +107,7 @@ export function StudySession({
   const [isPaused, setIsPaused] = useState(false);
   const [stats, setStats] = useState<StudyStats>(
     () =>
-      resumeSnapshot?.stats ?? {
+      initialStats ?? {
         cardsReviewed: 0,
         ratings: { 1: 0, 2: 0, 3: 0, 5: 0 },
       },
@@ -430,22 +361,17 @@ export function StudySession({
               return `/decks/${currentCard.deck.id}/cards/${currentCard.id}/edit?${qp.toString()}`;
             })()}
             onClick={() => {
-              const snapshot: StudyResumeSnapshot = {
-                cardIds: cards.map((c) => c.id),
+              // Stash the WHOLE session (full ordered cards + position
+              // + stats) so the return trip restores it verbatim — no
+              // re-fetch that would drop the cards already reviewed.
+              writeStudyResume({
+                cards: cards as StudyResumeCard[],
                 currentIndex,
                 stats,
                 isFlipped,
+                learningLanguage: learningLanguage ?? null,
                 savedAt: Date.now(),
-              };
-              try {
-                sessionStorage.setItem(
-                  STUDY_RESUME_KEY,
-                  JSON.stringify(snapshot),
-                );
-              } catch {
-                // Quota or private mode: degrade gracefully — user
-                // returns to a fresh session, same as before this fix.
-              }
+              });
             }}
             className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-foreground transition-colors"
             title="Edit this card"
