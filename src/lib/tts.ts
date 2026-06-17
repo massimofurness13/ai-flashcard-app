@@ -105,6 +105,11 @@ function getSilentUnlockUrl(): string {
  * earns persists because `persistentAudio` is module-level and
  * survives client-side navigation.
  */
+// Set once the user has unlocked audio in this SPA session. Gates the
+// foreground re-unlock below so we never play the silent clip on pages
+// that never use audio.
+let audioEverUnlocked = false;
+
 export function unlockAudio(): void {
   if (typeof window === "undefined") return;
   try {
@@ -126,9 +131,41 @@ export function unlockAudio(): void {
         // grants activation; nothing to do on failure.
       });
     }
+    audioEverUnlocked = true;
+    installForegroundReunlock();
   } catch {
     /* best effort */
   }
+}
+
+// ── Foreground re-unlock ────────────────────────────────────────────
+// Bug: after the app sits idle or the user multitasks away and comes
+// back, the first card's audio is slow / "times out" / won't play.
+// iOS/WebKit suspends the backgrounded <audio> element and can drop the
+// autoplay activation it earned at session start, so the next play()
+// stalls or is silently blocked.
+//
+// Fix: when the page returns to the foreground, re-run the same silent-
+// clip unlock to wake the element and re-assert its autoplay trust —
+// the urlCache and the browser's MP3 cache are untouched, so once the
+// element is live again playback is instant. Installed lazily (only
+// after the first real unlock) so non-audio pages never trigger it.
+let foregroundReunlockInstalled = false;
+function installForegroundReunlock(): void {
+  if (foregroundReunlockInstalled || typeof document === "undefined") return;
+  foregroundReunlockInstalled = true;
+  const reunlock = () => {
+    if (!audioEverUnlocked) return;
+    if (document.visibilityState !== "visible") return;
+    // Don't interrupt playback that survived the switch — only re-unlock
+    // when the element is idle, which is the suspended-on-return case.
+    if (persistentAudio && !persistentAudio.paused) return;
+    unlockAudio();
+  };
+  document.addEventListener("visibilitychange", reunlock);
+  // pageshow fires on bfcache restore (iOS Safari back-forward cache),
+  // which visibilitychange alone can miss.
+  window.addEventListener("pageshow", reunlock);
 }
 
 // Tracks the callbacks bound to the audio element so cancel() can

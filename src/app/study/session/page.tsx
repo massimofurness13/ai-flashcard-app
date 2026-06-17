@@ -6,6 +6,7 @@ import { StudySession, type StudyStats } from "@/components/study/study-session"
 import { StudyCountdown } from "@/components/study/study-countdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { peekStudyResume, clearStudyResume } from "@/lib/study-resume";
 
 interface StudyCard {
   id: string;
@@ -26,27 +27,36 @@ interface StudyCard {
 function StudySessionContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [cards, setCards] = useState<StudyCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Resume snapshot, captured once on mount (declared first so the
+  // state below can seed from it). When the user edited or deleted a
+  // card mid-session, this holds the FULL session (cards + position +
+  // stats) so we restore it verbatim instead of re-fetching /api/review
+  // — a re-fetch drops every card already reviewed this session and
+  // resets the progress counter. See src/lib/study-resume.
+  const [resume] = useState(() => peekStudyResume());
+
+  // Seed straight from the snapshot when resuming, so there's no
+  // setState-in-effect and no loading flash on the way back from edit.
+  const [cards, setCards] = useState<StudyCard[]>(() =>
+    resume ? (resume.cards as StudyCard[]) : [],
+  );
+  const [loading, setLoading] = useState(() => resume === null);
   const [completed, setCompleted] = useState(false);
   const [stats, setStats] = useState<StudyStats | null>(null);
   // Onboarding learning language — drives the voice fallback for
   // decks with no explicit language code (so we never use the
   // robotic device voice).
-  const [learningLanguage, setLearningLanguage] = useState<string | null>(null);
+  const [learningLanguage, setLearningLanguage] = useState<string | null>(
+    () => resume?.learningLanguage ?? null,
+  );
+
   // Gate the session behind a short "get ready" countdown. While it
   // runs we preload the opening cards' audio so the session starts
   // with zero delay instead of the user waiting on card 1.
   //
-  // EXCEPT when resuming mid-session: if the user edited a card and
-  // is coming straight back to where they were (a "study-session-
-  // resume" snapshot is waiting in sessionStorage — key owned by
-  // study-session.tsx), skip the countdown. They were already in
-  // the flow; a fresh 3·2·1 would be jarring.
-  const [prepared, setPrepared] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem("study-session-resume") !== null;
-  });
+  // EXCEPT when resuming mid-session: the user was already in the flow,
+  // so a fresh 3·2·1 would be jarring — skip straight in.
+  const [prepared, setPrepared] = useState(() => resume !== null);
   const handlePrepared = useCallback(() => setPrepared(true), []);
 
   const deckIds = searchParams.get("deckIds") || "";
@@ -61,6 +71,14 @@ function StudySessionContent() {
     | "mixed";
 
   useEffect(() => {
+    // Resuming from an edit/delete: cards/learningLanguage were already
+    // seeded from the snapshot above, so there's nothing to fetch. Just
+    // consume the snapshot so a later fresh session doesn't resume.
+    if (resume) {
+      clearStudyResume();
+      return;
+    }
+
     const params = new URLSearchParams();
     if (deckIds) params.set("deckIds", deckIds);
     params.set("limit", limit);
@@ -74,7 +92,7 @@ function StudySessionContent() {
         setLearningLanguage(data.learningLanguage ?? null);
         setLoading(false);
       });
-  }, [deckIds, limit, filter, tags]);
+  }, [resume, deckIds, limit, filter, tags]);
 
   function handleComplete(sessionStats: StudyStats) {
     setStats(sessionStats);
@@ -172,6 +190,9 @@ function StudySessionContent() {
       autoAdvanceSeconds={autoAdvance}
       orientation={orientation}
       onComplete={handleComplete}
+      initialIndex={resume?.currentIndex ?? 0}
+      initialStats={resume?.stats}
+      initialFlipped={resume?.isFlipped ?? false}
     />
   );
 }
