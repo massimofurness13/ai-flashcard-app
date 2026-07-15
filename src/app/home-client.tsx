@@ -417,7 +417,9 @@ export function HomePage({
                       <Button size="md">
                         {goalHit
                           ? "Study a little more"
-                          : "Begin today's session"}
+                          : cardsReviewedToday > 0
+                            ? "Continue today's session"
+                            : "Begin today's session"}
                       </Button>
                     </Link>
                     {!goalHit && (

@@ -10,7 +10,7 @@ export const AUTO_FLIP_MIN = 1;
 // upper half of the range. 1s is the sweet spot for both auto-flip
 // and auto-advance (it reads fast and keeps momentum), surfaced as
 // a "Recommended" hint in the study UI.
-export const AUTO_FLIP_MAX = 5;
+export const AUTO_FLIP_MAX = 3;
 export const DEFAULT_AUTO_FLIP = 0;
 /** The timing we recommend in the UI for auto-flip / auto-advance. */
 export const RECOMMENDED_AUTO_TIMING = 1;
