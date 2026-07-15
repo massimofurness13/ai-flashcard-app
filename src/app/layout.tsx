@@ -7,6 +7,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { Footer } from "@/components/layout/footer";
 import { FontSizeInit } from "@/components/layout/font-size-init";
+import { MediaServiceWorker } from "@/components/layout/media-service-worker";
 import { PostHogProvider } from "@/components/posthog-provider";
 
 const geistSans = Geist({
@@ -67,6 +68,7 @@ export default function RootLayout({
         <PostHogProvider>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
             <FontSizeInit />
+            <MediaServiceWorker />
             <Navbar />
             <main className="flex-1 pb-20 md:pb-0">
               <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
