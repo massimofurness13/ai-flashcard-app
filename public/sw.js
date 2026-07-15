@@ -1,19 +1,42 @@
 // Huella service worker.
 //
 // Two jobs:
-//   1. Push notifications + click-through (unchanged).
-//   2. Offline media cache — audio clips and card images are stored on
-//      the device so a pack, once downloaded, plays instantly and works
-//      with no signal. We only ever cache Supabase Storage media
-//      (/storage/v1/object/public/…); everything else — pages, API
-//      calls, spaced-repetition state — passes straight through to the
-//      network so study progress is never stale.
+//   1. Push notifications + click-through.
+//   2. Offline media cache — audio/images from a DOWNLOADED pack are
+//      served from the device.
+//
+// CRITICAL LESSON (fixed here): the first version intercepted EVERY
+// Supabase media request and did a full-file re-fetch on each one to
+// cache it opportunistically. Combined with the study preloader that
+// warms ~10 cards ahead, that flooded the browser's per-host connection
+// pool and STALLED audio playback — the <audio> element sat at
+// readyState 0 waiting for bytes that never arrived. So this version
+// only ever intercepts media the user has EXPLICITLY downloaded (tracked
+// in `cachedUrls`); every other request is left 100% to the browser's
+// native loader. No download = behaves exactly as if the SW weren't
+// there.
 
-const MEDIA_CACHE = "huella-media-v1";
+const MEDIA_CACHE = "huella-media-v2";
 
-// Only Supabase public-storage objects (audio + images) are cacheable.
-// Matching on the storage path keeps us project-ref-agnostic and means
-// we never accidentally cache an API response or an HTML page.
+// In-memory set of URLs we have on the device. The fetch handler must
+// decide synchronously whether to intercept (you can't "un-intercept"
+// after respondWith), so we can't consult the async Cache there —
+// hence this mirror. Repopulated on every SW startup + after a download.
+let cachedUrls = new Set();
+
+async function loadCachedUrls() {
+  try {
+    const cache = await caches.open(MEDIA_CACHE);
+    const keys = await cache.keys();
+    cachedUrls = new Set(keys.map((k) => k.url));
+  } catch {
+    /* ignore */
+  }
+}
+// Kick off on every SW startup (install AND wake-from-idle), not just
+// activate — a woken SW re-runs this module but not the activate event.
+loadCachedUrls();
+
 function isCacheableMedia(url) {
   try {
     return new URL(url).pathname.includes("/storage/v1/object/public/");
@@ -23,28 +46,26 @@ function isCacheableMedia(url) {
 }
 
 self.addEventListener("install", () => {
-  // Take over as soon as installed — no waiting for all tabs to close.
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      // Drop old cache versions on upgrade.
       const keys = await caches.keys();
       await Promise.all(
         keys
           .filter((k) => k.startsWith("huella-media-") && k !== MEDIA_CACHE)
           .map((k) => caches.delete(k)),
       );
+      await loadCachedUrls();
       await self.clients.claim();
     })(),
   );
 });
 
-// Build a 206 Partial Content response from a full cached response.
-// The <audio> element streams via Range requests; without this it can
-// refuse to play a cached clip on Safari/iOS.
+// Build a 206 Partial Content response from a full cached response, for
+// the <audio> element's Range requests. Only used for DOWNLOADED clips.
 async function rangeResponse(fullResp, rangeHeader) {
   const buf = await fullResp.clone().arrayBuffer();
   const size = buf.byteLength;
@@ -70,37 +91,14 @@ async function rangeResponse(fullResp, rangeHeader) {
   });
 }
 
-async function serveMedia(request) {
+async function serveDownloaded(request) {
   const cache = await caches.open(MEDIA_CACHE);
-  const rangeHeader = request.headers.get("range");
-
-  // Match by URL string so a Range header on the request never changes
-  // the lookup — we always store the full clip under its plain URL.
-  let cached = await cache.match(request.url);
-
+  const cached = await cache.match(request.url);
   if (!cached) {
-    // Not on device yet. Fetch the WHOLE file in cors mode (Supabase
-    // public buckets send CORS headers) so the cached body is readable
-    // — needed to build Range responses later — then cache it. This
-    // also means any clip the user simply encounters gets cached for
-    // next time, not just explicitly-downloaded ones.
-    try {
-      const netResp = await fetch(request.url, { mode: "cors" });
-      if (netResp && netResp.ok) {
-        await cache.put(request.url, netResp.clone());
-        cached = netResp;
-      } else {
-        // Non-OK (or cors blocked) — let the browser do its normal thing.
-        return fetch(request);
-      }
-    } catch {
-      // Offline and not cached — nothing we can do but try the network.
-      return fetch(request).catch(
-        () => new Response("", { status: 504, statusText: "Offline" }),
-      );
-    }
+    // Raced with an eviction — fall back to the network.
+    return fetch(request);
   }
-
+  const rangeHeader = request.headers.get("range");
   if (rangeHeader) {
     try {
       return await rangeResponse(cached, rangeHeader);
@@ -113,32 +111,39 @@ async function serveMedia(request) {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET" || !isCacheableMedia(req.url)) return; // pass through
-  event.respondWith(serveMedia(req));
+  if (req.method !== "GET" || !isCacheableMedia(req.url)) return; // native
+  // ONLY intercept media we've explicitly downloaded. Everything else is
+  // left to the browser (no interception, no stalls, no regression).
+  if (!cachedUrls.has(req.url)) return;
+  event.respondWith(serveDownloaded(req));
 });
 
-// Explicit pack download. The client sends a list of media URLs (audio
-// + images) and we fetch + store each, reporting progress back so the
-// UI can show a bar. Bounded concurrency keeps a big pack from opening
-// hundreds of sockets at once.
+// Explicit pack download. Client sends a list of media URLs; we fetch +
+// store each and report progress. Bounded concurrency so a big pack
+// doesn't open hundreds of sockets. Each stored URL is added to
+// `cachedUrls` so the fetch handler starts serving it.
 async function precache(urls, client) {
   const cache = await caches.open(MEDIA_CACHE);
   const total = urls.length;
   let done = 0;
   let idx = 0;
-  const CONCURRENCY = 6;
+  const CONCURRENCY = 4;
 
   async function worker() {
     while (idx < urls.length) {
       const url = urls[idx++];
       try {
-        const existing = await cache.match(url);
-        if (!existing) {
+        if (!cachedUrls.has(url) && !(await cache.match(url))) {
           const resp = await fetch(url, { mode: "cors" });
-          if (resp && resp.ok) await cache.put(url, resp.clone());
+          if (resp && resp.ok) {
+            await cache.put(url, resp.clone());
+            cachedUrls.add(url);
+          }
+        } else {
+          cachedUrls.add(url);
         }
       } catch {
-        // Skip a failed clip — the pack still mostly works offline.
+        /* skip a failed clip */
       }
       done++;
       client?.postMessage({ type: "PRECACHE_PROGRESS", done, total });
@@ -193,7 +198,6 @@ self.addEventListener("notificationclick", (event) => {
         type: "window",
         includeUncontrolled: true,
       });
-      // Focus an existing tab if one's already open on our origin
       for (const client of allClients) {
         if (client.url.includes(self.location.origin)) {
           client.focus();
