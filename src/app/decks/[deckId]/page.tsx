@@ -53,9 +53,15 @@ export default async function DeckPage({
     gradeDistribution[letterGrade(cm.mastery)]++;
   }
 
-  const [isPro, canView] = await Promise.all([
+  const [isPro, canView, user] = await Promise.all([
     isProUser(userId),
     canViewAiImages(userId),
+    // Learning language drives the voice fallback when downloading a
+    // pack whose deck has no explicit front/back language codes.
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { learningLanguage: true },
+    }),
   ]);
 
   return (
@@ -67,6 +73,7 @@ export default async function DeckPage({
         gradeDistribution={gradeDistribution}
         isPro={isPro}
         canViewAiImages={canView}
+        learningLanguage={user?.learningLanguage ?? null}
       />
     </Suspense>
   );

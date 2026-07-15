@@ -9,6 +9,11 @@ import { Card as CardUI, CardContent, CardHeader, CardTitle } from "@/components
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { type LetterGrade, gradeColor } from "@/lib/sm2";
 import { estimateImageGenTime } from "@/lib/utils";
+import {
+  downloadPack,
+  isPackDownloaded,
+  type DownloadProgress,
+} from "@/lib/offline-cache";
 
 interface CardData {
   id: string;
@@ -38,10 +43,15 @@ interface DeckViewProps {
     folder: { id: string; name: string; emoji: string | null } | null;
     cards: CardData[];
     _count: { cards: number };
+    frontLanguageCode?: string | null;
+    backLanguageCode?: string | null;
   };
   overallGrade: LetterGrade;
   avgMastery: number;
   gradeDistribution: GradeDistribution;
+  /** User's onboarding learning language — voice fallback for the
+   *  offline download when the deck has no explicit language codes. */
+  learningLanguage?: string | null;
   /** Accepted for call-site compatibility (the deck page still
    *  passes it) but no longer used here — Anki export is free now,
    *  so the export action doesn't gate on Pro. */
@@ -58,6 +68,7 @@ export function DeckView({
   avgMastery,
   gradeDistribution,
   canViewAiImages = false,
+  learningLanguage = null,
 }: DeckViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -148,6 +159,58 @@ export function DeckView({
       alert("Export failed. Please try again.");
     } finally {
       setExporting(false);
+    }
+  }
+
+  // ── Download for offline ──────────────────────────────────────────
+  // Resolves every clip's audio (generating any missing ones) + image,
+  // then stores them on the device via the service worker so the pack
+  // plays instantly with no signal. Progress bar covers both phases.
+  const [downloaded, setDownloaded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadPct, setDownloadPct] = useState(0);
+  const [downloadLabel, setDownloadLabel] = useState("");
+
+  useEffect(() => {
+    setDownloaded(isPackDownloaded(deck.id));
+  }, [deck.id]);
+
+  async function handleDownload() {
+    if (downloading || deck.cards.length === 0) return;
+    setDownloading(true);
+    setDownloadPct(0);
+    setDownloadLabel("Preparing…");
+    try {
+      await downloadPack(
+        {
+          deckId: deck.id,
+          cards: deck.cards.map((c) => ({
+            front: c.front,
+            back: c.back,
+            imageUrl: c.imageUrl,
+          })),
+          frontLanguageCode: deck.frontLanguageCode ?? null,
+          backLanguageCode: deck.backLanguageCode ?? null,
+          learningLanguage,
+        },
+        (p: DownloadProgress) => {
+          // Two phases weighted 50/50 into a single bar.
+          const frac = p.total > 0 ? p.done / p.total : 1;
+          const pct =
+            p.phase === "prepare"
+              ? Math.round(frac * 50)
+              : 50 + Math.round(frac * 50);
+          setDownloadPct(pct);
+          setDownloadLabel(
+            p.phase === "prepare" ? "Preparing audio…" : "Saving to device…",
+          );
+        },
+      );
+      setDownloaded(true);
+    } catch {
+      alert("Download failed. Please try again on a stronger connection.");
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -352,7 +415,51 @@ export function DeckView({
             Pack settings
           </Button>
         </Link>
+
+        {/* Download for offline — stores this pack's audio + images on
+         *  the device so it plays instantly and works with no signal. */}
+        {deck.cards.length > 0 && (
+          <Button
+            variant="outline"
+            onClick={handleDownload}
+            disabled={downloading}
+            title="Save this pack's audio and images on your device"
+          >
+            {downloading ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                {downloadLabel} {downloadPct}%
+              </>
+            ) : downloaded ? (
+              <>
+                <svg className="h-4 w-4 text-[color:var(--glow)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Saved offline · update
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
+                </svg>
+                Download for offline
+              </>
+            )}
+          </Button>
+        )}
       </div>
+
+      {downloading && (
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-300"
+            style={{ width: `${downloadPct}%` }}
+          />
+        </div>
+      )}
 
       {generationActive && (
         <CardUI>
