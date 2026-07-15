@@ -16,11 +16,16 @@ import { fallbackVoiceCodes } from "@/lib/language-codes";
 import { writeStudyResume, type StudyResumeCard } from "@/lib/study-resume";
 
 const PRELOAD_AHEAD = 5;
-// Voice preload window is tighter than image preload (3 vs 5) because
-// each TTS call costs real money on first generation — we want to warm
-// only the cards the user is very likely to reach. Once cached, they're
-// free forever so this only matters for brand-new content.
-const VOICE_PRELOAD_AHEAD = 3;
+// Voice preload window. Widened from 3 → 10 after user feedback that
+// brand-new packs had a ~2s wait when flipping to the back. On a fresh
+// pack every clip is generated on first play (~1-2s server-side), so a
+// narrow window let the user catch up to the generation frontier. A
+// 10-card lookahead keeps the frontier well ahead of a human's pace
+// (~5-12s/card), and in-flight dedupe in tts.ts means we never generate
+// the same clip twice. Cost is unchanged for a completed session — the
+// user reaches these cards anyway, and every clip is cached forever
+// after its first generation.
+const VOICE_PRELOAD_AHEAD = 10;
 
 interface Card {
   id: string;

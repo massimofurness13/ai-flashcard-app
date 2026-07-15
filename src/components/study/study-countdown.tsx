@@ -27,7 +27,9 @@ interface StudyCountdownProps {
 // How many upcoming cards' audio to warm during the countdown. The
 // in-session VoicePreloader keeps going after this, but warming the
 // first few here is what removes the "wait a beat on card 1" lag.
-const PRELOAD_COUNT = 4;
+// Bumped 4 → 6 so a fresh pack (where every clip generates on first
+// play) has more of the opening ready before the user starts flipping.
+const PRELOAD_COUNT = 6;
 // Seconds in the get-ready countdown. Long enough to warm the first
 // clips on a typical connection, short enough not to feel like a
 // chore. Also doubles as a "prepare yourself" beat before studying.
