@@ -10,14 +10,14 @@ const RequestSchema = z.object({
   languageCode: z.string().min(2).max(16),
 });
 
-// 120 TTS requests / min / user. A study session typically rings the
-// TTS endpoint ~2x per card (front + back), and 1 card every few
-// seconds is the upper bound of human flipping. 120/min comfortably
-// covers that with headroom for preloader prefetches; anything
-// significantly above is a script. Cap protects us from worst-case
-// Google TTS spend ($16/M chars uncached) — without it, a single
-// authenticated user can burn unbounded $$$ on cache-miss prompts.
-const TTS_MAX_PER_MINUTE = 120;
+// 240 TTS requests / min / user. A study session rings the endpoint
+// ~2x per card (front + back). With the widened 10-card preload window
+// a session-start burst can briefly fire ~22 requests, and rapid
+// advancing adds more — 120/min was close enough to throttle legit
+// preloading, so it's doubled to 240. Still bounded: the cap protects
+// against worst-case Google TTS spend ($16/M chars uncached) from a
+// script hammering cache-miss prompts.
+const TTS_MAX_PER_MINUTE = 240;
 
 /**
  * POST /api/tts

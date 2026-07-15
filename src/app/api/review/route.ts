@@ -136,6 +136,22 @@ export async function GET(request: NextRequest) {
     cards = cards.slice(0, limit);
   }
 
+  // Randomise the study order for the "smart" filters. A brand-new user
+  // whose cards are all ungraded gets them back in a stable order (which
+  // for "due"/"mastery" collapses to creation order → 100 of pack A,
+  // then 100 of pack B…). Shuffling the SELECTED set interleaves the
+  // packs so each session feels varied. The filter still decides WHICH
+  // cards are studied; only the within-session order is randomised, and
+  // order doesn't matter pedagogically for a single session. "random" is
+  // already shuffled above; "created"/"recent"/"alpha" keep their order
+  // because there the order is the whole point.
+  if (filter === "due" || filter === "mastery") {
+    for (let i = cards.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cards[i], cards[j]] = [cards[j], cards[i]];
+    }
+  }
+
   // Repeat-fill: when the user asks for MORE cards than exist (a custom
   // count above the available pool, e.g. "study this 100-card pack 125
   // times"), show every unique card once, then keep going with repeats
