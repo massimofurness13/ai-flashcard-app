@@ -45,21 +45,25 @@ export async function GET(request: NextRequest) {
     where.nextReviewAt = { lte: now };
   }
 
-  // Session-boundary: never re-serve a card the user touched in the
-  // past 6 hours, regardless of filter. Fixes the bug where a user
-  // who quit mid-session was shown the same cards again on return.
-  // SM-2 still drives the long-term schedule; this just adds a
-  // short-term "already saw it this afternoon" guard.
-  const sessionCutoff = new Date(now.getTime() - 6 * 60 * 60 * 1000);
-
-  // The optional `recencyCutoffDays` URL param can extend this further
-  // (e.g. "don't show me anything from the past 3 days") — when set, it
-  // overrides the 6-hour default with the longer window.
-  const effectiveCutoff =
-    recencyCutoffDays > 0
-      ? new Date(now.getTime() - recencyCutoffDays * 86400000)
-      : sessionCutoff;
-  where.reviews = { none: { reviewedAt: { gte: effectiveCutoff } } };
+  // Session-boundary exclusion — DUE only. For "due", re-serving a card
+  // the user reviewed hours ago would resurface it before its SM-2
+  // schedule says so, and replay a just-quit session on return — so we
+  // hide anything touched in the last 6 hours.
+  //
+  // But the manual/practice filters — random, mastery ("needs practice"),
+  // created, recent, alpha — are the user explicitly choosing WHAT to
+  // see. Hiding recently-studied cards there is wrong: it made "Random"
+  // come up empty right after a study session (reported bug). So we only
+  // apply the exclusion for "due" (or when recencyCutoffDays is set,
+  // which is an explicit "don't show me anything from the past N days").
+  if (filter === "due" || recencyCutoffDays > 0) {
+    const sessionCutoff = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+    const effectiveCutoff =
+      recencyCutoffDays > 0
+        ? new Date(now.getTime() - recencyCutoffDays * 86400000)
+        : sessionCutoff;
+    where.reviews = { none: { reviewedAt: { gte: effectiveCutoff } } };
+  }
 
   const orderBy: Prisma.CardOrderByWithRelationInput =
     filter === "due"
