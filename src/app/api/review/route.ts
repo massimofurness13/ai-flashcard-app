@@ -152,13 +152,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Repeat-fill: when the user asks for MORE cards than exist (a custom
-  // count above the available pool, e.g. "study this 100-card pack 125
-  // times"), show every unique card once, then keep going with repeats
-  // until we reach the requested limit. So 100 unique + 25 repeats = 125.
-  // For "random" each repeat pass is reshuffled so the order varies and
-  // we avoid an immediate back-to-back duplicate at the seam.
-  if (cards.length > 0 && cards.length < limit) {
+  // Repeat-fill: the "random drill" mood ONLY. When a user picks Random
+  // and asks for MORE cards than exist (e.g. "study this 100-card pack
+  // 125 times"), show every unique card once, then keep going with
+  // reshuffled repeats until we hit the requested count — 100 unique +
+  // 25 repeats = 125.
+  //
+  // Gated to `random` on purpose. For every other filter — especially
+  // "due" — the count is a CEILING, not a target: if only 5 cards are
+  // due, the session is 5 cards, full stop. The old un-gated version
+  // caused a real bug — "Due, limit 200" with 5 due cards padded to a
+  // 200-card session that replayed the same 5 cards forever.
+  if (filter === "random" && cards.length > 0 && cards.length < limit) {
     const unique = cards.slice();
     const filled = unique.slice();
     const shuffle = (arr: typeof unique) => {
