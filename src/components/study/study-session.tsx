@@ -99,7 +99,6 @@ export function StudySession({
   const [cards] = useState<Card[]>(initialCards);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isFlipped, setIsFlipped] = useState(initialFlipped);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [dealingOut, setDealingOut] = useState(false);
   // Tracks which (card-id, side) combination has finished playing
   // its TTS clip. Storing the identity rather than a boolean lets us
@@ -271,15 +270,21 @@ export function StudySession({
   }, [dealingOut]);
 
   const handleRate = useCallback(
-    async (quality: number) => {
-      if (isSubmitting || dealingOut || isAutoAdvance) return;
-      setIsSubmitting(true);
+    (quality: number) => {
+      if (dealingOut || isAutoAdvance) return;
 
-      await fetch("/api/review", {
+      // Save in the BACKGROUND — never block the UI on the network. The
+      // rating result isn't needed to advance, so the old `await` here
+      // was the cause of "click Good → buttons grey out → wait ages":
+      // a slow save (cold DB, weak signal) froze the card until the POST
+      // returned. Each rating is an independent, idempotent write; a
+      // dropped one just leaves the daily count off by one, which the
+      // next review reconciles.
+      void fetch("/api/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardId: currentCard.id, quality }),
-      });
+      }).catch(() => {});
 
       const newStats = {
         cardsReviewed: stats.cardsReviewed + 1,
@@ -289,10 +294,9 @@ export function StudySession({
         },
       };
       setStats(newStats);
-      setIsSubmitting(false);
       dealAndAdvance(newStats);
     },
-    [currentCard, stats, isSubmitting, dealingOut, isAutoAdvance, dealAndAdvance]
+    [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance]
   );
 
   useKeyboardNav({
@@ -451,7 +455,7 @@ export function StudySession({
             <p className="text-sm text-muted-foreground text-center">
               How well did you know this?
             </p>
-            <RatingButtons onRate={handleRate} disabled={isSubmitting} />
+            <RatingButtons onRate={handleRate} disabled={dealingOut} />
           </div>
         )}
 
