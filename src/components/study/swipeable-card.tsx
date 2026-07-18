@@ -161,7 +161,16 @@ export function SwipeableCard({
   return (
     <div
       className="relative select-none"
-      style={{ touchAction: enabled ? "pan-y" : "auto" }}
+      style={{
+        touchAction: enabled ? "pan-y" : "auto",
+        // Kill native image/text drag-and-drop. Without this, a mouse
+        // drag that starts on the card's <img> fires `dragstart`, the
+        // browser enters drag-and-drop mode, and pointermove events stop
+        // — so the card never follows the cursor on desktop. Cancelling
+        // dragstart keeps the pointer stream flowing to our handlers.
+        WebkitUserDrag: "none",
+      } as React.CSSProperties}
+      onDragStart={(e) => e.preventDefault()}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
