@@ -7,12 +7,6 @@ import { useRef, useState, useCallback, type ReactNode } from "react";
 const SLOP = 8;
 // Release past this = commit a grade (fly the card off-screen).
 const DECIDE_THRESHOLD = 110;
-// Release past this on the FRONT = reveal the answer. Lower than the
-// grade threshold: flipping is a lighter action than voting.
-const REVEAL_THRESHOLD = 55;
-// Pre-flip drags are damped so a reveal-swipe feels distinctly softer
-// than a grade-swipe (the card resists rather than flinging).
-const REVEAL_DAMP = 0.32;
 // Max tilt (deg) at a full swipe — the Tinder-style lean.
 const MAX_ROTATE = 14;
 // How long the fly-off animation runs before we tell the parent to
@@ -21,42 +15,35 @@ const EXIT_MS = 190;
 
 interface SwipeableCardProps {
   children: ReactNode;
-  /** Answer is showing — left/right swipes grade the card. */
-  canGrade: boolean;
-  /** Front is showing — a swipe (either direction) reveals the answer.
-   *  No grading is possible in this state, by design. */
-  canReveal: boolean;
+  /** Answer is showing — left/right swipes grade the card. On the front
+   *  this is false, so the card isn't swipeable and every tap falls
+   *  straight through to flip it (no dead zone). */
+  enabled: boolean;
   /** Swiped right on the answer — "I knew it". */
   onSwipeRight: () => void;
   /** Swiped left on the answer — "I didn't know it". */
   onSwipeLeft: () => void;
-  /** Swiped (or the parent's tap) on the front — flip to the answer. */
-  onReveal: () => void;
 }
 
 /**
- * Tinder-style swipe wrapper around a flashcard, with a two-stage
- * gesture model:
+ * Tinder-style swipe wrapper around a flashcard. The interaction model:
  *
- *   Front (canReveal)  — a swipe in EITHER direction flips the card to
- *                        reveal the answer. The drag is damped and shows
- *                        no green/red stamp: you can't vote on a card you
- *                        haven't turned over.
- *   Answer (canGrade)  — swipe right = known (green), left = unknown
- *                        (red); a committed swipe flies the card off and
- *                        advances, a short one springs back.
+ *   Front  — NOT swipeable; a tap flips the card to reveal the answer
+ *            (handled by the child's onClick, which we never intercept
+ *            here while `enabled` is false).
+ *   Answer — swipe right = known (green), left = unknown (red); a
+ *            committed swipe flies the card off and advances, a short one
+ *            springs back. A plain tap still flips back to the front.
  *
  * Works with mouse, touch, and pen via Pointer Events. A tap (no drag)
- * falls through to the child's onClick so tap-to-flip still works; a real
- * drag has its click suppressed so it never doubles as a flip.
+ * falls through to the child's onClick so tap-to-flip always works; a
+ * real drag has its click suppressed so it never doubles as a flip.
  */
 export function SwipeableCard({
   children,
-  canGrade,
-  canReveal,
+  enabled,
   onSwipeRight,
   onSwipeLeft,
-  onReveal,
 }: SwipeableCardProps) {
   const [dx, setDx] = useState(0);
   const [active, setActive] = useState(false); // finger currently down
@@ -66,8 +53,6 @@ export function SwipeableCard({
   const dragging = useRef(false);
   const moved = useRef(false);
   const decided = useRef(false);
-
-  const enabled = canGrade || canReveal;
 
   const setOffset = (v: number) => {
     dxRef.current = v;
@@ -124,23 +109,17 @@ export function SwipeableCard({
     if (!dragging.current) return;
     dragging.current = false;
     setActive(false);
-    const d = dxRef.current;
-    if (canGrade && Math.abs(d) > DECIDE_THRESHOLD) {
-      decide(d > 0 ? 1 : -1);
-      return;
+    if (Math.abs(dxRef.current) > DECIDE_THRESHOLD) {
+      decide(dxRef.current > 0 ? 1 : -1);
+    } else {
+      setOffset(0); // spring back to centre
     }
-    if (canReveal && Math.abs(d) > REVEAL_THRESHOLD) {
-      // Reveal in place — snap back to centre and let the flip animate.
-      setOffset(0);
-      onReveal();
-      return;
-    }
-    setOffset(0); // spring back to centre
-  }, [canGrade, canReveal, decide, onReveal]);
+  }, [decide]);
 
   // A drag ends with a click event on the child; swallow it so a swipe
   // never doubles as a flip. A genuine tap (moved === false) passes, so
-  // tap-to-flip on the front still works.
+  // tap-to-flip always works — on the front (never intercepted) and on
+  // the answer (a still tap flips back).
   const onClickCapture = useCallback((e: React.MouseEvent) => {
     if (moved.current) {
       e.preventDefault();
@@ -149,14 +128,9 @@ export function SwipeableCard({
     }
   }, []);
 
-  // Grade swipes track the finger 1:1; reveal swipes are damped so the
-  // card visibly resists — a different feel that signals "this only
-  // flips, it doesn't vote".
-  const displayDx = canGrade ? dx : dx * REVEAL_DAMP;
-  const rot = Math.max(-MAX_ROTATE, Math.min(MAX_ROTATE, displayDx / 14));
-  // Stamps only ever show while grading — never on the front.
-  const knowOp = canGrade ? Math.max(0, Math.min(1, dx / DECIDE_THRESHOLD)) : 0;
-  const dontOp = canGrade ? Math.max(0, Math.min(1, -dx / DECIDE_THRESHOLD)) : 0;
+  const rot = Math.max(-MAX_ROTATE, Math.min(MAX_ROTATE, dx / 14));
+  const knowOp = Math.max(0, Math.min(1, dx / DECIDE_THRESHOLD));
+  const dontOp = Math.max(0, Math.min(1, -dx / DECIDE_THRESHOLD));
 
   return (
     <div
@@ -179,7 +153,7 @@ export function SwipeableCard({
     >
       <div
         style={{
-          transform: `translateX(${displayDx}px) rotate(${rot}deg)`,
+          transform: `translateX(${dx}px) rotate(${rot}deg)`,
           transition: active
             ? "none"
             : `transform ${EXIT_MS}ms cubic-bezier(0.2,0.6,0.2,1)`,

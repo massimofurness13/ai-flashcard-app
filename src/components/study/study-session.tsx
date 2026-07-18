@@ -422,14 +422,12 @@ export function StudySession({
       <Progress value={progress * 100} />
 
       {/* Keyed per card so each one remounts: the enter animation
-       *  replays and the swipe offset resets to centre. Two-stage
-       *  gesture — a swipe on the front reveals the answer; a swipe on
-       *  the answer grades it (manual mode). No grading before reveal. */}
+       *  replays and the swipe offset resets to centre. Tap the front
+       *  to flip (handled by Flashcard's onClick); the card is only
+       *  swipeable once the answer shows, where left/right grades it. */}
       <SwipeableCard
         key={currentCard.id}
-        canGrade={!isAutoAdvance && isFlipped && !dealingOut}
-        canReveal={!isFlipped && !dealingOut}
-        onReveal={handleFlip}
+        enabled={!isAutoAdvance && isFlipped && !dealingOut}
         onSwipeRight={() => handleRate(QUALITY_KNOW)}
         onSwipeLeft={() => handleRate(QUALITY_DONT_KNOW)}
       >
