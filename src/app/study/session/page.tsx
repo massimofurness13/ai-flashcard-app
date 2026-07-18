@@ -144,16 +144,12 @@ function StudySessionContent() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-red-500">Again</span>
-              <span className="font-medium">{stats.ratings[1] || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-yellow-500">Good</span>
+              <span className="text-green-500">Knew it</span>
               <span className="font-medium">{stats.ratings[3] || 0}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-green-500">Easy</span>
-              <span className="font-medium">{stats.ratings[5] || 0}</span>
+              <span className="text-red-500">Didn&apos;t know</span>
+              <span className="font-medium">{stats.ratings[1] || 0}</span>
             </div>
           </CardContent>
         </Card>
