@@ -145,7 +145,7 @@ function StudySessionContent() {
           <CardContent className="space-y-3">
             <div className="flex justify-between">
               <span className="text-green-500">Knew it</span>
-              <span className="font-medium">{stats.ratings[3] || 0}</span>
+              <span className="font-medium">{stats.ratings[4] || 0}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-red-500">Didn&apos;t know</span>
