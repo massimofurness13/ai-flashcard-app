@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useCallback, useMemo } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
-import { RatingButtons } from "./rating-buttons";
+import { SwipeableCard } from "./swipeable-card";
+import { SwipeControls } from "./swipe-controls";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useKeyboardNav } from "@/hooks/use-keyboard-nav";
@@ -16,6 +17,14 @@ import { fallbackVoiceCodes } from "@/lib/language-codes";
 import { writeStudyResume, type StudyResumeCard } from "@/lib/study-resume";
 
 const PRELOAD_AHEAD = 5;
+
+// Two-choice swipe grading maps onto the existing SM-2 scale:
+//   Know it   → 3 (Good)  — successful recall, interval grows, seen less
+//   Don't know → 1 (Again) — failed recall, resets to 1 day, seen soon
+// This is the whole "more greens = less frequent, more reds = more
+// frequent" behaviour — SM-2 already schedules exactly that.
+const QUALITY_KNOW = 3;
+const QUALITY_DONT_KNOW = 1;
 // Voice preload window. Widened from 3 → 10 after user feedback that
 // brand-new packs had a ~2s wait when flipping to the back. On a fresh
 // pack every clip is generated on first play (~1-2s server-side), so a
@@ -299,12 +308,17 @@ export function StudySession({
     [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance]
   );
 
+  // Once the answer is revealed, ← / → grade the card (don't know /
+  // know it) — the keyboard twin of the swipe. Space flips.
   useKeyboardNav({
     onFlip: handleFlip,
-    onRate: isAutoAdvance ? undefined : handleRate,
+    onNext: isAutoAdvance ? undefined : () => handleRate(QUALITY_KNOW),
+    onPrev: isAutoAdvance ? undefined : () => handleRate(QUALITY_DONT_KNOW),
     enabled: isFlipped && !dealingOut,
   });
 
+  // Before the flip, the card is just waiting to be revealed — Space
+  // (or a tap) flips it; arrows do nothing yet.
   useKeyboardNav({
     onFlip: handleFlip,
     enabled: !isFlipped && !dealingOut,
@@ -398,38 +412,48 @@ export function StudySession({
 
       <Progress value={progress * 100} />
 
-      <div className={dealingOut ? "flashcard-deal-out" : "flashcard-enter"} key={currentCard.id}>
-        <Flashcard
-          front={frontText}
-          back={backText}
-          imageUrl={currentCard.imageUrl}
-          imageTier={
-            currentCard.imageTier === "quick" || currentCard.imageTier === "premium"
-              ? currentCard.imageTier
-              : null
-          }
-          hint={currentCard.hint}
-          isFlipped={isFlipped}
-          onFlip={handleFlip}
-          isPro={isPro}
-          canViewAiImages={canViewAiImages}
-          frontVoice={frontVoiceName}
-          backVoice={backVoiceName}
-          frontLanguageCode={
-            showBackFirst
-              ? effBack(currentCard.deck.backLanguageCode)
-              : effFront(currentCard.deck.frontLanguageCode)
-          }
-          backLanguageCode={
-            showBackFirst
-              ? effFront(currentCard.deck.frontLanguageCode)
-              : effBack(currentCard.deck.backLanguageCode)
-          }
-          autoPlayVoice
-          paused={isPaused}
-          onAudioEnd={() => setLastAudioKey(currentAudioKey)}
-        />
-      </div>
+      {/* Keyed per card so each one remounts: the enter animation
+       *  replays and the swipe offset resets to centre. Swipe is armed
+       *  only once the answer is revealed (manual mode). */}
+      <SwipeableCard
+        key={currentCard.id}
+        enabled={!isAutoAdvance && isFlipped && !dealingOut}
+        onSwipeRight={() => handleRate(QUALITY_KNOW)}
+        onSwipeLeft={() => handleRate(QUALITY_DONT_KNOW)}
+      >
+        <div className="flashcard-enter">
+          <Flashcard
+            front={frontText}
+            back={backText}
+            imageUrl={currentCard.imageUrl}
+            imageTier={
+              currentCard.imageTier === "quick" || currentCard.imageTier === "premium"
+                ? currentCard.imageTier
+                : null
+            }
+            hint={currentCard.hint}
+            isFlipped={isFlipped}
+            onFlip={handleFlip}
+            isPro={isPro}
+            canViewAiImages={canViewAiImages}
+            frontVoice={frontVoiceName}
+            backVoice={backVoiceName}
+            frontLanguageCode={
+              showBackFirst
+                ? effBack(currentCard.deck.backLanguageCode)
+                : effFront(currentCard.deck.frontLanguageCode)
+            }
+            backLanguageCode={
+              showBackFirst
+                ? effFront(currentCard.deck.frontLanguageCode)
+                : effBack(currentCard.deck.backLanguageCode)
+            }
+            autoPlayVoice
+            paused={isPaused}
+            onAudioEnd={() => setLastAudioKey(currentAudioKey)}
+          />
+        </div>
+      </SwipeableCard>
 
       {/* Single action area — either Show Answer OR rating, never both */}
       <div className="min-h-[80px] flex items-start justify-center">
@@ -451,12 +475,11 @@ export function StudySession({
         )}
 
         {!isAutoAdvance && isFlipped && !dealingOut && (
-          <div className="space-y-2 w-full">
-            <p className="text-sm text-muted-foreground text-center">
-              How well did you know this?
-            </p>
-            <RatingButtons onRate={handleRate} disabled={dealingOut} />
-          </div>
+          <SwipeControls
+            onKnow={() => handleRate(QUALITY_KNOW)}
+            onDontKnow={() => handleRate(QUALITY_DONT_KNOW)}
+            disabled={dealingOut}
+          />
         )}
 
         {isAutoAdvance && isFlipped && !dealingOut && (
