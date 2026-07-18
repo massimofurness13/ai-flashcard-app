@@ -19,11 +19,19 @@ import { writeStudyResume, type StudyResumeCard } from "@/lib/study-resume";
 const PRELOAD_AHEAD = 5;
 
 // Two-choice swipe grading maps onto the existing SM-2 scale:
-//   Know it   → 3 (Good)  — successful recall, interval grows, seen less
+//   Know it    → 4 — successful recall; interval multiplies, seen less
 //   Don't know → 1 (Again) — failed recall, resets to 1 day, seen soon
-// This is the whole "more greens = less frequent, more reds = more
-// frequent" behaviour — SM-2 already schedules exactly that.
-const QUALITY_KNOW = 3;
+//
+// "Know it" is quality 4, NOT 3 (Good), on purpose. On SM-2's ease
+// formula, q=3 nudges the ease factor DOWN by ~0.14 every pass, so a
+// card you always get right would grow its intervals slower and slower
+// over time. q=4 leaves ease exactly flat (delta 0), so intervals grow
+// at a steady, predictable multiplier — the right behaviour for a
+// binary "I got it" that carries no "how easy" nuance. q=5 (Easy) would
+// inflate ease and balloon intervals, too aggressive for a plain pass.
+// This is the whole "more greens = seen less, more reds = seen sooner"
+// behaviour — SM-2 already schedules exactly that.
+const QUALITY_KNOW = 4;
 const QUALITY_DONT_KNOW = 1;
 // Voice preload window. Widened from 3 → 10 after user feedback that
 // brand-new packs had a ~2s wait when flipping to the back. On a fresh
@@ -122,7 +130,8 @@ export function StudySession({
     () =>
       initialStats ?? {
         cardsReviewed: 0,
-        ratings: { 1: 0, 2: 0, 3: 0, 5: 0 },
+        // Binary swipe grading: 1 = Don't know, 4 = Know it.
+        ratings: { 1: 0, 4: 0 },
       },
   );
 
@@ -413,11 +422,14 @@ export function StudySession({
       <Progress value={progress * 100} />
 
       {/* Keyed per card so each one remounts: the enter animation
-       *  replays and the swipe offset resets to centre. Swipe is armed
-       *  only once the answer is revealed (manual mode). */}
+       *  replays and the swipe offset resets to centre. Two-stage
+       *  gesture — a swipe on the front reveals the answer; a swipe on
+       *  the answer grades it (manual mode). No grading before reveal. */}
       <SwipeableCard
         key={currentCard.id}
-        enabled={!isAutoAdvance && isFlipped && !dealingOut}
+        canGrade={!isAutoAdvance && isFlipped && !dealingOut}
+        canReveal={!isFlipped && !dealingOut}
+        onReveal={handleFlip}
         onSwipeRight={() => handleRate(QUALITY_KNOW)}
         onSwipeLeft={() => handleRate(QUALITY_DONT_KNOW)}
       >
