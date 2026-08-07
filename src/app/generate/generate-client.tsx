@@ -731,12 +731,11 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
         // Silent — user can re-trigger from deck view if it never starts
       });
 
-      // ?generating=true tells deck-view to start polling for incoming
-      // images and show the "Generating..." banner.
-      router.push(`/decks/${deckId}?generating=true`);
-    } else {
-      router.push(`/decks/${deckId}`);
     }
+    // Land on the home screen after saving so the new pack is visible in
+    // the user's library. Any background image generation kicked off above
+    // continues server-side and shows up on the pack when it's opened.
+    router.push("/");
     router.refresh();
 
     setSaving(false);
