@@ -58,6 +58,28 @@ Return ONLY a JSON array. No markdown, no preamble, no trailing text. Each objec
 
 If extraction yields 10 pairs, return exactly 10 cards.`;
 
+/** Model for card generation/extraction. Sonnet 4 (claude-sonnet-4-20250514)
+ *  was RETIRED 2026-06-15, which returned a 404 on every call and broke all
+ *  AI generation. Sonnet 5 is its drop-in successor. */
+const GENERATION_MODEL = "claude-sonnet-5";
+
+/**
+ * Pull the JSON array out of a model response. The system prompt asks for a
+ * bare array, but we slice from the first "[" to the last "]" so any stray
+ * preamble or code fence the model adds is tolerated. We used to force this
+ * with an assistant prefill of "[", but assistant prefills return a 400 on
+ * Sonnet 5 and newer models — so we parse defensively instead.
+ */
+function extractJsonArray(text: string): string {
+  const raw = text.trim();
+  const start = raw.indexOf("[");
+  const end = raw.lastIndexOf("]");
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("No JSON array found in Claude response");
+  }
+  return raw.slice(start, end + 1);
+}
+
 /**
  * Generate flashcards from a topic (invent mode) or material (extract-first mode).
  */
@@ -129,14 +151,14 @@ Generate 8-15 high-quality cards covering breadth of the topic, progressing from
 Return the JSON array now.`;
 
   const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: GENERATION_MODEL,
     max_tokens: 8192,
+    // Thinking off so the full token budget goes to the JSON output and
+    // latency stays predictable. Sonnet 5 defaults to adaptive thinking,
+    // which would otherwise eat into max_tokens on large extractions.
+    thinking: { type: "disabled" },
     system: SYSTEM_PROMPT,
-    messages: [
-      { role: "user", content: userMessage },
-      // Pre-fill the assistant's response to force JSON-only output
-      { role: "assistant", content: "[" },
-    ],
+    messages: [{ role: "user", content: userMessage }],
   });
 
   const textBlock = message.content.find((block) => block.type === "text");
@@ -144,21 +166,7 @@ Return the JSON array now.`;
     throw new Error("No text response from Claude");
   }
 
-  // Prepend the "[" we used to force JSON output
-  let jsonStr = "[" + textBlock.text.trim();
-
-  // Strip any trailing code fence or text after the JSON
-  if (jsonStr.endsWith("```")) {
-    jsonStr = jsonStr.replace(/```$/, "").trim();
-  }
-
-  // Find the end of the JSON array (in case model added trailing text)
-  const lastBracket = jsonStr.lastIndexOf("]");
-  if (lastBracket !== -1) {
-    jsonStr = jsonStr.slice(0, lastBracket + 1);
-  }
-
-  const cards: GeneratedCard[] = JSON.parse(jsonStr);
+  const cards: GeneratedCard[] = JSON.parse(extractJsonArray(textBlock.text));
 
   if (!Array.isArray(cards)) {
     throw new Error("Response is not an array");
@@ -192,8 +200,9 @@ export async function extractCardsWithAI(
   const truncated = content.length > 50000 ? content.slice(0, 50000) : content;
 
   const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: GENERATION_MODEL,
     max_tokens: 8192,
+    thinking: { type: "disabled" },
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -206,7 +215,6 @@ ${truncated}
 
 Use EXTRACTION mode — this is card data. Return every card, verbatim.`,
       },
-      { role: "assistant", content: "[" },
     ],
   });
 
@@ -215,18 +223,7 @@ Use EXTRACTION mode — this is card data. Return every card, verbatim.`,
     throw new Error("No text response from Claude");
   }
 
-  let jsonStr = "[" + textBlock.text.trim();
-
-  if (jsonStr.endsWith("```")) {
-    jsonStr = jsonStr.replace(/```$/, "").trim();
-  }
-
-  const lastBracket = jsonStr.lastIndexOf("]");
-  if (lastBracket !== -1) {
-    jsonStr = jsonStr.slice(0, lastBracket + 1);
-  }
-
-  const cards: GeneratedCard[] = JSON.parse(jsonStr);
+  const cards: GeneratedCard[] = JSON.parse(extractJsonArray(textBlock.text));
 
   if (!Array.isArray(cards)) {
     throw new Error("Response is not an array");
