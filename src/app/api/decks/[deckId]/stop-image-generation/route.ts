@@ -41,11 +41,9 @@ export async function POST(
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
-  // Clear imageTier on every pending card. We also clear the lock
-  // and the error string so the card is in a clean state for any
-  // future re-trigger. imageGenAttempts is left alone so we still
-  // know if a card had failed attempts (visible in the UI as an
-  // imageGenError when relevant).
+  // Withdraw pending intent, but retain a running worker's lease. An
+  // image already claimed may finish; clearing its lock would allow a
+  // second request to start another paid generation for the same card.
   const result = await prisma.card.updateMany({
     where: {
       deckId,
@@ -54,7 +52,6 @@ export async function POST(
     },
     data: {
       imageTier: null,
-      imageGenLockedAt: null,
       imageGenError: null,
     },
   });

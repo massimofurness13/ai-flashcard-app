@@ -66,14 +66,26 @@ export async function POST(request: Request) {
 
   // Pull the pending cards in deterministic order so positional tier
   // assignment (first N premium, rest quick) is stable across calls.
+  const eligible = {
+    imageUrl: null,
+    AND: [
+      { OR: [
+        { imageGenLockedAt: null },
+        { imageGenLockedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } },
+      ] },
+      { OR: [{ imageTier: null }, { imageGenAttempts: { gte: 3 } }] },
+    ],
+  };
   const cards = await prisma.card.findMany({
+    // Keep already queued cards in the selection window: filtering them
+    // out would make a repeated capped request spill into extra cards.
     where: { deckId, imageUrl: null },
     select: { id: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
 
   if (cards.length === 0) {
-    return NextResponse.json({ queued: 0, message: "All cards already have images" });
+    return NextResponse.json({ queued: 0, message: "No new images to queue. Requested images may already be processing." });
   }
 
   // Affordability: walk the assignments in user-intent order, drop the
@@ -105,10 +117,14 @@ export async function POST(request: Request) {
   // Stamp the tier on each queued card AND reset queue-state fields so
   // a previously-failed card (imageGenAttempts at max) gets another
   // shot when the user explicitly re-triggers generation.
-  await Promise.all(
+  const results = await Promise.all(
     affordable.map(({ id, tier: t }) =>
-      prisma.card.update({
-        where: { id },
+      prisma.card.updateMany({
+        // Recheck eligibility atomically. A concurrent request may already
+        // have queued or claimed this card since the read above.
+        where: {
+          id, deckId, ...eligible,
+        },
         data: {
           imageTier: t,
           imageGenAttempts: 0,
@@ -118,24 +134,34 @@ export async function POST(request: Request) {
       }),
     ),
   );
+  const queued = results.reduce((sum, result) => sum + result.count, 0);
+  if (queued === 0) {
+    return NextResponse.json({ queued: 0, total: cards.length, message: "Images are already queued or processing." });
+  }
 
   // Best-effort inline batch — gives the user instant first-page
   // feedback. Wrapped in a Promise.race against a short deadline so a
   // slow run doesn't block the response. The cron drains everything
   // we miss here, so a partial inline result is fine.
-  const inlineDeadline = new Promise<null>((resolve) =>
-    setTimeout(() => resolve(null), 25_000),
-  );
-  await Promise.race([processQueue().catch(() => null), inlineDeadline]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const inlineDeadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), 25_000);
+  });
+  try {
+    await Promise.race([processQueue({ userId: auth.userId }).catch(() => null), inlineDeadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 
   const skipped = cards.length - affordable.length;
   return NextResponse.json({
-    queued: affordable.length,
+    queued,
     total: cards.length,
-    premiumCount: Math.min(premiumCount, affordable.length),
+    premiumCount: affordable.reduce((count, card, index) =>
+      count + (card.tier === "premium" ? results[index].count : 0), 0),
     message:
       skipped > 0
-        ? `Generating ${affordable.length} images with your remaining credits. ${skipped} cards will need more credits.`
+        ? `Queued ${queued} images. ${skipped} cards were outside this request or credit budget.`
         : "Generation started. Images will appear as they're ready.",
   });
 }

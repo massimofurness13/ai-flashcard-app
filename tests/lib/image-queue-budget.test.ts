@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(), quota: vi.fn(), worker: vi.fn(),
   deck: { findUnique: vi.fn() },
-  card: { findMany: vi.fn(), update: vi.fn() },
+  card: { findMany: vi.fn(), updateMany: vi.fn() },
 }));
 vi.mock("@/lib/db", () => ({ prisma: { deck: mocks.deck, card: mocks.card } }));
 vi.mock("@/lib/auth", () => ({ requireAuth: mocks.auth }));
@@ -22,7 +22,7 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ userId: "owner" });
   mocks.deck.findUnique.mockResolvedValue({ id: "pack" });
   mocks.card.findMany.mockResolvedValue(Array.from({ length: 17 }, (_, i) => ({ id: `card-${i}` })));
-  mocks.card.update.mockResolvedValue({});
+  mocks.card.updateMany.mockReset().mockResolvedValue({ count: 1 });
   mocks.quota.mockResolvedValue({ totalRemaining: 1000 });
   mocks.worker.mockResolvedValue({});
 });
@@ -32,8 +32,8 @@ describe("explicit image generation budget", () => {
     const response = await POST(request({ deckId: "pack", maxImages: 3, premiumCount: 1 }));
     expect(response.status).toBe(200);
     expect((await response.json()).queued).toBe(3);
-    expect(mocks.card.update).toHaveBeenCalledTimes(3);
-    expect(mocks.card.update.mock.calls.map(([arg]) => arg.data.imageTier)).toEqual(["premium", "quick", "quick"]);
+    expect(mocks.card.updateMany).toHaveBeenCalledTimes(3);
+    expect(mocks.card.updateMany.mock.calls.map(([arg]) => arg.data.imageTier)).toEqual(["premium", "quick", "quick"]);
   });
 
   it("also respects available credits", async () => {
@@ -44,7 +44,7 @@ describe("explicit image generation budget", () => {
 
   it.each([0, -1, 1.5, 501, "3"])("rejects invalid requested limits: %s", async (maxImages) => {
     expect((await POST(request({ deckId: "pack", maxImages }))).status).toBe(400);
-    expect(mocks.card.update).not.toHaveBeenCalled();
+    expect(mocks.card.updateMany).not.toHaveBeenCalled();
   });
 
   it("does not queue images in another user's pack", async () => {
@@ -53,6 +53,27 @@ describe("explicit image generation budget", () => {
     expect(mocks.deck.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "someone-elses-pack", userId: "owner" },
     }));
-    expect(mocks.card.update).not.toHaveBeenCalled();
+    expect(mocks.card.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not restart the worker when another request wins all assignments", async () => {
+    mocks.card.updateMany.mockResolvedValue({ count: 0 });
+    const response = await POST(request({ deckId: "pack", maxImages: 3 }));
+    expect((await response.json()).queued).toBe(0);
+    expect(mocks.worker).not.toHaveBeenCalled();
+  });
+
+  it("reports only winning assignments and scopes inline work to the caller", async () => {
+    mocks.card.updateMany.mockResolvedValueOnce({ count: 0 });
+    const response = await POST(request({ deckId: "pack", maxImages: 3, premiumCount: 1 }));
+    expect(await response.json()).toMatchObject({ queued: 2, premiumCount: 0 });
+    expect(mocks.worker).toHaveBeenCalledWith({ userId: "owner" });
+    expect(mocks.card.updateMany.mock.calls[0][0].where).toMatchObject({
+      imageUrl: null,
+      AND: [
+        { OR: [{ imageGenLockedAt: null }, { imageGenLockedAt: { lt: expect.any(Date) } }] },
+        { OR: [{ imageTier: null }, { imageGenAttempts: { gte: 3 } }] },
+      ],
+    });
   });
 });

@@ -11,7 +11,7 @@ Last checked: 27 September 2026. This is an evidence log, not a declaration that
 
 ## Verified baseline
 
-- Production URL https://flashmind-35q4.onrender.com served build 3738969 at audit start.
+- The production Render URL configured in capacitor.config.ts served build 3738969 at audit start.
 - Google OAuth worked in the user's Chrome, returning to the existing account and a library of 1,120 cards. No password or new permission was needed.
 - Local production build passes. Baseline tests: 406. Replaced eight mirrored date-math tests with four tests of actual quota/access functions and added eight actual queue-route tests: 410 passing.
 - TypeScript passes; targeted lint has existing warnings for unused isPro and an img element, no errors.
@@ -24,12 +24,12 @@ Last checked: 27 September 2026. This is an evidence log, not a declaration that
 - Queue route validates and respects maxImages alongside available credit balance and pack ownership.
 - Navigation warning cleanup disarms itself without calling history.back(), which could race with Save-to-Home.
 - Save reads the live card ref rather than the pre-await render closure.
-- Pack and study image access survive cancellation; public cancellation copy updated; remaining FlashMind footer wordmark removed.
+- Pack and study image access survive cancellation; public cancellation copy updated; remaining legacy footer wordmark removed.
 - End-to-end Save-to-Home still needs live verification after deployment; do not claim that the old browser failure was an automation issue.
 
 ## Launch blockers to resolve next
 
-1. **Durable explicit image jobs:** generation page still runs a client loop, while the queue worker can also process cards. Move confirmed requests into one durable server queue with explicit selected card IDs and tiers, cancellation, budget reservation and idempotency. Closing the app must not lose remaining work. Never restore automatic imageTier assignment during text autosave. Queue endpoint currently resets locks and attempts on repeat submission; audit duplicate charging under concurrent retries.
+1. **Durable explicit image jobs:** generation page still runs a client loop, while the queue worker can also process cards. Move confirmed requests into one durable server queue with explicit selected card IDs and tiers, cancellation, budget reservation and idempotency. Closing the app must not lose remaining work. Never restore automatic imageTier assignment during text autosave. The queue concurrency fixes below address repeat submission and lease ownership, but do not provide provider-level exactly-once generation or atomic credit reservations.
 2. **Study persistence:** study-session fire-and-forget review POST swallows errors. Implement an account-scoped durable pending-review queue plus server idempotency. Card schedule update and review log currently use Promise.all, not a transaction. Test lost responses, replay, offline/online, switching accounts, quitting and resuming; do not simulate learning on real user cards.
 3. **Credit correctness:** debit and ledger writes are separate/best-effort. Reconcile and make atomic; test concurrent spending, failures/refunds, interrupted jobs, cancellation and duplicate Stripe deliveries. Never infer a historical spend breakdown without evidence.
 4. **Audio/session behaviour:** measure flip-to-audio latency on cached and uncached clips, idle/resume and mobile Safari/Capacitor; test gesture unlock and cleanup races. Prior automation limitations are not proof of root cause. Verify edits/deletes preserve session counts, random sessions traverse unique cards before repeats and settings persist.
@@ -37,6 +37,17 @@ Last checked: 27 September 2026. This is an evidence log, not a declaration that
 6. **Authentication and security:** verify fresh signup/onboarding, password reset, disabled provider buttons, ownership on all mutations, database RLS/roles and storage access using actual configuration. Re-check exposed credentials through authorized dashboards without printing secrets.
 7. **Public launch page:** audit unsupported 6x learning claims and image-price labels; replace claims lacking product evidence. Update all pricing/cancellation/help text consistently once new billing is implemented.
 8. **Native iOS:** scaffold exists but no verified simulator/device build. Verify Apple Developer membership, signing, native OAuth/deep links, safe areas, network failure, audio and current App Store payment requirements. A browser checkout is not a universal exemption from App Store rules. No submission without user authorization.
+
+## Follow-up: queue concurrency (27 September, afternoon)
+
+- Verified the previous changes are live: public HTML contains build f6071e0.
+- Queue trigger now uses conditional writes and counts successful assignments. Requests cannot reset a running/queued card's lock, attempts or tier; stale cancelled leases can be requeued after the existing five-minute recovery threshold.
+- Stop clears pending intent without clearing an active lease. A claimed image may finish; unclaimed candidates recheck tier and updatedAt before spending.
+- Result/failure updates are fenced by the worker's claim timestamp; superseded results are refunded without overwriting a newer result or clearing a newer lease. Refund cleanup errors do not trigger a second refund in the same run.
+- Inline work is scoped to the requesting account, and its deadline timer is cleared after completion.
+- Mocked-provider route/worker tests cover cancellation before claim, overlapping claims, stale completion, stop, queue caps, caller ownership and refund cleanup failure. These are orchestration tests with mocked database responses, not real Postgres concurrency tests.
+- Validation: 419 tests pass; targeted lint has no errors; production build and TypeScript pass. The rebrand test initially rejected historical wording in this checklist; that documentation was corrected before committing.
+- Remaining: full image-job durability/client migration, database integration race tests, atomic debits/ledger/refunds, and live end-to-end image/Save smoke verification. No paid provider requests made in this follow-up.
 
 ## Working agreement
 
