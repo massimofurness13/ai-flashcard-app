@@ -40,6 +40,11 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const { deckId } = body;
+  const maxImages = body.maxImages;
+  if (maxImages !== undefined &&
+      (!Number.isInteger(maxImages) || maxImages < 1 || maxImages > 500)) {
+    return NextResponse.json({ error: "maxImages must be between 1 and 500" }, { status: 400 });
+  }
   const tier: ImageTier = body.tier === "premium" ? "premium" : "quick";
   const premiumCountRaw = Number(body.premiumCount);
   const premiumCount =
@@ -77,6 +82,7 @@ export async function POST(request: Request) {
   let remaining = quota.totalRemaining;
   const affordable: { id: string; tier: ImageTier }[] = [];
   for (let i = 0; i < cards.length; i++) {
+    if (maxImages !== undefined && affordable.length >= maxImages) break;
     const cardTier: ImageTier =
       premiumCount > 0 && i < premiumCount ? "premium" : tier;
     const cost = TIER_COSTS[cardTier];

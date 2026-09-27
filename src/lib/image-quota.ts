@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { isProUser, FREE_IMAGE_VIEW_TRIAL_DAYS } from "@/lib/subscription";
+import { isProUser } from "@/lib/subscription";
 import type { ImageTier } from "@/lib/image-gen";
 import { recordLedger } from "@/lib/credit-ledger";
 
@@ -58,14 +58,9 @@ export type QuotaState = {
   resetAt: Date | null;
   canAffordQuick: boolean;
   canAffordPremium: boolean;
-  /** Whether the user can currently *view* AI illustrations
-   *  unblurred. True for active Pro users AND non-Pro users still
-   *  in their 30-day free image-viewing trial; false otherwise. */
+  /** Existing illustrations remain visible for all existing accounts. */
   canViewAiImages: boolean;
-  /** ISO timestamp when the free image-viewing trial ends. Useful
-   *  for surfaces that want to say "your trial ends in N days".
-   *  Null for Pro users (no trial concept while subscribed) and
-   *  for users whose trial has already expired. */
+  /** Legacy response field; always null now that viewing does not expire. */
   freeViewTrialEndsAt: Date | null;
 };
 
@@ -101,20 +96,9 @@ export async function getQuotaState(userId: string): Promise<QuotaState> {
         ? PRO_MONTHLY_CREDITS
         : 0;
 
-  // Image-viewing entitlement. Pro users always see their illustrations.
-  // Non-Pro users get a 30-day window from account creation during which
-  // any images they generate (using their 25 lifetime credits) stay
-  // visible. After 30 days, the blur kicks in until they subscribe.
-  const trialEnd = user
-    ? new Date(
-        user.createdAt.getTime() +
-          FREE_IMAGE_VIEW_TRIAL_DAYS * 24 * 60 * 60 * 1000,
-      )
-    : null;
-  const inFreeViewTrial =
-    !isPro && trialEnd !== null && trialEnd.getTime() > Date.now();
-  const canViewAiImages = isPro || inFreeViewTrial;
-  const freeViewTrialEndsAt = inFreeViewTrial ? trialEnd : null;
+  // Spending credits and viewing existing images are independent.
+  const canViewAiImages = Boolean(user);
+  const freeViewTrialEndsAt = null;
 
   if (!user) {
     return {

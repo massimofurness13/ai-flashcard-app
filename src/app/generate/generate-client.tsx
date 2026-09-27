@@ -104,6 +104,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   // skip the background-generation handoff — otherwise the cron would
   // happily finish the very images the user just cancelled.
   const imageGenCancelledRef = useRef(false);
+  const requestedImageIndicesRef = useRef<Set<number>>(new Set());
 
   // Auto-save bookkeeping. When the AI text-generation step finishes
   // we immediately POST /api/decks so the cards land in the user's
@@ -187,10 +188,12 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("popstate", handlePopState);
-      // When generation finishes naturally, pop the dummy entry so the
-      // user's back-button history isn't polluted by it.
+      // Disarm without navigating: history.back() here can undo Save's
+      // navigation home or interrupt the router during unmount.
       if (window.history.state?.navGuard) {
-        window.history.back();
+        const state = { ...window.history.state };
+        delete state.navGuard;
+        window.history.replaceState(state, "", window.location.href);
       }
     };
   }, [navGuardActive]);
@@ -334,6 +337,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
           : needingImages;
 
       if (slice.length === 0) return;
+      requestedImageIndicesRef.current = new Set(slice.map((card) => card.index));
 
       setGeneratingImages(true);
       setImageProgress(0);
@@ -478,6 +482,8 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     setGenerating(true);
     setError("");
     setCards([]);
+    setAutoSavedDeckId(null);
+    requestedImageIndicesRef.current = new Set();
     setGeneratedCount(0);
 
     try {
@@ -529,18 +535,13 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
               name: trimmedName,
               frontLanguageCode: frontLanguageCode || null,
               backLanguageCode: backLanguageCode || null,
-              // Stamp imageTier on every card at save time so the
-              // cron's queue-scoping filter (imageTier IS NOT NULL =
-              // "user explicitly wants an image here") recognises
-              // these as real generation requests. Without this,
-              // cards where the user navigated away mid-image-loop
-              // would be permanently invisible to the cron and never
-              // get their images.
-              cards: generated.map((c, i) => ({
+              // Text generation is not consent to spend image credits.
+              // Only an explicit image request may queue illustrations.
+              cards: generated.map((c) => ({
                 front: c.front,
                 back: c.back,
                 hint: c.hint || null,
-                imageTier: i < premiumCount ? "premium" : "quick",
+                imageTier: null,
               })),
             }),
           });
@@ -606,10 +607,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
         // Already swallowed inside the loop
       }
     }
-    // Pull the latest cards out of state via a microtask — setCards
-    // from the just-finished in-flight runs synchronously inside the
-    // awaited promise, but React commits async. A short flush gives
-    // the just-finished card's imageUrl a chance to land in cards.
+    // Let the live ref receive the latest committed image results.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     let deckId = autoSavedDeckId ?? targetDeckId;
@@ -618,7 +616,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     // before the abort). We need this both to write the cards AND to
     // figure out how many premium slots are still owed to the
     // background route.
-    const snapshot = cards;
+    const snapshot = cardsRef.current;
     const cardsPayload = snapshot.map((c) => ({
       front: c.front,
       back: c.back,
@@ -710,7 +708,9 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     // this just stops us re-queuing them on the way out.
     const stillMissing = imageGenCancelledRef.current
       ? 0
-      : snapshot.filter((c) => !c.imageUrl).length;
+      : snapshot.filter((c, index) =>
+          requestedImageIndicesRef.current.has(index) && !c.imageUrl
+        ).length;
     if (stillMissing > 0) {
       const imagedPremium = snapshot
         .slice(0, premiumCount)
@@ -726,6 +726,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
         body: JSON.stringify({
           deckId,
           premiumCount: remainingPremium,
+          maxImages: stillMissing,
         }),
       }).catch(() => {
         // Silent — user can re-trigger from deck view if it never starts

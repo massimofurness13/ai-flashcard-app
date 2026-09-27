@@ -136,7 +136,7 @@ const faq = [
   },
   {
     q: "What happens if I cancel?",
-    a: "Your text cards, study progress, and decks stay forever — those never go away. AI illustrations work on a viewing entitlement: you can see them clearly while you're a Pro subscriber, and for new accounts, for the first 30 days while you spend your 25 starter credits. After that, if you're not on Pro, the illustrations stay safely in your account but render blurred until you subscribe. We never delete the underlying images — re-subscribing restores visibility instantly.",
+    a: "Your packs, study progress and generated illustrations stay available in your account after cancellation. You can keep studying the cards and images you already made. Purchased image credits do not expire.",
   },
   {
     q: "Is there a free trial of Pro?",
@@ -591,7 +591,7 @@ export function LandingPage() {
       <footer className="border-t border-border px-4 py-10">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
           <p className="font-editorial italic text-foreground">
-            Flash<span className="not-italic">Mind</span>
+            Huella
           </p>
           <div className="flex flex-wrap gap-6">
             <Link
