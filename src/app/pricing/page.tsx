@@ -24,7 +24,7 @@ const FREE_FEATURES = [
   "Anki .apkg import and export — no lock-in",
   "Upload your own images to cards",
   "Text-to-speech with native voices in 9+ languages",
-  "25 AI image credits + 30-day viewing window",
+  "25 starter AI image credits",
   "Light and dark themes",
 ];
 
@@ -33,7 +33,7 @@ const FREE_FEATURES = [
 // viewing entitlement.
 const PRO_FEATURES = [
   "Everything in Free, plus:",
-  "AI illustrations stay visible forever (no 30-day blur)",
+  "Keep your generated illustrations after cancellation",
   "Generate from any pack, any time",
   "Priority support from our team",
 ];
@@ -269,7 +269,7 @@ export default function PricingPage() {
               </div>
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              The whole app — try every Pro feature for 30 days
+              Start studying with 25 image credits to try
             </p>
           </CardHeader>
           <CardContent>
@@ -277,8 +277,8 @@ export default function PricingPage() {
               <p className="font-medium">25 starter image credits</p>
               <p className="text-muted-foreground text-xs mt-2 leading-relaxed">
                 Enough for 5 Premium or 25 Quick illustrations. AI illustrations
-                you generate stay visible for the first 30 days, then blur
-                until you upgrade — your data is never deleted.
+                you generate stay available in your packs, even without an
+                active subscription.
               </p>
             </div>
 
