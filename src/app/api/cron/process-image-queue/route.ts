@@ -103,6 +103,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       front: true,
       back: true,
       imageTier: true,
+      updatedAt: true,
       deckId: true,
       deck: { select: { userId: true, name: true } },
     },
@@ -126,12 +127,14 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
   const queue = [...candidates];
   let deadlineHit = false;
 
-  async function claim(cardId: string): Promise<boolean> {
+  async function claim(card: (typeof candidates)[number]): Promise<Date | null> {
     const claimedAt = new Date();
     const result = await prisma.card.updateMany({
       where: {
-        id: cardId,
+        id: card.id,
         imageUrl: null,
+        imageTier: card.imageTier,
+        updatedAt: card.updatedAt,
         imageGenAttempts: { lt: MAX_ATTEMPTS },
         OR: [
           { imageGenLockedAt: null },
@@ -140,12 +143,12 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       },
       data: { imageGenLockedAt: claimedAt },
     });
-    return result.count === 1;
+    return result.count === 1 ? claimedAt : null;
   }
 
   async function processOne(card: (typeof candidates)[number]): Promise<void> {
-    const won = await claim(card.id);
-    if (!won) return; // another worker (or run) got it
+    const lease = await claim(card);
+    if (!lease) return; // changed, cancelled, or claimed after selection
 
     processed++;
     const tier: ImageTier = card.imageTier === "premium" ? "premium" : "quick";
@@ -171,7 +174,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       // "credits needed" hint next to the card if we ever want it.
       noCredits++;
       await prisma.card.updateMany({
-        where: { id: card.id },
+        where: { id: card.id, imageGenLockedAt: lease },
         data: {
           imageGenLockedAt: null,
           imageTier: null,
@@ -181,6 +184,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       return;
     }
 
+    let delivered = false;
     try {
       const imageUrl = await generateAndUploadImage(
         userId,
@@ -188,8 +192,8 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
         card.back,
         tier,
       );
-      await prisma.card.updateMany({
-        where: { id: card.id, imageUrl: null },
+      const saved = await prisma.card.updateMany({
+        where: { id: card.id, imageUrl: null, imageGenLockedAt: lease },
         data: {
           imageUrl,
           imageTier: tier,
@@ -197,7 +201,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
           imageGenError: null,
         },
       });
-      succeeded++;
+      delivered = saved.count === 1;
     } catch (err) {
       await refundImageCredit(userId, consumed.source, consumed.amountUsed, {
         tier,
@@ -205,7 +209,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       });
       const message = err instanceof Error ? err.message : String(err);
       await prisma.card.updateMany({
-        where: { id: card.id },
+        where: { id: card.id, imageGenLockedAt: lease },
         data: {
           imageGenAttempts: { increment: 1 },
           imageGenLockedAt: null,
@@ -214,6 +218,22 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       });
       failed++;
       console.error(`[image-queue] card ${card.id}:`, message);
+      return;
+    }
+    if (delivered) {
+      succeeded++;
+    } else {
+      // Another result replaced this work or a newer worker owns the
+      // lease. Never overwrite it or charge for an undelivered result.
+      // Keep refunds outside the generation catch to avoid refunding
+      // twice if subsequent lock cleanup fails.
+      await refundImageCredit(userId, consumed.source, consumed.amountUsed, {
+        tier, ...ledgerContext,
+      });
+      await prisma.card.updateMany({
+        where: { id: card.id, imageGenLockedAt: lease },
+        data: { imageGenLockedAt: null },
+      });
     }
   }
 
