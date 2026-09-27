@@ -31,7 +31,7 @@ Last checked: 27 September 2026. This is an evidence log, not a declaration that
 
 1. **Durable explicit image jobs:** generation page still runs a client loop, while the queue worker can also process cards. Move confirmed requests into one durable server queue with explicit selected card IDs and tiers, cancellation, budget reservation and idempotency. Closing the app must not lose remaining work. Never restore automatic imageTier assignment during text autosave. The queue concurrency fixes below address repeat submission and lease ownership, but do not provide provider-level exactly-once generation or atomic credit reservations.
 2. **Study persistence:** study-session fire-and-forget review POST swallows errors. Implement an account-scoped durable pending-review queue plus server idempotency. Card schedule update and review log currently use Promise.all, not a transaction. Test lost responses, replay, offline/online, switching accounts, quitting and resuming; do not simulate learning on real user cards.
-3. **Credit correctness:** debit and ledger writes are separate/best-effort. Reconcile and make atomic; test concurrent spending, failures/refunds, interrupted jobs, cancellation and duplicate Stripe deliveries. Never infer a historical spend breakdown without evidence.
+3. **Credit correctness:** image debits, image refunds and support grants now share a transaction with their ledger entries (evening follow-up below). Stripe purchase/refund ledger writes still need migration. Reconcile historical gaps; test concurrent spending, failures/refunds, interrupted jobs, cancellation and duplicate Stripe deliveries. Never infer a historical spend breakdown without evidence.
 4. **Audio/session behaviour:** measure flip-to-audio latency on cached and uncached clips, idle/resume and mobile Safari/Capacitor; test gesture unlock and cleanup races. Prior automation limitations are not proof of root cause. Verify edits/deletes preserve session counts, random sessions traverse unique cards before repeats and settings persist.
 5. **Billing migration:** await product decisions above, implement separate new plan without allowance while preserving legacy plans. Validate Stripe prices/currencies and displayed totals, checkout, cancellation, webhook replay, refund policies and account status in test mode. Do not charge real payment methods for smoke tests.
 6. **Authentication and security:** verify fresh signup/onboarding, password reset, disabled provider buttons, ownership on all mutations, database RLS/roles and storage access using actual configuration. Re-check exposed credentials through authorized dashboards without printing secrets.
@@ -48,6 +48,15 @@ Last checked: 27 September 2026. This is an evidence log, not a declaration that
 - Mocked-provider route/worker tests cover cancellation before claim, overlapping claims, stale completion, stop, queue caps, caller ownership and refund cleanup failure. These are orchestration tests with mocked database responses, not real Postgres concurrency tests.
 - Validation: 419 tests pass; targeted lint has no errors; production build and TypeScript pass. The rebrand test initially rejected historical wording in this checklist; that documentation was corrected before committing.
 - Remaining: full image-job durability/client migration, database integration race tests, atomic debits/ledger/refunds, and live end-to-end image/Save smoke verification. No paid provider requests made in this follow-up.
+
+## Follow-up: atomic image credit history (27 September, evening)
+
+- Confirmed queue-concurrency build 923c6f9 is live.
+- Image debits across subscription, purchased and starter credits now write their ledger entry inside the same Prisma transaction. Ledger failures propagate and abort the transaction; paid generation does not proceed on a failed debit.
+- Image refunds and support credit grants also commit balance/history together and reject non-positive, fractional or non-finite amounts.
+- No schema change, plan change, production balance adjustment or paid generation is part of this change.
+- Validation: 435 tests, TypeScript, targeted lint and production build pass. Added transaction-boundary/failure-propagation tests against the real functions with mocked Prisma; no local Postgres/Docker runtime was available, so real database rollback/concurrency integration testing is still outstanding.
+- Still open: operation IDs for replay-safe debit/refund, interrupted generation reconciliation, cross-period refund handling, Stripe purchase/refund atomic history and full job-level credit reservations. This change is not exactly-once billing.
 
 ## Working agreement
 

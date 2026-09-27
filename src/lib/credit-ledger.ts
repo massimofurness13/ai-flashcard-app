@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 
 /**
  * Credit ledger — the append-only history behind the /usage page.
  *
  * The User row stores running BALANCES; this records every individual
- * MOVEMENT so a user can see exactly where their credits went. Writes
- * are best-effort and must NEVER throw into the caller: a failed audit
- * insert must not break image generation or a Stripe webhook. So every
- * write is wrapped and swallowed here.
+ * MOVEMENT so a user can see exactly where their credits went. Financial
+ * mutations should pass their transaction so balance and history are
+ * atomic. Legacy callers without a transaction still use best-effort
+ * logging until their workflows are migrated.
  */
 
 export type LedgerKind = "spend" | "refund" | "purchase" | "grant";
@@ -26,8 +27,17 @@ export interface LedgerEntry {
   note?: string | null;
 }
 
-/** Best-effort ledger write. Never throws — logs and moves on. */
-export async function recordLedger(entry: LedgerEntry): Promise<void> {
+/** Transactional writes throw on failure; legacy standalone writes log failures. */
+export async function recordLedger(
+  entry: LedgerEntry,
+  transaction?: Pick<Prisma.TransactionClient, "creditLedger">,
+): Promise<void> {
+  // Financial mutations pass their transaction. An audit failure must
+  // then roll back the balance change rather than disappear silently.
+  if (transaction) {
+    await transaction.creditLedger.create({ data: entry });
+    return;
+  }
   try {
     await prisma.creditLedger.create({
       data: {
