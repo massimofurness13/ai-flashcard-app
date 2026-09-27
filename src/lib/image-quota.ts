@@ -87,7 +87,11 @@ export async function getQuotaState(userId: string): Promise<QuotaState> {
   // past-due yearly user falls back to "no allowance" — they keep
   // any purchased top-up credits but lose subscription credits.
   const plan: SubscriptionPlan | null =
-    isPro && subscription?.plan === "yearly" ? "yearly" : isPro ? "monthly" : null;
+    isPro && subscription?.plan === "yearly"
+      ? "yearly"
+      : isPro
+        ? "monthly"
+        : null;
 
   const allowance =
     plan === "yearly"
@@ -132,7 +136,8 @@ export async function getQuotaState(userId: string): Promise<QuotaState> {
   const lifetimeFreeRemaining = isPro
     ? 0
     : Math.max(FREE_LIFETIME_CREDITS - user.lifetimeFreeImagesUsed, 0);
-  const totalRemaining = monthlyRemaining + user.imageCredits + lifetimeFreeRemaining;
+  const totalRemaining =
+    monthlyRemaining + user.imageCredits + lifetimeFreeRemaining;
 
   return {
     isPro,
@@ -172,109 +177,116 @@ export type ConsumeResult =
 export async function consumeImageCredit(
   userId: string,
   tier: ImageTier = "quick",
-  context?: CreditContext
+  context?: CreditContext,
 ): Promise<ConsumeResult> {
   const cost = TIER_COSTS[tier];
   const now = new Date();
   const nextResetAt = new Date();
   nextResetAt.setMonth(nextResetAt.getMonth() + 1);
 
-  // Log the spend to the ledger (best-effort) and return the success
-  // result. Every successful spend path funnels through here so no
-  // movement goes unrecorded.
-  const spent = async (
-    source: "monthly" | "credits" | "free",
-    amountUsed: number
-  ): Promise<ConsumeResult> => {
-    await recordLedger({
-      userId,
-      delta: -amountUsed,
-      kind: "spend",
-      source,
-      tier,
-      deckId: context?.deckId ?? null,
-      deckName: context?.deckName ?? null,
-      note: context?.note ?? null,
-    });
-    return { ok: true, source, amountUsed };
-  };
-
   const isPro = await isProUser(userId);
+  const result = await prisma.$transaction(
+    async (tx): Promise<ConsumeResult | null> => {
+      // Balance and history commit together. If history cannot be written,
+      // no credit is spent and the caller must not start a paid generation.
+      const spent = async (
+        source: "monthly" | "credits" | "free",
+        amountUsed: number,
+      ): Promise<ConsumeResult> => {
+        await recordLedger(
+          {
+            userId,
+            delta: -amountUsed,
+            kind: "spend",
+            source,
+            tier,
+            deckId: context?.deckId ?? null,
+            deckName: context?.deckName ?? null,
+            note: context?.note ?? null,
+          },
+          tx,
+        );
+        return { ok: true, source, amountUsed };
+      };
 
-  if (isPro) {
-    const sub = await prisma.subscription.findUnique({
-      where: { userId },
-      select: { plan: true },
-    });
-    const allowance =
-      sub?.plan === "yearly" ? PRO_YEARLY_CREDITS : PRO_MONTHLY_CREDITS;
+      if (isPro) {
+        const sub = await tx.subscription.findUnique({
+          where: { userId },
+          select: { plan: true },
+        });
+        const allowance =
+          sub?.plan === "yearly" ? PRO_YEARLY_CREDITS : PRO_MONTHLY_CREDITS;
 
-    // First-time monthly use (no reset date set yet) — initialise.
-    const initResult = await prisma.user.updateMany({
-      where: { id: userId, monthlyImagesResetAt: null },
-      data: {
-        monthlyImagesUsed: cost,
-        monthlyImagesResetAt: nextResetAt,
-      },
-    });
-    if (initResult.count === 1) {
-      return spent("monthly", cost);
-    }
+        // First-time monthly use (no reset date set yet) — initialise.
+        const initResult = await tx.user.updateMany({
+          where: { id: userId, monthlyImagesResetAt: null },
+          data: {
+            monthlyImagesUsed: cost,
+            monthlyImagesResetAt: nextResetAt,
+          },
+        });
+        if (initResult.count === 1) {
+          return spent("monthly", cost);
+        }
 
-    // Cycle expired — reset usage and charge in one atomic update.
-    const resetResult = await prisma.user.updateMany({
-      where: { id: userId, monthlyImagesResetAt: { lte: now } },
-      data: {
-        monthlyImagesUsed: cost,
-        monthlyImagesResetAt: nextResetAt,
-      },
-    });
-    if (resetResult.count === 1) {
-      return spent("monthly", cost);
-    }
+        // Cycle expired — reset usage and charge in one atomic update.
+        const resetResult = await tx.user.updateMany({
+          where: { id: userId, monthlyImagesResetAt: { lte: now } },
+          data: {
+            monthlyImagesUsed: cost,
+            monthlyImagesResetAt: nextResetAt,
+          },
+        });
+        if (resetResult.count === 1) {
+          return spent("monthly", cost);
+        }
 
-    // Normal in-cycle increment. The `monthlyImagesUsed: { lte: allowance - cost }`
-    // precondition is what makes this race-safe — if N concurrent
-    // requests all see "100 used, 500 limit", only some will pass
-    // this WHERE clause depending on the order Postgres applies the
-    // writes; the rest get count=0 and try the next source.
-    const incResult = await prisma.user.updateMany({
-      where: {
-        id: userId,
-        monthlyImagesResetAt: { gt: now },
-        monthlyImagesUsed: { lte: allowance - cost },
-      },
-      data: { monthlyImagesUsed: { increment: cost } },
-    });
-    if (incResult.count === 1) {
-      return spent("monthly", cost);
-    }
-  }
+        // Normal in-cycle increment. The `monthlyImagesUsed: { lte: allowance - cost }`
+        // precondition is what makes this race-safe — if N concurrent
+        // requests all see "100 used, 500 limit", only some will pass
+        // this WHERE clause depending on the order Postgres applies the
+        // writes; the rest get count=0 and try the next source.
+        const incResult = await tx.user.updateMany({
+          where: {
+            id: userId,
+            monthlyImagesResetAt: { gt: now },
+            monthlyImagesUsed: { lte: allowance - cost },
+          },
+          data: { monthlyImagesUsed: { increment: cost } },
+        });
+        if (incResult.count === 1) {
+          return spent("monthly", cost);
+        }
+      }
 
-  // Purchased credits — never expire, available to everyone.
-  const creditsResult = await prisma.user.updateMany({
-    where: { id: userId, imageCredits: { gte: cost } },
-    data: { imageCredits: { decrement: cost } },
-  });
-  if (creditsResult.count === 1) {
-    return spent("credits", cost);
-  }
+      // Purchased credits — never expire, available to everyone.
+      const creditsResult = await tx.user.updateMany({
+        where: { id: userId, imageCredits: { gte: cost } },
+        data: { imageCredits: { decrement: cost } },
+      });
+      if (creditsResult.count === 1) {
+        return spent("credits", cost);
+      }
 
-  // Lifetime free trial — non-Pro only.
-  if (!isPro) {
-    const freeResult = await prisma.user.updateMany({
-      where: {
-        id: userId,
-        lifetimeFreeImagesUsed: { lte: FREE_LIFETIME_CREDITS - cost },
-      },
-      data: { lifetimeFreeImagesUsed: { increment: cost } },
-    });
-    if (freeResult.count === 1) {
-      return spent("free", cost);
-    }
-  }
+      // Lifetime free trial — non-Pro only.
+      if (!isPro) {
+        const freeResult = await tx.user.updateMany({
+          where: {
+            id: userId,
+            lifetimeFreeImagesUsed: { lte: FREE_LIFETIME_CREDITS - cost },
+          },
+          data: { lifetimeFreeImagesUsed: { increment: cost } },
+        });
+        if (freeResult.count === 1) {
+          return spent("free", cost);
+        }
+      }
 
-  // Everyone failed — read state for the error response.
+      return null;
+    },
+  );
+  if (result) return result;
+  // Read the error response after releasing the transaction connection.
   const state = await getQuotaState(userId);
   return { ok: false, reason: "out_of_quota", state };
 }
@@ -283,52 +295,68 @@ export async function refundImageCredit(
   userId: string,
   source: "monthly" | "credits" | "free",
   amount: number,
-  context?: CreditContext & { tier?: ImageTier | null }
+  context?: CreditContext & { tier?: ImageTier | null },
 ): Promise<void> {
-  if (source === "monthly") {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { monthlyImagesUsed: { decrement: amount } },
-    });
-  } else if (source === "credits") {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { imageCredits: { increment: amount } },
-    });
-  } else {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { lifetimeFreeImagesUsed: { decrement: amount } },
-    });
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new Error("Refund amount must be a positive integer");
   }
+  await prisma.$transaction(async (tx) => {
+    if (source === "monthly") {
+      await tx.user.update({
+        where: { id: userId },
+        data: { monthlyImagesUsed: { decrement: amount } },
+      });
+    } else if (source === "credits") {
+      await tx.user.update({
+        where: { id: userId },
+        data: { imageCredits: { increment: amount } },
+      });
+    } else {
+      await tx.user.update({
+        where: { id: userId },
+        data: { lifetimeFreeImagesUsed: { decrement: amount } },
+      });
+    }
 
-  await recordLedger({
-    userId,
-    delta: amount,
-    kind: "refund",
-    source,
-    tier: context?.tier ?? null,
-    deckId: context?.deckId ?? null,
-    deckName: context?.deckName ?? null,
-    note: context?.note ?? "Refund — image generation failed",
+    await recordLedger(
+      {
+        userId,
+        delta: amount,
+        kind: "refund",
+        source,
+        tier: context?.tier ?? null,
+        deckId: context?.deckId ?? null,
+        deckName: context?.deckName ?? null,
+        note: context?.note ?? "Refund — image generation failed",
+      },
+      tx,
+    );
   });
 }
 
 export async function addCredits(
   userId: string,
   amount: number,
-  note?: string
+  note?: string,
 ): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: { imageCredits: { increment: amount } },
-  });
-  await recordLedger({
-    userId,
-    delta: amount,
-    kind: "grant",
-    source: "credits",
-    note: note ?? "Credits added",
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new Error("Credit grant must be a positive integer");
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { imageCredits: { increment: amount } },
+    });
+    await recordLedger(
+      {
+        userId,
+        delta: amount,
+        kind: "grant",
+        source: "credits",
+        note: note ?? "Credits added",
+      },
+      tx,
+    );
   });
 }
 
@@ -338,7 +366,7 @@ export async function addCredits(
  */
 export async function syncResetDateToBillingCycle(
   userId: string,
-  billingCycleEnd: Date
+  billingCycleEnd: Date,
 ): Promise<void> {
   await prisma.user.update({
     where: { id: userId },
