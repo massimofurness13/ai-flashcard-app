@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -30,7 +31,8 @@ export function DangerZoneCard() {
       const supabase = createClient();
       await supabase.auth.signOut();
       router.push("/auth/login");
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
     } catch {
       setLoading(false);
     }

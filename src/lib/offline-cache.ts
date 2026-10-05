@@ -1,210 +1,69 @@
 import { fallbackVoiceCodes } from "@/lib/language-codes";
+import { audioKey, deviceOwner, downloadMedia, resolveSavedAudio } from "@/lib/device-media";
+import { readRecord, writeRecord } from "@/lib/device-db";
 
-/**
- * Offline pack download.
- *
- * "Download for offline" resolves every audio clip (generating any that
- * don't exist yet) + image URL for a pack, then hands the list to the
- * service worker (public/sw.js) to store on the device. After that the
- * pack plays instantly and works with no signal — the SW serves the
- * media from its cache instead of the network.
- */
-
-const PACKS_KEY = "huella-offline-packs";
-
-// ── Downloaded-state bookkeeping (localStorage) ─────────────────────
-export function getDownloadedPacks(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(PACKS_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-export function isPackDownloaded(deckId: string): boolean {
-  return getDownloadedPacks().includes(deckId);
-}
-
-function markPackDownloaded(deckId: string): void {
-  if (typeof window === "undefined") return;
-  const set = new Set(getDownloadedPacks());
-  set.add(deckId);
-  try {
-    localStorage.setItem(PACKS_KEY, JSON.stringify([...set]));
-  } catch {
-    /* ignore */
-  }
-}
-
-// ── Service worker ──────────────────────────────────────────────────
 export async function registerMediaServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
-    return null;
-  }
-  try {
-    const reg = await navigator.serviceWorker.register("/sw.js");
-    // Ask the OS to keep our cache around under storage pressure so a
-    // downloaded pack stays downloaded.
-    if (navigator.storage?.persist) {
-      navigator.storage.persist().catch(() => {});
-    }
-    return reg;
-  } catch {
-    return null;
-  }
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
+  try { return await navigator.serviceWorker.register("/sw.js"); } catch { return null; }
 }
-
-// ── Helpers ─────────────────────────────────────────────────────────
-async function mapConcurrent<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let idx = 0;
-  async function worker() {
-    while (idx < items.length) {
-      const i = idx++;
-      results[i] = await fn(items[i]);
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length || 1) }, worker),
-  );
-  return results;
-}
-
-async function fetchAudioUrl(
-  text: string,
-  languageCode: string,
-): Promise<string | null> {
-  try {
-    const res = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, languageCode }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { audioUrl?: string };
-    return data.audioUrl ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function precacheViaServiceWorker(
-  urls: string[],
-  onProgress: (done: number, total: number) => void,
-): Promise<void> {
-  const reg = await registerMediaServiceWorker();
-  if (!reg) {
-    // No SW support — warm the browser HTTP cache as a best-effort
-    // fallback so at least this session is fast.
-    let done = 0;
-    await mapConcurrent(urls, 6, async (u) => {
-      try {
-        await fetch(u, { mode: "cors", cache: "force-cache" });
-      } catch {
-        /* ignore */
-      }
-      onProgress(++done, urls.length);
-    });
-    return;
-  }
-
-  const ready = await navigator.serviceWorker.ready;
-  const target = navigator.serviceWorker.controller || ready.active;
-  if (!target) {
-    onProgress(urls.length, urls.length);
-    return;
-  }
-
-  await new Promise<void>((resolve) => {
-    const onMessage = (e: MessageEvent) => {
-      const d = e.data;
-      if (!d) return;
-      if (d.type === "PRECACHE_PROGRESS") onProgress(d.done, d.total);
-      if (d.type === "PRECACHE_DONE") {
-        navigator.serviceWorker.removeEventListener("message", onMessage);
-        resolve();
-      }
-    };
-    navigator.serviceWorker.addEventListener("message", onMessage);
-    target.postMessage({ type: "PRECACHE", urls });
-  });
-}
-
-// ── Public API ──────────────────────────────────────────────────────
-export interface DownloadCard {
-  front: string;
-  back: string;
-  imageUrl: string | null;
-}
-
+export interface DownloadCard { front: string; back: string; imageUrl: string | null }
 export interface DownloadPackInput {
-  deckId: string;
-  cards: DownloadCard[];
-  frontLanguageCode: string | null;
-  backLanguageCode: string | null;
-  /** User's onboarding learning language — the voice fallback for a
-   *  deck with no explicit language codes. */
-  learningLanguage: string | null;
+  deckId: string; cards: DownloadCard[]; frontLanguageCode: string | null;
+  backLanguageCode: string | null; learningLanguage: string | null;
 }
-
-export type DownloadProgress = {
-  /** "prepare" = resolving/generating audio URLs; "save" = writing to device. */
-  phase: "prepare" | "save";
-  done: number;
-  total: number;
-};
-
-/**
- * Download a pack's audio + images to the device. Reports progress in
- * two phases: preparing (resolving audio URLs, which also generates any
- * missing clips) then saving (writing to the on-device cache).
- */
-export async function downloadPack(
-  input: DownloadPackInput,
-  onProgress?: (p: DownloadProgress) => void,
-): Promise<{ mediaCount: number }> {
+export type DownloadProgress = { phase: "prepare" | "save"; done: number; total: number };
+interface Manifest { signature: string; urls: string[] }
+function signature(input: DownloadPackInput) {
+  return JSON.stringify([input.cards, input.frontLanguageCode, input.backLanguageCode, input.learningLanguage]);
+}
+export async function isPackDownloaded(input: DownloadPackInput): Promise<boolean> {
+  const owner = await deviceOwner();
+  if (!owner) return false;
+  try {
+    const record = await readRecord<Manifest>(owner, `pack:${input.deckId}`);
+    if (!record || record.value.signature !== signature(input)) return false;
+    for (const url of record.value.urls) {
+      if (!(await readRecord<Blob>(owner, `media:${url}`))?.value?.size) return false;
+    }
+    return true;
+  } catch { return false; }
+}
+export async function downloadPack(input: DownloadPackInput, onProgress?: (progress: DownloadProgress) => void): Promise<{ mediaCount: number }> {
+  const owner = await deviceOwner();
+  if (!owner) throw new Error("Sign in before downloading.");
+  await navigator.storage?.persist?.().catch(() => false);
   const fallback = fallbackVoiceCodes(input.learningLanguage);
-  const frontLang = input.frontLanguageCode || fallback.front;
-  const backLang = input.backLanguageCode || fallback.back;
-
-  // Audio clips to resolve (skip sides with no language / no text).
-  const audioItems: { text: string; lang: string }[] = [];
-  for (const c of input.cards) {
-    if (frontLang && c.front.trim()) {
-      audioItems.push({ text: c.front, lang: frontLang });
+  const front = input.frontLanguageCode || fallback.front;
+  const back = input.backLanguageCode || fallback.back;
+  const clips = input.cards.flatMap(card => [
+    ...(front && card.front.trim() ? [{ text: card.front, language: front }] : []),
+    ...(back && card.back.trim() ? [{ text: card.back, language: back }] : []),
+  ]);
+  const urls = new Set(input.cards.map(card => card.imageUrl).filter((url): url is string => !!url));
+  let done = 0;
+  // Sequential audio lookup keeps large packs below the TTS rate limit.
+  for (const clip of clips) {
+    let url = await resolveSavedAudio(owner, clip.text, clip.language);
+    if (!url) {
+      const response = await fetch("/api/tts", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: clip.text, languageCode: clip.language }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!response.ok) throw new Error("Some audio couldn't be prepared. Retry to resume.");
+      url = (await response.json()).audioUrl;
+      if (!url) throw new Error("Missing audio file.");
+      await writeRecord(owner, audioKey(clip.text, clip.language), url);
     }
-    if (backLang && c.back.trim()) {
-      audioItems.push({ text: c.back, lang: backLang });
-    }
+    urls.add(url);
+    onProgress?.({ phase: "prepare", done: ++done, total: clips.length });
   }
-
-  // Phase 1 — resolve audio URLs (generates any that don't exist yet).
-  let prepared = 0;
-  const audioUrls = (
-    await mapConcurrent(audioItems, 6, async (it) => {
-      const url = await fetchAudioUrl(it.text, it.lang);
-      onProgress?.({ phase: "prepare", done: ++prepared, total: audioItems.length });
-      return url;
-    })
-  ).filter((u): u is string => !!u);
-
-  // Image URLs come straight off the cards.
-  const imageUrls = input.cards
-    .map((c) => c.imageUrl)
-    .filter((u): u is string => !!u);
-
-  const allUrls = [...new Set([...audioUrls, ...imageUrls])];
-
-  // Phase 2 — write everything to the device cache via the SW.
-  await precacheViaServiceWorker(allUrls, (done, total) =>
-    onProgress?.({ phase: "save", done, total }),
-  );
-
-  markPackDownloaded(input.deckId);
-  return { mediaCount: allUrls.length };
+  done = 0;
+  for (const url of urls) {
+    await downloadMedia(owner, url);
+    onProgress?.({ phase: "save", done: ++done, total: urls.size });
+  }
+  // Only commit completion once EVERY required file has been saved.
+  await writeRecord(owner, `pack:${input.deckId}`, { signature: signature(input), urls: [...urls] });
+  return { mediaCount: urls.size };
 }

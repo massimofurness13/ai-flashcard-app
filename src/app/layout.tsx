@@ -9,6 +9,7 @@ import { Footer } from "@/components/layout/footer";
 import { FontSizeInit } from "@/components/layout/font-size-init";
 import { MediaServiceWorker } from "@/components/layout/media-service-worker";
 import { PostHogProvider } from "@/components/posthog-provider";
+import { DeviceProvider } from "@/components/layout/device-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,6 +36,7 @@ export const viewport: Viewport = {
   themeColor: "#0f0d0a",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
   maximumScale: 1,
   userScalable: false,
 };
@@ -67,14 +69,16 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <PostHogProvider>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <DeviceProvider>
             <FontSizeInit />
             <MediaServiceWorker />
             <Navbar />
-            <main className="flex-1 pb-20 md:pb-0">
+            <main className="app-content flex-1 md:pb-0">
               <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
             </main>
             <Footer />
             <MobileNav />
+            </DeviceProvider>
           </ThemeProvider>
         </PostHogProvider>
       </body>

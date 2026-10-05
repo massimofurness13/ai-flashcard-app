@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -152,14 +153,16 @@ export function AnkiImport({ isPro }: AnkiImportProps) {
               {result.deckIds.length === 1 ? (
                 <Button onClick={() => {
                   router.push(`/decks/${result.deckIds[0]}`);
-                  router.refresh();
+                  invalidateDeviceQueries();
+    router.refresh();
                 }}>
                   View Imported Deck
                 </Button>
               ) : (
                 <Button onClick={() => {
                   router.push("/");
-                  router.refresh();
+                  invalidateDeviceQueries();
+    router.refresh();
                 }}>
                   View All Decks
                 </Button>

@@ -68,7 +68,7 @@ export function DeckCard({
     // truncate inside doesn't apply because the parent's intrinsic
     // min-width still respects content width — caused the home page
     // to scroll horizontally on iPhone width.
-    <Link href={`/decks/${id}`} className="block w-full min-w-0">
+    <Link href={`/decks/${id}`} prefetch={true} className="block w-full min-w-0">
       <article className="editorial-card group relative w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card px-3 py-2.5 transition-colors hover:border-[color:var(--primary)]/40 sm:px-4">
         {/* Folder-color spine */}
         {folderColor && (

@@ -53,13 +53,13 @@ export function MetricTile({
   return (
     <div
       className={cn(
-        "rounded-2xl border p-4 sm:p-5 flex flex-col gap-1.5",
+        "min-w-0 rounded-xl border p-2.5 sm:p-3 flex flex-col gap-1",
         toneClasses,
         className
       )}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="flex flex-wrap items-baseline justify-between gap-1">
+        <p className="text-xs text-muted-foreground">
           {label}
         </p>
         {kicker && (
@@ -70,7 +70,7 @@ export function MetricTile({
       </div>
       <p
         className={cn(
-          "font-editorial text-3xl sm:text-4xl font-medium leading-none tabular-nums",
+          "font-editorial text-2xl sm:text-3xl font-medium leading-tight tabular-nums break-words",
           valueClasses
         )}
       >

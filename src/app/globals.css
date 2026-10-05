@@ -83,6 +83,12 @@ body {
   background-attachment: fixed;
 }
 
+/* Leave an explicit gesture zone even in WebViews reporting a zero inset. */
+.mobile-tab-bar { padding-bottom: max(env(safe-area-inset-bottom, 0px), 20px); }
+@media (max-width: 767px) {
+  .app-content { padding-bottom: calc(80px + max(env(safe-area-inset-bottom, 0px), 20px)); }
+}
+
 /* Editorial display serif utility. Apply to major headlines. */
 .font-editorial {
   font-family: var(--font-serif, Georgia, "Times New Roman", serif);

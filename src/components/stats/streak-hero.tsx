@@ -13,27 +13,18 @@ interface StreakHeroProps {
 export function StreakHero({ streak, longestStreak }: StreakHeroProps) {
   const onFire = streak >= 1;
   return (
-    <div className="flex items-center gap-5">
-      <div
-        className={`relative w-[124px] h-[124px] rounded-full flex items-center justify-center ${
-          onFire
-            ? "bg-gradient-to-br from-[color-mix(in_oklch,var(--primary)_30%,transparent)] to-[color-mix(in_oklch,var(--glow)_30%,transparent)]"
-            : "bg-muted/40"
-        }`}
-      >
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span
-          className="text-[56px] leading-none"
+          className="text-base leading-[18px]"
           aria-hidden
           style={{ filter: onFire ? "none" : "grayscale(100%) opacity(0.5)" }}
         >
           🔥
         </span>
+        <span>Current streak</span>
       </div>
-      <div className="space-y-1">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-          Current streak
-        </p>
-        <p className="font-editorial text-3xl font-medium leading-tight tabular-nums">
+        <p className="font-editorial text-2xl font-medium leading-tight tabular-nums">
           {streak}{" "}
           <span className="text-base text-muted-foreground font-normal">
             day{streak === 1 ? "" : "s"}
@@ -42,7 +33,6 @@ export function StreakHero({ streak, longestStreak }: StreakHeroProps) {
         <p className="text-xs text-muted-foreground">
           Longest: {longestStreak} day{longestStreak === 1 ? "" : "s"}
         </p>
-      </div>
     </div>
   );
 }

@@ -1,394 +1,98 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
+import { useDeviceAccount } from "@/components/layout/device-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-import type { User } from "@supabase/supabase-js";
-import {
-  CARDS_PER_SESSION_OPTIONS,
-  AUTO_FLIP_MAX,
-  CARD_ORIENTATION_OPTIONS,
-  FONT_SIZE_OPTIONS,
-} from "@/lib/constants";
+import { CARDS_PER_SESSION_OPTIONS, AUTO_FLIP_MAX, CARD_ORIENTATION_OPTIONS, FONT_SIZE_OPTIONS } from "@/lib/constants";
+import { readDeviceSettings, updateDeviceSettings } from "@/lib/device-settings";
 import { speak } from "@/lib/tts";
-import { ImageQuotaCard } from "@/components/subscription/image-quota-card";
 import { DailyGoalCard } from "@/components/account/daily-goal-card";
-import { AccountInfoCard } from "@/components/account/account-info-card";
 import { DangerZoneCard } from "@/components/account/danger-zone-card";
 import { ReminderCard } from "@/components/account/reminder-card";
-import Link from "next/link";
+import { SettingsSection } from "@/components/account/settings-section";
 
 export default function AccountPage() {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [ttsSpeed, setTtsSpeed] = useState(1);
-  const [defaultCards, setDefaultCards] = useState(10);
-  const [customCards, setCustomCards] = useState("");
-  const [isCustomCards, setIsCustomCards] = useState(false);
-  const [defaultAutoFlip, setDefaultAutoFlip] = useState(0);
-  const [defaultOrientation, setDefaultOrientation] = useState("front");
-  const [fontSize, setFontSize] = useState("medium");
-
+  const { user } = useDeviceAccount();
+  const [settings, setSettings] = useState<Record<string, unknown>>({});
+  const [countDraft, setCountDraft] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState(false);
   useEffect(() => {
-    setMounted(true);
-
-    // Load user info
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-    });
-
-    // Load saved settings from localStorage
-    const saved = localStorage.getItem("huella-settings");
-    if (saved) {
-      const settings = JSON.parse(saved);
-      setTtsSpeed(settings.ttsSpeed || 1);
-      setDefaultCards(settings.defaultCards || 10);
-      setDefaultAutoFlip(settings.defaultAutoFlip || 0);
-      setDefaultOrientation(settings.defaultOrientation || "front");
-      if (settings.fontSize) {
-        setFontSize(settings.fontSize);
-        applyFontSize(settings.fontSize);
-      }
-    }
+    // Hydrate browser-only preferences after the server/client initial render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSettings(readDeviceSettings());
   }, []);
-
-  function saveSettings() {
-    localStorage.setItem(
-      "huella-settings",
-      JSON.stringify({
-        ttsSpeed,
-        defaultCards,
-        defaultAutoFlip,
-        defaultOrientation,
-        fontSize,
-      })
-    );
+  const speed = Number(settings.ttsSpeed ?? 1);
+  const count = Number(settings.defaultCards ?? 10);
+  const flip = Number(settings.defaultAutoFlip ?? 0);
+  const advance = Number(settings.defaultAutoAdvance ?? 0);
+  const orientation = String(settings.defaultOrientation ?? "front");
+  const fontSize = String(settings.fontSize ?? "medium");
+  function save(patch: Record<string, unknown>) {
+    setSettings(previous => ({ ...previous, ...patch }));
+    setSaveError(!updateDeviceSettings(patch));
   }
-
-  function applyFontSize(size: string) {
+  function changeFont(value: string) {
     document.body.classList.remove("font-small", "font-medium", "font-large", "font-xlarge");
-    document.body.classList.add(`font-${size}`);
+    document.body.classList.add(`font-${value}`);
+    save({ fontSize: value });
   }
-
-  function handleFontSize(size: string) {
-    setFontSize(size);
-    applyFontSize(size);
-    // Save inline since setState is async
-    localStorage.setItem(
-      "huella-settings",
-      JSON.stringify({
-        ttsSpeed,
-        defaultCards,
-        defaultAutoFlip,
-        defaultOrientation,
-        fontSize: size,
-      })
-    );
-  }
-
-  function testVoice() {
-    // Use the same Google Chirp 3 HD pipeline as study sessions —
-    // routing through a real language code (en-GB here) instead of
-    // the browser's robotic Web Speech API. Persists the current
-    // slider value to localStorage first so getSettings() inside
-    // tts.ts reads back the speed the user is currently testing,
-    // even before they hit Save.
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem("huella-settings") || "{}"
-      );
-      localStorage.setItem(
-        "huella-settings",
-        JSON.stringify({ ...saved, ttsSpeed })
-      );
-    } catch {
-      /* non-fatal — speed override is best-effort */
-    }
-    speak("This is a sample at the current playback speed.", {
-      languageCode: "en-GB",
-    });
-  }
-
-  async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+  async function logout() {
+    await createClient().auth.signOut();
     router.push("/auth/login");
+    invalidateDeviceQueries();
     router.refresh();
   }
-
-  if (!mounted) return null;
-
-  const displayName =
-    user?.user_metadata?.full_name ||
-    user?.user_metadata?.name ||
-    user?.email?.split("@")[0] ||
-    "User";
-
-  const avatarUrl = user?.user_metadata?.avatar_url;
-
-  return (
-    <div className="space-y-4 max-w-2xl">
-      <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
-        Account &amp; settings
-      </h1>
-
-      {/* Identity row — avatar + name + email + sign-out in a single
-       *  compact bar so the user can scan past it in one glance. The
-       *  old layout had a full Card with header/content padding for
-       *  what was really just "you're logged in as X". */}
-      {user && (
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt={displayName}
-              className="h-10 w-10 rounded-full shrink-0"
-            />
-          ) : (
-            <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-base font-bold text-primary">
-              {displayName[0]?.toUpperCase()}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold truncate">{displayName}</p>
-            <p className="text-xs text-muted-foreground truncate">
-              {user.email}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive hover:text-destructive shrink-0"
-            onClick={handleLogout}
-          >
-            Sign out
-          </Button>
+  const name = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0];
+  return <div className="max-w-2xl space-y-5">
+    <h1 className="font-editorial text-3xl font-medium">Settings</h1>
+    {user && <div className="flex items-center gap-3">
+      <div aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-editorial text-xl text-primary">{name?.[0]?.toUpperCase()}</div>
+      <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{name}</p><p className="truncate text-xs text-muted-foreground">{user.email}</p></div>
+      <Button variant="ghost" size="sm" onClick={logout}>Sign out</Button>
+    </div>}
+    {saveError && <p role="alert" className="text-sm text-destructive">Your device couldn’t save this setting. Check available storage and try again.</p>}
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <SettingsSection title="Study" summary="Session length, timers and card order">
+        <label className="block text-sm font-medium" htmlFor="default-card-count">Cards per session</label>
+        <div className="flex flex-wrap gap-2">
+          {CARDS_PER_SESSION_OPTIONS.map(n => <Button key={n} size="sm" variant={count === n ? "default" : "outline"} onClick={() => { setCountDraft(null); save({ defaultCards: n }); }}>{n}</Button>)}
+          <Input id="default-card-count" aria-label="Custom cards per session" type="number" min={1} max={1000} value={countDraft ?? String(count)} onChange={e => { setCountDraft(e.target.value); const n = Number(e.target.value); if (n >= 1 && n <= 1000) save({ defaultCards: Math.floor(n) }); }} onBlur={() => setCountDraft(null)} className="w-24" />
         </div>
-      )}
-
-      {/* Subscription + sync + member-since */}
-      <AccountInfoCard />
-
-      {/* AI image quota + credit top-ups */}
-      <ImageQuotaCard />
-
-      {/* Credit usage history */}
-      <Link href="/usage" className="block">
-        <Card className="transition-colors hover:border-primary/50">
-          <CardContent className="flex items-center justify-between gap-3 py-4">
-            <div>
-              <p className="font-medium">Credit usage</p>
-              <p className="text-sm text-muted-foreground">
-                See where your credits went — by pack and date.
-              </p>
-            </div>
-            <span aria-hidden className="text-muted-foreground">
-              →
-            </span>
-          </CardContent>
-        </Card>
-      </Link>
-
-      {/* Theme */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Appearance</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium mb-2 block">Theme</label>
-            <div className="flex gap-2">
-              {[
-                { label: "Light", value: "light" },
-                { label: "Dark", value: "dark" },
-                { label: "System", value: "system" },
-              ].map((opt) => (
-                <Button
-                  key={opt.value}
-                  variant={theme === opt.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setTheme(opt.value)}
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium mb-2 block">Font Size</label>
-            <div className="flex gap-2">
-              {FONT_SIZE_OPTIONS.map((opt) => (
-                <Button
-                  key={opt.value}
-                  variant={fontSize === opt.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handleFontSize(opt.value)}
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Daily study goal */}
-      <DailyGoalCard />
-
-      {/* Daily push reminder */}
-      <ReminderCard />
-
-      {/* Default Review Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Default Review Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium mb-2 block">Cards per session</label>
-            <div className="flex gap-2 flex-wrap">
-              {CARDS_PER_SESSION_OPTIONS.map((n) => (
-                <Button
-                  key={n}
-                  variant={!isCustomCards && defaultCards === n ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => { setDefaultCards(n); setIsCustomCards(false); setCustomCards(""); saveSettings(); }}
-                >
-                  {n}
-                </Button>
-              ))}
-              <div className="flex items-center gap-1">
-                <Input
-                  type="number"
-                  placeholder="Custom"
-                  value={customCards}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCustomCards(val);
-                    const num = parseInt(val, 10);
-                    if (num > 0) {
-                      setDefaultCards(num);
-                      setIsCustomCards(true);
-                      saveSettings();
-                    }
-                  }}
-                  className="w-24 h-8 text-sm"
-                  min={1}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium mb-2 block">
-              Auto-flip timer: {defaultAutoFlip === 0 ? "Off" : `${defaultAutoFlip.toFixed(1)}s`}
-            </label>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">Off</span>
-              <input
-                type="range"
-                min={0}
-                max={AUTO_FLIP_MAX}
-                step={0.1}
-                value={defaultAutoFlip}
-                onChange={(e) => { setDefaultAutoFlip(parseFloat(e.target.value)); saveSettings(); }}
-                className="w-full"
-              />
-              <span className="text-xs text-muted-foreground">{AUTO_FLIP_MAX}s</span>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium mb-2 block">Card orientation</label>
-            <div className="flex gap-2">
-              {CARD_ORIENTATION_OPTIONS.map((opt) => (
-                <Button
-                  key={opt.value}
-                  variant={defaultOrientation === opt.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => { setDefaultOrientation(opt.value); saveSettings(); }}
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* TTS speed only — voices are set per pack on the Edit Pack
-       *  screen. The long explanation about that has been moved to
-       *  Help; this section is just the slider + test button. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Audio</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium">Playback speed</label>
-              <span className="text-sm tabular-nums text-muted-foreground">
-                {ttsSpeed.toFixed(1)}×
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0.5}
-              max={2}
-              step={0.1}
-              value={ttsSpeed}
-              onChange={(e) => {
-                setTtsSpeed(parseFloat(e.target.value));
-                saveSettings();
-              }}
-              className="w-full"
-            />
-          </div>
-          <Button variant="outline" size="sm" onClick={testVoice}>
-            Test
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Help / Contact / About / Updates navigation */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              { href: "/help", label: "Help" },
-              { href: "/contact", label: "Contact" },
-              { href: "/about", label: "About" },
-              { href: "/updates", label: "Updates" },
-            ].map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="rounded-lg border border-border px-3 py-3 text-center text-sm font-medium hover:border-primary/30 hover:bg-muted/30 transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Danger zone (delete account) */}
-      <DangerZoneCard />
-
-      {/* Build stamp — lets the user (and support) confirm which
-       *  deployed version they're actually running, which matters
-       *  when a cached PWA might be serving an old bundle. */}
-      <p className="text-center text-[11px] text-muted-foreground/60 pt-2">
-        Huella · build {process.env.NEXT_PUBLIC_BUILD_SHA}
-      </p>
+        {([{ key: "defaultAutoFlip", label: "Auto-flip", value: flip }, { key: "defaultAutoAdvance", label: "Auto-advance", value: advance }] as const).map(timer => <div key={timer.key}>
+          <label htmlFor={timer.key} className="flex justify-between text-sm mb-2"><span>{timer.label}</span><span className="tabular-nums text-muted-foreground">{timer.value === 0 ? "Off" : `${timer.value.toFixed(1)}s`}</span></label>
+          <input id={timer.key} type="range" min={0} max={AUTO_FLIP_MAX} step={0.1} value={timer.value} onChange={e => save({ [timer.key]: Number(e.target.value) })} className="w-full" />
+        </div>)}
+        <p className="text-xs text-muted-foreground">1 second recommended. Timers start after the audio.</p>
+        <p className="text-sm font-medium">Show first</p>
+        <div className="flex flex-wrap gap-2">{CARD_ORIENTATION_OPTIONS.map(o => <Button key={o.value} size="sm" variant={orientation === o.value ? "default" : "outline"} onClick={() => save({ defaultOrientation: o.value })}>{o.label}</Button>)}</div>
+      </SettingsSection>
+      <SettingsSection title="Audio" summary={`${speed.toFixed(1)}× playback speed`}>
+        <label htmlFor="voice-speed" className="flex justify-between text-sm"><span>Playback speed</span><span>{speed.toFixed(1)}×</span></label>
+        <input id="voice-speed" className="w-full" type="range" min={0.5} max={2} step={0.1} value={speed} onChange={e => save({ ttsSpeed: Number(e.target.value) })} />
+        <Button size="sm" variant="outline" onClick={() => speak("This is a sample at your selected speed.", { languageCode: "en-GB" })}>Play sample</Button>
+        <p className="text-xs text-muted-foreground">Choose each language’s voice in Pack settings.</p>
+      </SettingsSection>
+      <SettingsSection title="Daily goal" summary="Choose your daily card target"><DailyGoalCard /></SettingsSection>
+      <SettingsSection title="Reminders" summary="When to remind you to study"><ReminderCard /></SettingsSection>
+      <SettingsSection title="Appearance" summary="Theme and text size">
+        <p className="text-sm font-medium">Theme</p>
+        <div className="flex flex-wrap gap-2">{["light", "dark", "system"].map(value => <Button key={value} size="sm" variant={theme === value ? "default" : "outline"} onClick={() => setTheme(value)} className="capitalize">{value}</Button>)}</div>
+        <p className="text-sm font-medium">Text size</p>
+        <div className="flex flex-wrap gap-2">{FONT_SIZE_OPTIONS.map(o => <Button key={o.value} size="sm" variant={fontSize === o.value ? "default" : "outline"} onClick={() => changeFont(o.value)}>{o.label}</Button>)}</div>
+      </SettingsSection>
     </div>
-  );
+    <div className="divide-y divide-border rounded-xl border border-border bg-card">
+      {[{ href: "/account/billing", label: "Plan & credits" }, { href: "/usage", label: "Credit usage" }, { href: "/account/downloads", label: "Device storage" }, { href: "/help", label: "Help & support" }].map(item => <Link key={item.href} href={item.href} className="flex min-h-12 items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40">{item.label}<span aria-hidden className="text-muted-foreground">›</span></Link>)}
+    </div>
+    <div className="overflow-hidden rounded-xl border border-border bg-card"><SettingsSection title="Delete account" summary="Permanently remove your account"><DangerZoneCard /></SettingsSection></div>
+    <p className="text-center text-xs text-muted-foreground">Huella · build {process.env.NEXT_PUBLIC_BUILD_SHA}</p>
+  </div>;
 }

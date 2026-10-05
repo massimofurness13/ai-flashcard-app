@@ -1,4 +1,6 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
+import { DeviceImage } from "@/components/flashcard/device-image";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -347,7 +349,8 @@ export function EditCardsClient({
       // be on this page for a moment before the route change).
       emitCreditsChanged();
       router.push(`/decks/${deckId}?generating=true`);
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
     } catch {
       setBulkGenError("Network error. Please try again.");
       setBulkGenLoading(false);
@@ -517,7 +520,7 @@ export function EditCardsClient({
                   ) : card.imageUrl ? (
                     <>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <DeviceImage
                         src={card.imageUrl}
                         alt={`Image for card ${index + 1}`}
                         className="w-16 h-16 object-cover rounded-lg border border-border"

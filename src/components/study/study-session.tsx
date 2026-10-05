@@ -1,8 +1,9 @@
 "use client";
+import { queueReview } from "@/lib/review-outbox";
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { SwipeableCard } from "./swipeable-card";
 import { SwipeControls } from "./swipe-controls";
@@ -117,6 +118,8 @@ export function StudySession({
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isFlipped, setIsFlipped] = useState(initialFlipped);
   const [dealingOut, setDealingOut] = useState(false);
+  const savingReview = useRef(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   // Tracks which (card-id, side) combination has finished playing
   // its TTS clip. Storing the identity rather than a boolean lets us
   // implicitly "reset" when the user changes card or flips — a stale
@@ -264,22 +267,18 @@ export function StudySession({
   // recalled the card, so guessing "Good" would corrupt the
   // schedule. Manual mode still uses the user's explicit
   // Again/Good/Easy rating via handleRate, which DOES drive SM-2.
-  const handleCountdownComplete = useCallback(() => {
-    if (!isAutoAdvance || !isFlipped || dealingOut) return;
-    void fetch("/api/review", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cardId: currentCard.id, quality: 0 }),
-    }).catch(() => {
-      // Network blip — non-fatal. Daily count may be off by one,
-      // but nothing crashes and the next review will reconcile.
-    });
+  const handleCountdownComplete = useCallback(async () => {
+    if (!isAutoAdvance || !isFlipped || dealingOut || savingReview.current) return;
+    savingReview.current = true;
+    try { await queueReview(currentCard.id, 0); setReviewError(null); }
+    catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
     const newStats = {
       ...stats,
       cardsReviewed: stats.cardsReviewed + 1,
     };
     setStats(newStats);
     dealAndAdvance(newStats);
+    savingReview.current = false;
   }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance, currentCard]);
 
   const handleFlip = useCallback(() => {
@@ -288,21 +287,14 @@ export function StudySession({
   }, [dealingOut]);
 
   const handleRate = useCallback(
-    (quality: number) => {
-      if (dealingOut || isAutoAdvance) return;
+    async (quality: number) => {
+      if (dealingOut || isAutoAdvance || savingReview.current) return;
+      savingReview.current = true;
 
-      // Save in the BACKGROUND — never block the UI on the network. The
-      // rating result isn't needed to advance, so the old `await` here
-      // was the cause of "click Good → buttons grey out → wait ages":
-      // a slow save (cold DB, weak signal) froze the card until the POST
-      // returned. Each rating is an independent, idempotent write; a
-      // dropped one just leaves the daily count off by one, which the
-      // next review reconciles.
-      void fetch("/api/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardId: currentCard.id, quality }),
-      }).catch(() => {});
+      // Commit to the device before advancing. Only the network part runs
+      // in the background; unacknowledged reviews survive app restarts.
+      try { await queueReview(currentCard.id, quality); setReviewError(null); }
+      catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
 
       const newStats = {
         cardsReviewed: stats.cardsReviewed + 1,
@@ -313,6 +305,7 @@ export function StudySession({
       };
       setStats(newStats);
       dealAndAdvance(newStats);
+      savingReview.current = false;
     },
     [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance]
   );
@@ -367,6 +360,7 @@ export function StudySession({
   return (
     <div className="space-y-6">
       <ImagePreloader urls={upcomingImageUrls} />
+      {reviewError && <p role="alert" className="text-sm text-destructive">{reviewError}</p>}
       <VoicePreloader items={upcomingVoiceItems} />
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm text-muted-foreground truncate">

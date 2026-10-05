@@ -2,6 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+  // Public UI shells only. Account data still requires authenticated APIs.
+  // Server-rendered edit pages and API routes must not bypass authentication.
+  const path = request.nextUrl.pathname;
+  if (["/", "/study", "/stats", "/account", "/account/billing", "/account/downloads"].includes(path)
+      || (path !== "/decks/new" && /^\/decks\/[^/]+$/.test(path))) return NextResponse.next({ request });
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

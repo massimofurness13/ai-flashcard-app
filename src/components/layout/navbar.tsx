@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -100,6 +101,7 @@ export function Navbar() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/auth/login");
+    invalidateDeviceQueries();
     router.refresh();
   }
 
@@ -136,6 +138,7 @@ export function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true}
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-primary/10",
                     isActive
