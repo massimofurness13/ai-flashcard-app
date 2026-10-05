@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { APP_NAME } from "@/lib/constants";
+import { authErrorMessage, safeAuthRedirect } from "@/lib/native-auth";
 import { Suspense } from "react";
 import {
   OAuthSignInButton,
@@ -17,7 +18,7 @@ import {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/";
+  const redirectTo = safeAuthRedirect(searchParams.get("redirectTo"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -55,6 +56,11 @@ function LoginForm() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {authErrorMessage(searchParams.get("error")) && (
+            <p role="alert" className="text-sm text-destructive text-center">
+              {authErrorMessage(searchParams.get("error"))}
+            </p>
+          )}
           <div className="space-y-2">
             <OAuthSignInButton provider="google" redirectTo={redirectTo} />
             <OAuthSignInButton provider="azure" redirectTo={redirectTo} />

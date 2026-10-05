@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicOrigin } from "@/lib/public-origin";
+import { nativeAuthReturn, safeAuthRedirect } from "@/lib/native-auth";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const redirectTo = searchParams.get("redirectTo") || "/";
+  const redirectTo = safeAuthRedirect(searchParams.get("redirectTo"));
+
+  const nativeReturn = nativeAuthReturn(searchParams);
+  if (nativeReturn) {
+    return new Response(null, { status: 302, headers: {
+      Location: nativeReturn.toString(),
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    } });
+  }
 
   // CRITICAL: do NOT use `new URL(request.url).origin` here. On Render
   // that returns the internal proxy address `http://localhost:10000`,
@@ -15,7 +25,7 @@ export async function GET(request: Request) {
   // to X-Forwarded-* headers — both produce the real public origin.
   const origin = getPublicOrigin(request);
 
-  if (code) {
+  if (code && !searchParams.has("native")) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
