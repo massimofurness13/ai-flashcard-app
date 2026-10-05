@@ -83,9 +83,7 @@ export function DailyGoalCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          You&apos;ll see a goal of {goal} cards per day on your home screen.
-          Consistency is what makes flashcards work — pick a number you can
-          actually hit most days.
+          Your daily target: {goal} cards.
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <Button

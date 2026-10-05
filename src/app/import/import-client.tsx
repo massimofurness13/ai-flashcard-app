@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -96,7 +97,8 @@ export function ImportClient({ decks, isPro }: { decks: Deck[]; isPro: boolean }
 
     if (res.ok) {
       router.push(`/decks/${deckId}`);
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
     }
 
     setSaving(false);

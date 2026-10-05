@@ -31,6 +31,9 @@
  *      which is the unavoidable tax of the single-element approach.
  */
 
+import { audioKey, deviceOwner, downloadMedia, resolveSavedAudio, savedMedia } from "@/lib/device-media";
+import { writeRecord } from "@/lib/device-db";
+
 export interface SpeakHandle {
   /** Stop playback immediately. Safe to call multiple times. */
   cancel: () => void;
@@ -181,9 +184,10 @@ let activeCallbacks: {
 // (text+lang) → Supabase public URL. Preloader populates it; speak()
 // reads it synchronously to skip the /api/tts round trip.
 const urlCache = new Map<string, string>();
+let audioGeneration = 0;
 
 function cacheKey(text: string, languageCode: string): string {
-  return `${languageCode}|${text.trim().toLowerCase()}`;
+  return `${languageCode}|${text.trim()}`;
 }
 
 /** Synchronously read a preloaded URL. Returns null if not cached. */
@@ -214,17 +218,26 @@ function resolveAudioUrl(
   languageCode: string,
 ): Promise<string | null> {
   const key = cacheKey(text, languageCode);
+  const generation = audioGeneration;
   const cached = urlCache.get(key);
   if (cached) return Promise.resolve(cached);
   const existing = inFlight.get(key);
   if (existing) return existing;
 
   const p = (async () => {
-    const url = await fetchAudioUrl(text, languageCode); // sets urlCache on success
+    const owner = await deviceOwner().catch(() => null);
+    const persisted = owner ? await resolveSavedAudio(owner, text, languageCode).catch(() => null) : null;
+    const url = persisted || await fetchAudioUrl(text, languageCode);
+    if (generation !== audioGeneration) return null;
     if (url) {
-      // Warm the MP3 bytes into the browser HTTP cache so the <audio>
-      // element's own fetch on play() is instant (just a decode).
-      void fetch(url, { mode: "cors", cache: "force-cache" }).catch(() => {});
+      if (owner) {
+        await writeRecord(owner, audioKey(text, languageCode), url).catch(() => {});
+        const local = await savedMedia(owner, url).catch(() => null)
+          || await downloadMedia(owner, url).catch(() => null);
+        if (generation !== audioGeneration) return null;
+        if (local) { urlCache.set(key, local); return local; }
+      }
+      urlCache.set(key, url);
     }
     return url;
   })().finally(() => {
@@ -308,9 +321,6 @@ async function fetchAudioUrlOnce(
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { audioUrl?: string };
-    if (data.audioUrl) {
-      urlCache.set(cacheKey(text, languageCode), data.audioUrl);
-    }
     return data.audioUrl ?? null;
   } catch {
     return null;
@@ -437,10 +447,11 @@ export function speak(
   // Slow path — async fetch, then play. Wire a handle that fills in
   // once the URL resolves.
   const handle: SpeakHandle = {
-    cancel: () => cancelAll(),
+    cancel: () => { cancelled = true; cancelAll(); },
     onEnded: undefined,
     onError: undefined,
   };
+  let cancelled = false;
   const endedCbs: (() => void)[] = [];
   const errorCbs: (() => void)[] = [];
   handle.onEnded = (cb) => endedCbs.push(cb);
@@ -448,6 +459,7 @@ export function speak(
 
   (async () => {
     const url = await resolveAudioUrl(text, languageCode);
+    if (cancelled) return;
     if (!url) {
       // Couldn't produce the Google clip. Stay silent, fire onError
       // so the countdown still advances.
@@ -465,6 +477,13 @@ export function speak(
 
 export function stopSpeaking() {
   cancelAll();
+}
+
+export function clearAudioMemory() {
+  audioGeneration++;
+  cancelAll();
+  urlCache.clear();
+  inFlight.clear();
 }
 
 export function isTTSSupported(): boolean {

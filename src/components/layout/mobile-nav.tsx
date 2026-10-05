@@ -70,7 +70,7 @@ export function MobileNav() {
   if (!user || isAuthPage || isStudySession) return null;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm md:hidden pb-[env(safe-area-inset-bottom)]">
+    <nav aria-label="Main navigation" className="mobile-tab-bar fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm md:hidden">
       <div className="flex items-stretch justify-around">
         {navItems.map((item) => {
           const isActive =
@@ -81,8 +81,10 @@ export function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={true}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors",
+                "min-h-16 flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors",
                 isActive
                   ? item.highlight
                     ? "text-primary"
@@ -94,7 +96,7 @@ export function MobileNav() {
                 className={cn(
                   "relative",
                   item.highlight &&
-                    "flex items-center justify-center rounded-full h-10 w-10 -mt-2",
+                    "flex items-center justify-center rounded-full h-9 w-9",
                   item.highlight && isActive
                     ? "bg-primary text-primary-foreground shadow-md"
                     : item.highlight

@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -98,7 +99,8 @@ export function DeckForm({ mode, initialData, previewCard }: DeckFormProps) {
     if (res.ok) {
       const deck = await res.json();
       router.push(mode === "edit" ? `/decks/${deck.id}` : `/decks/${deck.id}`);
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
     }
 
     setSaving(false);

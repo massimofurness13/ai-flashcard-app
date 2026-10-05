@@ -9,6 +9,8 @@ import { MetricTile } from "@/components/stats/metric-tile";
 import { TodayRing } from "@/components/stats/today-ring";
 import { StreakHero } from "@/components/stats/streak-hero";
 import type { LetterGrade } from "@/lib/sm2";
+import { useDeviceQuery } from "@/hooks/use-device-query";
+import { SavedDataState } from "@/components/layout/saved-data-state";
 
 interface DeckStat {
   id: string;
@@ -56,17 +58,23 @@ function formatBestDate(iso: string | null): string {
 }
 
 export function StatsClient() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [demoStats, setDemoStats] = useState<Stats | null>(null);
   const [period, setPeriod] = useState(7);
   const [demo] = useState(() => {
     if (typeof window === "undefined") return false;
     return new URLSearchParams(window.location.search).get("demo") === "1";
   });
 
+  const saved = useDeviceQuery<Stats>(`/api/stats?period=${period}`, !demo);
+  const stats = demo ? demoStats : saved.data;
+
   useEffect(() => {
+    if (!demo) return;
+    let active = true;
     fetch(`/api/stats?period=${period}${demo ? "&demo=1" : ""}`)
       .then((res) => res.json())
-      .then(setStats);
+      .then(data => { if (active) setDemoStats(data); }).catch(() => {});
+    return () => { active = false; };
   }, [period, demo]);
 
   if (!stats) {
@@ -75,7 +83,7 @@ export function StatsClient() {
         <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
           Statistics
         </h1>
-        <p className="text-muted-foreground">Loading…</p>
+        <SavedDataState error={saved.error} retry={saved.refresh} />
       </div>
     );
   }
@@ -91,9 +99,10 @@ export function StatsClient() {
           : "danger";
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className="space-y-3">
+      {saved.error && !demo && <p role="status" className="text-xs text-muted-foreground">{saved.error}</p>}
       {/* ── Header + period filter ─────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-2 items-center justify-between">
         <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
           Statistics
         </h1>
@@ -116,14 +125,14 @@ export function StatsClient() {
       </div>
 
       {/* ── Hero row: streak + today ring ──────────────────────── */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="min-w-0 rounded-xl border border-border bg-card p-3">
           <StreakHero
             streak={stats.streak}
             longestStreak={stats.longestStreak}
           />
         </div>
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="min-w-0 rounded-xl border border-border bg-card p-3">
           <TodayRing
             done={stats.cardsReviewedToday}
             goal={stats.dailyGoal}
@@ -133,7 +142,7 @@ export function StatsClient() {
       </div>
 
       {/* ── Six metric tiles ───────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
         <MetricTile
           label="Goal days · 30d"
           value={

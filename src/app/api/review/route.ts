@@ -3,6 +3,9 @@ import { prisma } from "@/lib/db";
 import { sm2, masteryLevel } from "@/lib/sm2";
 import { requireAuth } from "@/lib/auth";
 import type { Prisma } from "@/generated/prisma/client";
+import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
+const ReviewInput = z.object({ cardId: z.string().min(1).max(128), quality: z.number().int().min(0).max(5), eventId: z.string().uuid().optional(), reviewedAt: z.string().datetime().optional() });
 
 type StudyFilter = "due" | "random" | "created" | "mastery" | "recent" | "alpha";
 
@@ -213,78 +216,47 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// POST /api/review — submit a review rating (SM-2 update)
+// Ratings are idempotent and atomic: retries cannot spend a second review.
 export async function POST(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
-
-  const body = await request.json();
-  const { cardId, quality } = body;
-
-  if (!cardId || quality === undefined) {
-    return NextResponse.json(
-      { error: "cardId and quality are required" },
-      { status: 400 }
-    );
+  const parsed = ReviewInput.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid review" }, { status: 400 });
+  const { cardId, quality, eventId, reviewedAt } = parsed.data;
+  const when = reviewedAt ? new Date(reviewedAt) : new Date();
+  if (when.getTime() > Date.now() + 300_000 || when.getTime() < Date.now() - 90 * 86400_000) {
+    return NextResponse.json({ error: "Review date is outside the sync window." }, { status: 400 });
   }
-
-  const card = await prisma.card.findUnique({
-    where: { id: cardId },
-    include: { deck: { select: { userId: true } } },
+  const id = createHash("sha256").update(auth.userId + ":" + (eventId ?? randomUUID())).digest("hex");
+  const result = await prisma.$transaction(async tx => {
+    // Serialize updates to a card across devices and simultaneous retries.
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT c.id FROM "Card" c JOIN "Deck" d ON d.id = c."deckId"
+      WHERE c.id = ${cardId} AND d."userId" = ${auth.userId} FOR UPDATE OF c
+    `;
+    if (!locked.length) return { error: "Card not found", status: 404 };
+    const existing = await tx.reviewLog.findUnique({ where: { id } });
+    if (existing) return existing.cardId === cardId && existing.quality === quality
+      ? { recorded: true, duplicate: true }
+      : { error: "Review identifier already used", status: 409 };
+    const card = await tx.card.findUniqueOrThrow({ where: { id: cardId } });
+    const latest = await tx.reviewLog.findFirst({ where: { cardId }, orderBy: { reviewedAt: "desc" } });
+    // Keep delayed offline history, but don't rewind a newer device's schedule.
+    const updateSchedule = quality !== 0 && (!latest || latest.reviewedAt <= when);
+    const next = updateSchedule ? sm2(quality, card) : null;
+    if (next) {
+      next.nextReviewAt = new Date(when);
+      next.nextReviewAt.setDate(next.nextReviewAt.getDate() + next.interval);
+      next.nextReviewAt.setHours(0, 0, 0, 0);
+      await tx.card.update({ where: { id: cardId }, data: next });
+    }
+    await tx.reviewLog.create({ data: {
+      id, cardId, quality, reviewedAt: when,
+      easeFactor: next?.easeFactor ?? card.easeFactor,
+      interval: next?.interval ?? card.interval,
+    } });
+    return { recorded: true, passive: quality === 0, interval: next?.interval ?? card.interval };
   });
-
-  if (!card || card.deck.userId !== auth.userId) {
-    return NextResponse.json({ error: "Card not found" }, { status: 404 });
-  }
-
-  // Passive view (quality === 0): the user saw the card in
-  // auto-advance mode but didn't actively rate it. Log the view so
-  // daily count, streak, and "pack studied" status all reflect it,
-  // but DON'T touch SM-2 fields — guessing "Good" on a card the
-  // user might not actually know would corrupt the schedule. The
-  // log row preserves the current ease/interval as a snapshot for
-  // history, even though they didn't change.
-  if (quality === 0) {
-    await prisma.reviewLog.create({
-      data: {
-        cardId,
-        quality: 0,
-        easeFactor: card.easeFactor,
-        interval: card.interval,
-      },
-    });
-    return NextResponse.json({ recorded: true, passive: true });
-  }
-
-  const result = sm2(quality, {
-    easeFactor: card.easeFactor,
-    interval: card.interval,
-    repetitions: card.repetitions,
-  });
-
-  const [updatedCard] = await Promise.all([
-    prisma.card.update({
-      where: { id: cardId },
-      data: {
-        easeFactor: result.easeFactor,
-        interval: result.interval,
-        repetitions: result.repetitions,
-        nextReviewAt: result.nextReviewAt,
-      },
-    }),
-    prisma.reviewLog.create({
-      data: {
-        cardId,
-        quality,
-        easeFactor: result.easeFactor,
-        interval: result.interval,
-      },
-    }),
-  ]);
-
-  return NextResponse.json({
-    card: updatedCard,
-    nextReviewAt: result.nextReviewAt,
-    interval: result.interval,
-  });
+  if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(result);
 }

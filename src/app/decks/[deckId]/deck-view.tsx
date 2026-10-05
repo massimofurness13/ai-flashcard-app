@@ -1,4 +1,6 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
+import { DeviceImage } from "@/components/flashcard/device-image";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
@@ -172,8 +174,10 @@ export function DeckView({
   const [downloadLabel, setDownloadLabel] = useState("");
 
   useEffect(() => {
-    setDownloaded(isPackDownloaded(deck.id));
-  }, [deck.id]);
+    let active = true;
+    void isPackDownloaded({ deckId: deck.id, cards: deck.cards, frontLanguageCode: deck.frontLanguageCode ?? null, backLanguageCode: deck.backLanguageCode ?? null, learningLanguage }).then(saved => { if (active) setDownloaded(saved); });
+    return () => { active = false; };
+  }, [deck, learningLanguage]);
 
   async function handleDownload() {
     if (downloading || deck.cards.length === 0) return;
@@ -223,7 +227,8 @@ export function DeckView({
       sessionStorage.removeItem(generationKey);
       sessionStorage.removeItem(generationTotalKey);
       setGenerationActive(false);
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
     } finally {
       setStopping(false);
     }
@@ -252,7 +257,8 @@ export function DeckView({
         // Network blip — non-fatal, next tick will retry.
       }
       if (cancelled) return;
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
     }
 
     function scheduleNext() {
@@ -300,6 +306,7 @@ export function DeckView({
     if (!confirm("Delete this pack and all its cards? This cannot be undone.")) return;
     await fetch(`/api/decks/${deck.id}`, { method: "DELETE" });
     router.push("/");
+    invalidateDeviceQueries();
     router.refresh();
   }
 
@@ -310,6 +317,7 @@ export function DeckView({
       body: JSON.stringify({ archive: true }),
     });
     router.push("/");
+    invalidateDeviceQueries();
     router.refresh();
   }
 
@@ -438,14 +446,14 @@ export function DeckView({
                 <svg className="h-4 w-4 text-[color:var(--glow)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                Saved offline · update
+                Media saved · update
               </>
             ) : (
               <>
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
                 </svg>
-                Download for offline
+                Save audio &amp; images
               </>
             )}
           </Button>
@@ -664,7 +672,7 @@ export function DeckView({
                   <div className="mb-3 flex justify-center">
                     {canViewAiImages ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <DeviceImage
                         src={card.imageUrl}
                         alt=""
                         className="max-h-28 max-w-full object-contain rounded-lg"
@@ -677,7 +685,7 @@ export function DeckView({
                       // entitlement is paywalled.
                       <div className="relative w-full max-h-28 rounded-lg overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <DeviceImage
                           src={card.imageUrl}
                           alt=""
                           aria-hidden

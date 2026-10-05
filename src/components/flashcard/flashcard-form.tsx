@@ -1,4 +1,6 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
+import { DeviceImage } from "@/components/flashcard/device-image";
 
 import { useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -149,7 +151,8 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
       // then push the navigation. router.refresh is a no-op on the
       // current page; the actual reload happens on the destination.
       setSavedConfirm(true);
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
       router.push(returnTo ?? `/decks/${deckId}`);
     } catch {
       setSaveError("Network error. Please try again.");
@@ -180,11 +183,13 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
       // remaining cards, instead of bouncing the user out to the deck.
       if (returnTo && mode === "edit" && initialData?.id) {
         removeStudyResumeCard(initialData.id);
-        router.refresh();
+        invalidateDeviceQueries();
+    router.refresh();
         router.push(returnTo);
         return;
       }
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
       router.push(`/decks/${deckId}`);
     } catch {
       setSaveError("Network error. Please try again.");
@@ -242,7 +247,7 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
           <div className="space-y-3">
             <div className="relative inline-block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <DeviceImage
                 src={imageUrl}
                 alt="Card image"
                 className="w-40 h-40 object-cover rounded-lg border border-border"

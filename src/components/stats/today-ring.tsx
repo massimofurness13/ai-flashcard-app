@@ -24,13 +24,14 @@ export function TodayRing({ done, goal, goalHit }: TodayRingProps) {
   const dashOffset = circumference * (1 - pct / 100);
 
   return (
-    <div className="flex items-center gap-5">
-      <div className="relative shrink-0">
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <svg
-          width="124"
-          height="124"
+          width="18"
+          height="18"
           viewBox="0 0 124 124"
-          className="-rotate-90"
+          className="-rotate-90 shrink-0"
+          aria-hidden="true"
         >
           <circle
             cx="62"
@@ -56,25 +57,14 @@ export function TodayRing({ done, goal, goalHit }: TodayRingProps) {
             }}
           />
         </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <p className="font-editorial text-3xl font-medium tabular-nums leading-none">
-            {done}
-          </p>
-          <p className="text-[10px] text-muted-foreground tabular-nums leading-none mt-1">
-            / {goal}
-          </p>
-        </div>
+        <span>Daily goal</span>
       </div>
-      <div className="space-y-1">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-          Today
-        </p>
-        <p className="font-editorial text-2xl font-medium leading-tight">
-          {Math.round(pct)}% of goal
+        <p className="font-editorial text-2xl font-medium leading-tight tabular-nums">
+          {done}<span className="text-base text-muted-foreground font-normal"> / {goal}</span>
         </p>
         {goalHit ? (
           <p className="text-xs text-[color:var(--primary)] font-medium">
-            🎉 Goal hit for today
+            Goal reached
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
@@ -82,7 +72,6 @@ export function TodayRing({ done, goal, goalHit }: TodayRingProps) {
             {Math.max(goal - done, 0) === 1 ? "" : "s"} to go
           </p>
         )}
-      </div>
     </div>
   );
 }

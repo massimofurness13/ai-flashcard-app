@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -554,7 +555,8 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
             // stale library (the duplicate-pack bug reported by
             // the user: "I navigated back, didn't see it, generated
             // again — now I have three copies").
-            router.refresh();
+            invalidateDeviceQueries();
+    router.refresh();
             // Pull back the cards we just saved so we know their
             // server-side IDs. Needed by the image loop to PATCH
             // each card individually as illustrations land.
@@ -737,6 +739,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
     // the user's library. Any background image generation kicked off above
     // continues server-side and shows up on the pack when it's opened.
     router.push("/");
+    invalidateDeviceQueries();
     router.refresh();
 
     setSaving(false);
@@ -1143,7 +1146,8 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                     <Button
                       onClick={() => {
                         router.push(`/decks/${ankiResult.deckIds[0]}`);
-                        router.refresh();
+                        invalidateDeviceQueries();
+    router.refresh();
                       }}
                     >
                       View imported pack
@@ -1152,7 +1156,8 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
                     <Button
                       onClick={() => {
                         router.push("/");
-                        router.refresh();
+                        invalidateDeviceQueries();
+    router.refresh();
                       }}
                     >
                       View all packs

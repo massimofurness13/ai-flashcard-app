@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -154,12 +155,14 @@ export function FirstTimeWelcome({ userName }: FirstTimeWelcomeProps) {
       }
       if (clone && data.deckId) {
         router.push(`/decks/${data.deckId}`);
-        router.refresh();
+        invalidateDeviceQueries();
+    router.refresh();
       } else {
         // Skip path: the server set onboardingCompletedAt, so the
         // refreshed home page will render the empty-library state
         // instead of bouncing us back into FirstTimeWelcome.
-        router.refresh();
+        invalidateDeviceQueries();
+    router.refresh();
       }
     } catch {
       setError("Network error. Try again in a moment.");

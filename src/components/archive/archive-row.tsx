@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -39,7 +40,8 @@ export function ArchiveRow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archive: false }),
       });
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
     } finally {
       setLoading(false);
     }
@@ -56,7 +58,8 @@ export function ArchiveRow({
     setLoading(true);
     try {
       await fetch(`/api/decks/${id}`, { method: "DELETE" });
-      router.refresh();
+      invalidateDeviceQueries();
+    router.refresh();
     } finally {
       setLoading(false);
     }

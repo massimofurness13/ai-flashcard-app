@@ -1,4 +1,5 @@
 "use client";
+import { DeviceImage } from "@/components/flashcard/device-image";
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -59,7 +60,7 @@ export function FlashcardImage({
           )}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <DeviceImage
             src={imageUrl}
             alt="Card illustration (locked)"
             aria-hidden
@@ -85,7 +86,7 @@ export function FlashcardImage({
     return (
       <div className={cn("relative inline-block w-full", className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <DeviceImage
           src={imageUrl}
           alt="Card illustration"
           className="w-full max-h-72 sm:max-h-80 object-contain rounded-lg"

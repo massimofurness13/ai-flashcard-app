@@ -1,4 +1,5 @@
 "use client";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -42,6 +43,7 @@ function LoginForm() {
     }
 
     router.push(redirectTo);
+    invalidateDeviceQueries();
     router.refresh();
   }
 
