@@ -22,7 +22,7 @@ export async function flushReviews(owner: string): Promise<void> {
         items.sort((a, b) => a.savedAt - b.savedAt);
         const item = items[0];
         if (!item) break;
-        const response = await fetch("/api/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(item.value), signal: AbortSignal.timeout(15000) });
+        const response = await fetch("/api/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(item.value), redirect: "error", signal: AbortSignal.timeout(15000) });
         if (!response.ok) {
           if ([400, 404, 409].includes(response.status)) {
             const data = await response.json().catch(() => ({}));
@@ -31,6 +31,12 @@ export async function flushReviews(owner: string): Promise<void> {
           }
           break;
         }
+        // HTTP 200 alone is not proof of a saved review: an auth proxy or
+        // captive portal may have served HTML instead. Keep the durable
+        // event until the review API explicitly acknowledges it.
+        if (response.redirected) break;
+        const acknowledgement = await response.json();
+        if (acknowledgement?.recorded !== true) break;
         await deleteRecord(owner, item.key);
         notify();
         window.dispatchEvent(new Event("huella:data-changed"));

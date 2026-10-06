@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { stripe, resolveLiveCustomerId } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 import { getPublicOrigin } from "@/lib/public-origin";
+import { z } from "zod";
 
 /**
  * Credit top-up checkout. Bundles are mapped to real Stripe price
@@ -30,23 +31,22 @@ const BUNDLES = {
   },
 } as const;
 
-type BundleId = keyof typeof BUNDLES;
+const creditInput = z.object({ bundle: z.enum(["500", "1500", "5000"]) });
 
 export async function POST(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
   const origin = getPublicOrigin(request);
-  const { bundle } = await request.json();
-
-  if (!bundle || !(bundle in BUNDLES)) {
+  const input = creditInput.safeParse(await request.json().catch(() => null));
+  if (!input.success) {
     return NextResponse.json(
       { error: "Invalid bundle. Must be '500', '1500', or '5000'." },
       { status: 400 }
     );
   }
-
-  const pack = BUNDLES[bundle as BundleId];
+  const { bundle } = input.data;
+  const pack = BUNDLES[bundle];
   const priceId = process.env[pack.priceIdEnv];
   if (!priceId) {
     return NextResponse.json(

@@ -15,7 +15,7 @@ describe("durable reviews", () => {
     await queueReview("card", 4); await flushReviews(owner);
     const first = (await listRecords(owner))[0];
     expect(first.value).toMatchObject({ cardId: "card", quality: 4 });
-    const sent = vi.fn().mockResolvedValue({ ok: true }); vi.stubGlobal("fetch", sent);
+    const sent = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ recorded: true }) }); vi.stubGlobal("fetch", sent);
     await flushReviews(owner);
     expect(JSON.parse(sent.mock.calls[0][1].body)).toEqual(first.value);
     expect(await listRecords(owner)).toEqual([]);
@@ -36,7 +36,7 @@ describe("durable reviews", () => {
   });
   it("deduplicates overlapping flush attempts", async () => {
     await queueReview("card", 4); await flushReviews(owner);
-    const sent = vi.fn().mockResolvedValue({ ok: true }); vi.stubGlobal("fetch", sent);
+    const sent = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ recorded: true }) }); vi.stubGlobal("fetch", sent);
     await Promise.all([flushReviews(owner), flushReviews(owner), flushReviews(owner)]);
     expect(sent).toHaveBeenCalledTimes(1);
   });
@@ -46,12 +46,22 @@ describe("durable reviews", () => {
     const sent = vi.fn().mockImplementation((_url, options) => Promise.resolve(
       JSON.parse(options.body).cardId === "deleted"
         ? { ok: false, status: 404, json: async () => ({ error: "Card not found" }) }
-        : { ok: true }
+        : { ok: true, json: async () => ({ recorded: true }) }
     ));
     vi.stubGlobal("fetch", sent);
     await flushReviews(owner);
     expect(sent).toHaveBeenCalledTimes(2);
     expect(await listRecords(owner, "review:")).toHaveLength(1);
     expect((await listRecords(owner, "review:"))[0].value).toMatchObject({ cardId: "deleted", error: "Card not found" });
+  });
+  it.each([
+    ["a sign-in HTML page", { ok: true, redirected: true, json: async () => { throw new Error("not JSON"); } }],
+    ["an empty success response", { ok: true, json: async () => ({}) }],
+    ["an explicit failed acknowledgement", { ok: true, json: async () => ({ recorded: false }) }],
+  ])("retains the review when the server returns %s", async (_label, response) => {
+    await queueReview("keep-me", 4); await flushReviews(owner);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    await flushReviews(owner);
+    expect(await listRecords(owner, "review:")).toHaveLength(1);
   });
 });

@@ -82,8 +82,11 @@ export async function resolveLiveCustomerId(
       if (!("deleted" in existing && existing.deleted)) {
         return sub.stripeCustomerId;
       }
-    } catch {
-      // 404 / "No such customer" — fall through to recreate
+    } catch (error) {
+      // Network, rate-limit and authentication failures do NOT mean the
+      // customer disappeared. Preserve their identity and let the caller retry.
+      const missing = error as { statusCode?: number; code?: string } | null;
+      if (missing?.statusCode !== 404 || missing?.code !== "resource_missing") throw error;
     }
   }
 
