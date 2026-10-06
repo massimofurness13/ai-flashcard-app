@@ -7,6 +7,7 @@ interface CalendarDay {
 
 interface CalendarMonthProps {
   data: CalendarDay[];
+  today?: string;
 }
 
 /**
@@ -14,7 +15,7 @@ interface CalendarMonthProps {
  * activity per day. Complements the yearly heatmap — shows "this month
  * at a glance" with actual date numbers rather than anonymous squares.
  */
-export function CalendarMonth({ data }: CalendarMonthProps) {
+export function CalendarMonth({ data, today }: CalendarMonthProps) {
   if (data.length === 0) return null;
 
   // Parse the YYYY-MM-DD string as a local-time date, not a UTC date.
@@ -42,7 +43,6 @@ export function CalendarMonth({ data }: CalendarMonthProps) {
   // Also pad the end so we always have a full week on the bottom row
   while (paddedCells.length % 7 !== 0) paddedCells.push(null);
 
-  const today = new Date().toISOString().split("T")[0];
   const maxCount = Math.max(...data.map((d) => d.count), 1);
 
   function cellBg(count: number): string {

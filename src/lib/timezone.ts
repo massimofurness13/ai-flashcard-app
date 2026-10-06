@@ -34,28 +34,40 @@ export function toLocalDateKey(date: Date, tz: string): string {
  * date being formatted.
  */
 export function startOfTodayInTz(tz: string): Date {
-  const todayKey = toLocalDateKey(new Date(), tz);
-  // Parse "YYYY-MM-DD" as midnight in tz by appending a tz-aware
-  // time string. Using Intl to extract the offset is finicky —
-  // easier to construct via a known-format input and a quick
-  // correction.
-  const naive = new Date(`${todayKey}T00:00:00Z`);
-  // `naive` is "today midnight UTC." We want "today midnight in tz."
-  // Format naive in tz to see how off we are.
-  const offsetParts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(naive);
-  const hour = parseInt(
-    offsetParts.find((p) => p.type === "hour")?.value || "0",
-    10,
-  );
-  const minute = parseInt(
-    offsetParts.find((p) => p.type === "minute")?.value || "0",
-    10,
-  );
-  const offsetMs = hour * 3_600_000 + minute * 60_000;
-  return new Date(naive.getTime() - offsetMs);
+  return startOfDateInTz(toLocalDateKey(new Date(), tz), tz);
+}
+
+/** Calendar arithmetic on a date key, independent of the server's timezone. */
+export function shiftDateKey(key: string, days: number): string {
+  const date = new Date(`${key}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Resolve local midnight, including the date part and signed UTC offset. */
+export function startOfDateInTz(key: string, tz: string): Date {
+  const target = Date.parse(`${key}T00:00:00Z`);
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  });
+  let candidate = target;
+  const seen = new Set<number>();
+  // Re-evaluate the offset at the corrected instant: DST may differ from
+  // the initial UTC-midnight estimate. Never interpret a negative offset
+  // (e.g. 18:00 on the previous day) as a positive eighteen-hour offset.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    seen.add(candidate);
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(candidate)).map(part => [part.type, part.value]));
+    const local = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+    const correction = target - local;
+    if (correction === 0) break;
+    const corrected = candidate + correction;
+    // Some zones jump forward at midnight, so 00:00 never occurs.
+    // The two offsets oscillate around the gap; its later boundary is
+    // the first valid instant of that local date (e.g. São Paulo 2018).
+    if (seen.has(corrected)) return new Date(Math.max(candidate, corrected));
+    candidate = corrected;
+  }
+  return new Date(candidate);
 }

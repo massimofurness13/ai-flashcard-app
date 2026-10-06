@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { masteryLevel, letterGrade, type LetterGrade } from "@/lib/sm2";
-import { toLocalDateKey, startOfTodayInTz } from "@/lib/timezone";
+import { toLocalDateKey, startOfDateInTz, shiftDateKey } from "@/lib/timezone";
 
 function generateDemoStats() {
   const heatmapData: { date: string; count: number }[] = [];
@@ -86,7 +86,10 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error;
 
   const period = searchParams.get("period") || "7"; // days
-  const days = parseInt(period, 10);
+  const days = Number(period);
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    return NextResponse.json({ error: "Period must be between 1 and 365 days." }, { status: 400 });
+  }
 
   // Fetch user tz first so date bucketing aligns with the user's
   // calendar rather than server UTC. ?tz= override is supported for
@@ -101,14 +104,15 @@ export async function GET(request: NextRequest) {
     "UTC";
 
   const now = new Date();
-  const startOfToday = startOfTodayInTz(tz);
-
-  // For the SQL filter we compute a UTC timestamp = start-of-day in tz
-  // N days ago. Day arithmetic in JS Date space (subtract 86400000 ms)
-  // is fine here — minor DST jitter doesn't affect "have we reviewed
-  // in the past N days" semantics.
-  const since = new Date(startOfToday.getTime() - days * 86_400_000);
-  const yearAgo = new Date(startOfToday.getTime() - 365 * 86_400_000);
+  let todayKey: string;
+  try { todayKey = toLocalDateKey(now, tz); }
+  catch { return NextResponse.json({ error: "Invalid timezone." }, { status: 400 }); }
+  const startOfToday = startOfDateInTz(todayKey, tz);
+  // Seven displayed calendar days means today plus six days, not eight.
+  // Resolve each boundary in the user's zone rather than subtracting 24h
+  // durations across DST changes.
+  const since = startOfDateInTz(shiftDateKey(todayKey, -(days - 1)), tz);
+  const yearAgo = startOfDateInTz(shiftDateKey(todayKey, -364), tz);
 
   const [
     totalCards,
@@ -179,23 +183,23 @@ export async function GET(request: NextRequest) {
 
   // Calculate streak (consecutive days with at least one review)
   const reviewDays = new Set(
-    dailyReviews.map((r) => toLocalDateKey(new Date(r.reviewedAt), tz))
+    lifetimeReviews.map((r) => toLocalDateKey(new Date(r.reviewedAt), tz))
   );
   let streak = 0;
-  const checkDate = new Date();
+  let checkDate = todayKey;
   while (true) {
-    const dayStr = toLocalDateKey(checkDate, tz);
+    const dayStr = checkDate;
     if (reviewDays.has(dayStr)) {
       streak++;
-      checkDate.setDate(checkDate.getDate() - 1);
+      checkDate = shiftDateKey(checkDate, -1);
     } else {
       // Allow today to not have reviews yet
       if (streak === 0) {
-        checkDate.setDate(checkDate.getDate() - 1);
-        const yesterdayStr = toLocalDateKey(checkDate, tz);
+        checkDate = shiftDateKey(checkDate, -1);
+        const yesterdayStr = checkDate;
         if (reviewDays.has(yesterdayStr)) {
           streak++;
-          checkDate.setDate(checkDate.getDate() - 1);
+          checkDate = shiftDateKey(checkDate, -1);
           continue;
         }
       }
@@ -206,9 +210,7 @@ export async function GET(request: NextRequest) {
   // Daily review counts for chart
   const dailyCounts: Record<string, number> = {};
   for (let i = 0; i < days; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    dailyCounts[toLocalDateKey(d, tz)] = 0;
+    dailyCounts[shiftDateKey(todayKey, -i)] = 0;
   }
   for (const r of dailyReviews) {
     const day = toLocalDateKey(new Date(r.reviewedAt), tz);
@@ -244,9 +246,7 @@ export async function GET(request: NextRequest) {
   // 365-day heatmap data
   const heatmapCounts: Record<string, number> = {};
   for (let i = 0; i < 365; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    heatmapCounts[toLocalDateKey(d, tz)] = 0;
+    heatmapCounts[shiftDateKey(todayKey, -i)] = 0;
   }
   for (const r of yearlyReviews) {
     const day = toLocalDateKey(new Date(r.reviewedAt), tz);
@@ -298,9 +298,7 @@ export async function GET(request: NextRequest) {
   // Goal days in last 30: how many of the last 30 days hit dailyGoal
   let goalDaysLast30 = 0;
   for (let i = 0; i < 30; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const day = toLocalDateKey(d, tz);
+    const day = shiftDateKey(todayKey, -i);
     if ((lifetimeByDay.get(day) || 0) >= dailyGoal) goalDaysLast30++;
   }
 
@@ -327,14 +325,11 @@ export async function GET(request: NextRequest) {
   // --- Calendar month view (current month) ---
   // Array of { date: "YYYY-MM-DD", count } for every day of the current month.
   const calendarMonth: { date: string; count: number }[] = [];
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const monthCursor = new Date(monthStart);
-  while (monthCursor.getMonth() === monthStart.getMonth()) {
-    const day = toLocalDateKey(monthCursor, tz);
-    calendarMonth.push({ date: day, count: lifetimeByDay.get(day) || 0 });
-    monthCursor.setDate(monthCursor.getDate() + 1);
+  const month = todayKey.slice(0, 7);
+  let monthCursor = `${month}-01`;
+  while (monthCursor.startsWith(month)) {
+    calendarMonth.push({ date: monthCursor, count: lifetimeByDay.get(monthCursor) || 0 });
+    monthCursor = shiftDateKey(monthCursor, 1);
   }
 
   return NextResponse.json({
