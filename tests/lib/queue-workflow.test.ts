@@ -9,7 +9,7 @@ const script = workflow.split("        run: |\n")[1].split("\n").map(line => lin
 function run(curlBody: string, secrets = true) {
   return spawnSync("bash", ["-e", "-c", `curl() { ${curlBody}; }\n${script}`], {
     encoding: "utf8", timeout: 5000,
-    env: { PATH: process.env.PATH, APP_URL: secrets ? "https://fixture.invalid" : "", CRON_SECRET: secrets ? "test-fixture" : "" },
+    env: { NODE_ENV: "test", PATH: process.env.PATH, APP_URL: secrets ? "https://fixture.invalid" : "", CRON_SECRET: secrets ? "test-fixture" : "" },
   });
 }
 describe("background worker health reporting", () => {
