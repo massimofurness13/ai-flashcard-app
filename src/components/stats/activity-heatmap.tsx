@@ -27,11 +27,9 @@ export function ActivityHeatmap({ data }: ActivityHeatmapProps) {
 
   // Align the grid so the rightmost column ends today.
   // Walk back 53 weeks (371 days) to guarantee we fill the grid.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Find the most recent Sunday ≤ today to anchor the grid's right edge
-  const dayOfWeek = today.getDay(); // 0 = Sunday
+  // The API's final day is "today" in the account's timezone. Treat
+  // these date keys as UTC calendar coordinates, not local instants.
+  const today = new Date(`${data[data.length - 1].date}T00:00:00Z`);
   const gridEnd = new Date(today);
   // We want columns to end on the current week. Use today as the last day.
 
@@ -39,10 +37,10 @@ export function ActivityHeatmap({ data }: ActivityHeatmapProps) {
   let column: { date: string; count: number | null }[] = [];
 
   const cursor = new Date(gridEnd);
-  cursor.setDate(cursor.getDate() - 7 * 52); // ~1 year back
+  cursor.setUTCDate(cursor.getUTCDate() - 7 * 52); // ~1 year back
   // Rewind to the Sunday on or before cursor
-  while (cursor.getDay() !== 0) {
-    cursor.setDate(cursor.getDate() - 1);
+  while (cursor.getUTCDay() !== 0) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
 
   const iter = new Date(cursor);
@@ -51,11 +49,11 @@ export function ActivityHeatmap({ data }: ActivityHeatmapProps) {
     const count = byDate.has(dateStr) ? byDate.get(dateStr)! : null;
     column.push({ date: dateStr, count });
 
-    if (iter.getDay() === 6 /* Saturday */) {
+    if (iter.getUTCDay() === 6 /* Saturday */) {
       weeks.push(column);
       column = [];
     }
-    iter.setDate(iter.getDate() + 1);
+    iter.setUTCDate(iter.getUTCDate() + 1);
   }
   if (column.length > 0) weeks.push(column);
 
@@ -74,11 +72,11 @@ export function ActivityHeatmap({ data }: ActivityHeatmapProps) {
   weeks.forEach((week, i) => {
     const firstCell = week[0];
     if (firstCell) {
-      const m = new Date(firstCell.date).getMonth();
+      const m = new Date(firstCell.date).getUTCMonth();
       if (m !== lastMonth) {
         monthLabels.push({
           col: i,
-          label: new Date(firstCell.date).toLocaleString("en", { month: "short" }),
+          label: new Date(firstCell.date).toLocaleString("en", { month: "short", timeZone: "UTC" }),
         });
         lastMonth = m;
       }

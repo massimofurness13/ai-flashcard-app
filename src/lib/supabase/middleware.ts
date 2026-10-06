@@ -5,7 +5,8 @@ export async function updateSession(request: NextRequest) {
   // Public UI shells only. Account data still requires authenticated APIs.
   // Server-rendered edit pages and API routes must not bypass authentication.
   const path = request.nextUrl.pathname;
-  if (["/", "/study", "/stats", "/account", "/account/billing", "/account/downloads"].includes(path)
+  if (/^\/pdf\.worker\.\d+\.\d+\.\d+\.min\.mjs$/.test(path)
+      || ["/", "/study", "/stats", "/account", "/account/billing", "/account/downloads"].includes(path)
       || (path !== "/decks/new" && /^\/decks\/[^/]+$/.test(path))) return NextResponse.next({ request });
   let supabaseResponse = NextResponse.next({ request });
 
@@ -89,6 +90,9 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect unauthenticated users to login
   if (!user && !isPublicRoute) {
+    if (path.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     url.searchParams.set("redirectTo", request.nextUrl.pathname);

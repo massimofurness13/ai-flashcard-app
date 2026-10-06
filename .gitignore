@@ -63,3 +63,5 @@ ios/App/*.xcworkspace/xcuserdata/
 ios/App/App.xcodeproj/xcuserdata/
 ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
 **/.DS_Store
+# Generated from the locked PDF.js dependency by predev/prebuild.
+/public/pdf.worker.*.min.mjs

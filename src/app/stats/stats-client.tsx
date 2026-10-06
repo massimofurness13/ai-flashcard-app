@@ -54,6 +54,7 @@ function formatBestDate(iso: string | null): string {
   return d.toLocaleDateString("en", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -110,7 +111,7 @@ export function StatsClient() {
           {[
             { label: "7 days", value: 7 },
             { label: "30 days", value: 30 },
-            { label: "All time", value: 365 },
+            { label: "365 days", value: 365 },
           ].map((opt) => (
             <Button
               key={opt.value}
@@ -186,7 +187,7 @@ export function StatsClient() {
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-3">
             This month
           </p>
-          <CalendarMonth data={stats.calendarMonth} />
+          <CalendarMonth data={stats.calendarMonth} today={stats.dailyCounts.at(-1)?.date} />
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-5">
@@ -206,7 +207,8 @@ export function StatsClient() {
                   day.count > 0
                     ? Math.max(Math.round((day.count / maxCount) * barMaxPx), 8)
                     : 5;
-                const date = new Date(day.date);
+                // A date key is a calendar label, not an instant in UTC.
+                const date = new Date(`${day.date}T12:00:00`);
                 const isShortPeriod = stats.dailyCounts.length <= 14;
                 const label = isShortPeriod
                   ? date.toLocaleDateString("en", { weekday: "short" })[0]
@@ -263,7 +265,7 @@ export function StatsClient() {
             Last 365 days
           </p>
           <p className="text-[10px] text-muted-foreground/70">
-            {stats.activeDays} active in {period}d window
+            {stats.heatmapData.filter(day => day.count > 0).length} active days in the last year
           </p>
         </div>
         <ActivityHeatmap data={stats.heatmapData} />

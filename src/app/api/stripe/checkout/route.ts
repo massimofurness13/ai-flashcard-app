@@ -9,6 +9,9 @@ import {
 } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 import { getPublicOrigin } from "@/lib/public-origin";
+import { z } from "zod";
+
+const checkoutInput = z.object({ plan: z.enum(["monthly", "yearly"]).default("monthly") });
 
 /**
  * Create a Stripe Checkout session for a Pro subscription. Body:
@@ -20,22 +23,18 @@ import { getPublicOrigin } from "@/lib/public-origin";
  * decide which `plan` to write on the Subscription row.
  *
  * The returned `url` is Stripe's hosted Checkout. The client should
- * open it in an EXTERNAL browser tab (window.open with _blank), so
- * the payment never happens inside a PWA / in-app webview — that
- * sidesteps Apple/Google App Store IAP rules if we ever wrap the app
- * in Capacitor or similar.
+ * open it using the shared checkout helper. Native-store eligibility
+ * must be reviewed separately; an external browser is not an IAP exemption.
  */
 export async function POST(request: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
-  let plan: SubscriptionPlan = "monthly";
-  try {
-    const body = await request.json();
-    if (body?.plan === "yearly") plan = "yearly";
-  } catch {
-    // No body → default monthly
+  const input = checkoutInput.safeParse(await request.json().catch(() => null));
+  if (!input.success) {
+    return NextResponse.json({ error: "Choose a monthly or yearly plan." }, { status: 400 });
   }
+  const plan: SubscriptionPlan = input.data.plan;
 
   const priceId = plan === "yearly" ? PRICE_ID_YEARLY : PRICE_ID;
   if (!priceId) {
@@ -53,6 +52,20 @@ export async function POST(request: Request) {
   const origin = getPublicOrigin(request);
 
   try {
+    const existing = await prisma.subscription.findUnique({ where: { userId: auth.userId } });
+    // Changing a live plan is a billing-portal operation, not a second
+    // subscription checkout. Past-due/incomplete subscriptions need recovery,
+    // not another charge. Canceled/expired subscriptions may subscribe again.
+    if (existing?.stripeSubscriptionId && !["canceled", "incomplete_expired", "inactive"].includes(existing.status)) {
+      if (!existing.stripeCustomerId) {
+        return NextResponse.json({ error: "Your existing subscription needs billing support before another checkout can start." }, { status: 409 });
+      }
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: existing.stripeCustomerId,
+        return_url: `${origin}/account/billing`,
+      });
+      return NextResponse.json({ url: portal.url, plan, manageExisting: true });
+    }
     const user = await prisma.user.findUnique({
       where: { id: auth.userId },
       select: { email: true },
@@ -66,8 +79,6 @@ export async function POST(request: Request) {
       success_url: `${origin}/checkout/done?plan=${plan}`,
       cancel_url: `${origin}/checkout/cancelled`,
       metadata: { userId: auth.userId, plan },
-      // For users already on monthly upgrading to yearly: prorate the
-      // unused portion of the current month so they don't pay twice.
       subscription_data: {
         metadata: { userId: auth.userId, plan },
       },
