@@ -189,7 +189,7 @@ function StudySessionContent() {
   const dailyHeading = daily && <div className="mb-4 text-sm text-muted-foreground">
     <p className="font-medium text-foreground">Your daily set: {daily.total} cards</p>
     <p>{daily.mix.practice} practice · {daily.mix.retention} retention · {daily.mix.new} new</p>
-    {daily.total<100 && <p>There aren’t enough eligible cards to fill 100 without repeats or introducing too many new words.</p>}
+    {daily.total<100 && <p>You’ve used the available learning cards. Add a pack for more new vocabulary; retention stays capped at 30.</p>}
   </div>;
   if (!prepared) {
     return (

@@ -17,8 +17,15 @@ export function DailyStudyButton() {
     } catch { /* Use manual flips when preferences cannot be read. */ }
     router.push("/study/session?"+new URLSearchParams({filter:"daily",limit:"100",orientation:"auto",autoFlip:String(autoFlip),autoAdvance:"0"}));
   }
-  return <div className="space-y-2">
-    <Button onClick={start}>Do my daily 100</Button>
-    <p className="max-w-sm text-xs text-muted-foreground">Practice + retention. Up to 10 new cards only when practice runs short. Your daily set is saved so you can continue later.</p>
-  </div>;
+  return (
+    <Button
+      onClick={start}
+      className="h-auto min-h-28 w-full justify-between gap-4 rounded-2xl px-6 py-7 text-left shadow-sm hover:bg-primary/90 sm:min-h-36 sm:px-9 motion-reduce:transition-none motion-reduce:active:scale-100"
+    >
+      <span className="font-editorial text-3xl leading-tight sm:text-4xl">Do my daily 100</span>
+      <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-current/30 sm:h-14 sm:w-14">
+        <svg viewBox="0 0 24 24" fill="currentColor" className="ml-0.5 h-6 w-6"><path d="M8 5.5a1 1 0 0 1 1.52-.85l10 6.5a1 1 0 0 1 0 1.7l-10 6.5A1 1 0 0 1 8 18.5z" /></svg>
+      </span>
+    </Button>
+  );
 }
