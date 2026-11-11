@@ -16,25 +16,31 @@ describe("adaptive daily 100",()=>{
   const picks=buildDailyPlan(pool(90,100,100),now);
   expect(counts(picks)).toEqual([70,30,0]);expect(new Set(picks.map(p=>p.id)).size).toBe(100);
  });
- it("introduces at most ten when practice is short and fills with retention",()=>{
-  expect(counts(buildDailyPlan(pool(40,100,100),now))).toEqual([40,50,10]);
-  expect(counts(buildDailyPlan(pool(0,100,100),now))).toEqual([0,90,10]);
+ it("fills the 70 learning slots with practice first and then new cards without a ten-card cap",()=>{
+  expect(counts(buildDailyPlan(pool(50,100,100),now))).toEqual([50,30,20]);
+  expect(counts(buildDailyPlan(pool(40,100,100),now))).toEqual([40,30,30]);
+  expect(counts(buildDailyPlan(pool(0,100,100),now))).toEqual([0,30,70]);
  });
- it("clears overdue retention before introducing new words",()=>{
+ it("keeps retention at 30 even when more secure cards are overdue",()=>{
   const cards=pool(40,100,100);for(const c of cards.filter(isSecureBothWays)) for(const s of c.recallStates)s.nextReviewAt=new Date(0);
-  expect(counts(buildDailyPlan(cards,now))).toEqual([40,60,0]);
+  expect(counts(buildDailyPlan(cards,now))).toEqual([40,30,30]);
  });
- it("does not repeat cards or introduce 100 new ones to fill an empty library",()=>{
-  expect(buildDailyPlan(pool(0,0,200),now)).toHaveLength(10);
+ it("uses learning to fill unavailable retention slots without repeating cards",()=>{
+  const picks=buildDailyPlan(pool(0,0,200),now);
+  expect(picks).toHaveLength(100);expect(new Set(picks.map(p=>p.id)).size).toBe(100);
+  expect(counts(buildDailyPlan(pool(70,10,100),now))).toEqual([70,10,20]);
   expect(buildDailyPlan([],now)).toEqual([]);
+ });
+ it("returns a shorter set when learning runs out rather than exceeding 30 retention",()=>{
+  expect(counts(buildDailyPlan(pool(5,100,2),now))).toEqual([5,30,2]);
  });
  it("introduces older Pack 3 cards before Pack 4 regardless of input order",()=>{
   const older=Array.from({length:12},(_,i)=>({...card(`pack3-${String(i).padStart(2,"0")}`,"new"),createdAt:new Date("2026-11-10")}));
   const newer=Array.from({length:20},(_,i)=>({...card(`pack4-${i}`,"new"),createdAt:new Date("2026-11-11")}));
-  const first=buildDailyPlan([...newer,...older.slice().reverse()],now);
+  const first=buildDailyPlan([...pool(60,30,0),...newer,...older.slice().reverse()],now).filter(p=>p.group==="new");
   expect(first.map(p=>p.id).sort()).toEqual(older.slice(0,10).map(c=>c.id));
   // Once those ten have been introduced, the next batch drains the older remainder first.
-  const next=buildDailyPlan([...newer,...older.slice(10)],now);
+  const next=buildDailyPlan([...pool(60,30,0),...newer,...older.slice(10)],now).filter(p=>p.group==="new");
   expect(next.map(p=>p.id)).toEqual(expect.arrayContaining(older.slice(10).map(c=>c.id)));
   expect(next.filter(p=>p.id.startsWith("pack4-")).length).toBe(8);
  });

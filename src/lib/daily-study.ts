@@ -16,7 +16,7 @@ export function isSecureBothWays(card: StudyCandidate): boolean {
     card.recallStates.some(s => s.direction === direction && recallBand(s.lastQuality) === "secure"));
 }
 
-/** 70 practice / 30 retention, at most ten new items when existing practice is short. */
+/** Up to 30 retention; fill the learning slots with practice first, then oldest new cards. */
 export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random: () => number = Math.random): DailyPick[] {
   const practiced = cards.filter(c => c.reviews.length > 0 || c.recallStates.length > 0);
   const weak = practiced.filter(c => !isSecureBothWays(c));
@@ -31,19 +31,15 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
       const due = (p: StudyPick) => Math.min(...byId.get(p.id)!.recallStates.map(s => s.nextReviewAt.getTime()));
       return due(a)-due(b);
     }).map(p => ({ ...p, group: "retention" as const, studyReason: "Retention — secure both ways" }));
-  const selected: DailyPick[] = [...practice.splice(0,70), ...retention.splice(0,30)];
-  // Extra overdue retention takes precedence over introducing new material.
-  while (selected.length < 100 && retention.length &&
-    byId.get(retention[0].id)!.recallStates.some(s => s.nextReviewAt <= now)) {
-    selected.push(retention.shift()!);
-  }
-  if (weak.length < 70 && selected.length < 100) {
+  const selected: DailyPick[] = retention.slice(0,30);
+  // Normally 70 learning slots. If retention has fewer than 30 unique
+  // cards, use the spare room for learning rather than duplicate reviews.
+  selected.push(...practice.slice(0,100-selected.length));
+  if (selected.length < 100) {
     selected.push(...selectStudyCards(newCards, "created", "auto", now, random)
-      .slice(0, Math.min(10, 70-weak.length, 100-selected.length))
+      .slice(0,100-selected.length)
       .map(p => ({ ...p, group: "new" as const, studyReason: "New vocabulary" })));
   }
-  selected.push(...retention.splice(0,100-selected.length));
-  selected.push(...practice.splice(0,100-selected.length));
   // Interleave the chosen groups so the session does not arrive pack by pack.
   for (let i=selected.length-1;i>0;i--) {
     const j=Math.floor(random()*(i+1)); [selected[i],selected[j]]=[selected[j],selected[i]];
