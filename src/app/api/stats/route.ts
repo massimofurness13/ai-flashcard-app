@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { directionalDueWhere } from "@/lib/recall-query";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { masteryLevel, letterGrade, type LetterGrade } from "@/lib/sm2";
@@ -130,7 +131,7 @@ export async function GET(request: NextRequest) {
       where: { deck: { userId: auth.userId } },
     }),
     prisma.card.count({
-      where: { deck: { userId: auth.userId }, nextReviewAt: { lte: now } },
+      where: { deck: { userId: auth.userId, archivedAt: null }, ...directionalDueWhere(now) },
     }),
     prisma.reviewLog.findMany({
       where: {

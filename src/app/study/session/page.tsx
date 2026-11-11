@@ -42,6 +42,7 @@ function StudySessionContent() {
   );
   const [loading, setLoading] = useState(() => resume === null);
   const [completed, setCompleted] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [stats, setStats] = useState<StudyStats | null>(null);
   // Onboarding learning language — drives the voice fallback for
   // decks with no explicit language code (so we never use the
@@ -65,7 +66,8 @@ function StudySessionContent() {
   const tags = searchParams.get("tags") || "";
   const autoFlip = parseFloat(searchParams.get("autoFlip") || "0");
   const autoAdvance = parseFloat(searchParams.get("autoAdvance") || "0");
-  const orientation = (searchParams.get("orientation") || "front") as
+  const orientation = (searchParams.get("orientation") || "auto") as
+    | "auto"
     | "front"
     | "back"
     | "mixed";
@@ -83,16 +85,17 @@ function StudySessionContent() {
     if (deckIds) params.set("deckIds", deckIds);
     params.set("limit", limit);
     params.set("filter", filter);
+    params.set("orientation", orientation);
     if (tags) params.set("tags", tags);
 
     fetch(`/api/review?${params.toString()}`)
-      .then((res) => res.json())
+      .then(async (res) => { if (!res.ok) throw new Error("Unable to load this session. Please try again."); return res.json(); })
       .then((data) => {
         setCards(data.cards);
         setLearningLanguage(data.learningLanguage ?? null);
         setLoading(false);
-      });
-  }, [resume, deckIds, limit, filter, tags]);
+      }).catch(() => { setLoadError("Unable to load this session. Your reviews are still saved. Please try again."); setLoading(false); });
+  }, [resume, deckIds, limit, filter, tags, orientation]);
 
   function handleComplete(sessionStats: StudyStats) {
     setStats(sessionStats);
@@ -107,6 +110,8 @@ function StudySessionContent() {
     );
   }
 
+  if (loadError) return <div role="alert" className="space-y-4 py-12"><p>{loadError}</p><Button onClick={() => router.push("/study")}>Back to study options</Button></div>;
+
   if (cards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -115,7 +120,7 @@ function StudySessionContent() {
         <p className="text-muted-foreground mt-2">
           {filter === "due"
             ? "No cards are due right now. Try another filter."
-            : "No cards matched the selected packs and filter."}
+            : filter === "mastery" ? "No weak or untested directions remain in these packs. Spaced review will bring them back when due." : "No cards matched the selected packs and filter."}
         </p>
         <div className="flex gap-3 mt-6">
           <Button onClick={() => router.push("/study")}>Change filter</Button>

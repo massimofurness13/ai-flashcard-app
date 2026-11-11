@@ -20,6 +20,8 @@ export const STUDY_RESUME_TTL_MS = 30 * 60 * 1000;
 /** The card shape the study session needs to render without a re-fetch. */
 export interface StudyResumeCard {
   id: string;
+  studyDirection?: "front" | "back";
+  studyReason?: string;
   front: string;
   back: string;
   imageUrl: string | null;

@@ -215,6 +215,7 @@ model Card {
   deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
 
   reviews        ReviewLog[]
+  recallStates   CardRecall[]
   imageFeedback  ImageFeedback[]
 
   // SM-2 spaced repetition state
@@ -254,12 +255,27 @@ model ReviewLog {
   easeFactor Float
   interval   Int
   reviewedAt DateTime @default(now())
+  direction  String? // front/back = face shown FIRST; null preserves unknown historical direction
 
   cardId String
   card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
 
   @@index([cardId])
   @@index([reviewedAt])
+}
+
+model CardRecall {
+  cardId         String
+  direction      String
+  card           Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  easeFactor     Float    @default(2.5)
+  interval       Int      @default(0)
+  repetitions    Int      @default(0)
+  nextReviewAt   DateTime @default(now())
+  lastReviewedAt DateTime
+  lastQuality    Int
+  @@id([cardId, direction])
+  @@index([nextReviewAt])
 }
 
 // Pre-built starter packs offered to new users during onboarding.

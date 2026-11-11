@@ -16,6 +16,7 @@ export const DEFAULT_AUTO_FLIP = 0;
 export const RECOMMENDED_AUTO_TIMING = 1;
 
 export const CARD_ORIENTATION_OPTIONS = [
+  { label: "Smart — weaker side first", value: "auto" },
   { label: "Front first", value: "front" },
   { label: "Back first", value: "back" },
   { label: "Mixed", value: "mixed" },
