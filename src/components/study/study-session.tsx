@@ -1,4 +1,5 @@
 "use client";
+import { useStudyClock } from "@/hooks/use-study-clock";
 import { queueReview } from "@/lib/review-outbox";
 
 import Link from "next/link";
@@ -66,6 +67,7 @@ interface Card {
 }
 
 interface StudySessionProps {
+  timingKey?: string;
   progressOffset?: number;
   initialCards: Card[];
   autoFlipSeconds: number;
@@ -84,6 +86,8 @@ interface StudySessionProps {
 }
 
 export interface StudyStats {
+  elapsedMs?: number;
+  timedCards?: number;
   cardsReviewed: number;
   ratings: Record<number, number>;
 }
@@ -101,6 +105,7 @@ const DEAL_OUT_MS = 100;
 // See src/lib/study-resume.ts.
 
 export function StudySession({
+  timingKey,
   initialCards,
   learningLanguage,
   autoFlipSeconds,
@@ -135,6 +140,8 @@ export function StudySession({
   // User-facing pause: freezes the countdown wheel and cancels any
   // in-flight audio. Resume picks up from the same offset.
   const [isPaused, setIsPaused] = useState(false);
+  const { stop: stopClock, reviewed: timeReview } = useStudyClock(isPaused, timingKey,
+    { elapsedMs: initialStats?.elapsedMs ?? 0, timedCards: initialStats?.timedCards ?? 0 });
   const [stats, setStats] = useState<StudyStats>(
     () =>
       initialStats ?? {
@@ -245,11 +252,11 @@ export function StudySession({
           setIsFlipped(false);
           setDealingOut(false);
         } else {
-          onComplete(finalStats);
+          onComplete({ ...finalStats, ...stopClock() });
         }
       }, DEAL_OUT_MS);
     },
-    [currentIndex, total, onComplete]
+    [currentIndex, total, onComplete, stopClock]
   );
 
   // Auto-advance is triggered by the visible CountdownWheel below
@@ -273,12 +280,13 @@ export function StudySession({
     catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
     const newStats = {
       ...stats,
+      ...timeReview(),
       cardsReviewed: stats.cardsReviewed + 1,
     };
     setStats(newStats);
     dealAndAdvance(newStats);
     savingReview.current = false;
-  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance, currentCard]);
+  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance, currentCard, timeReview]);
 
   const handleFlip = useCallback(() => {
     if (dealingOut) return;
@@ -296,6 +304,7 @@ export function StudySession({
       catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
 
       const newStats = {
+        ...timeReview(),
         cardsReviewed: stats.cardsReviewed + 1,
         ratings: {
           ...stats.ratings,
@@ -306,7 +315,7 @@ export function StudySession({
       dealAndAdvance(newStats);
       savingReview.current = false;
     },
-    [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance]
+    [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance, timeReview]
   );
 
   // Once the answer is revealed, ← / → grade the card (don't know /
@@ -394,7 +403,8 @@ export function StudySession({
                 progressOffset,
                 cards: cards as StudyResumeCard[],
                 currentIndex,
-                stats,
+                stats: { ...stats, ...stopClock() },
+                timingKey,
                 isFlipped,
                 learningLanguage: learningLanguage ?? null,
                 savedAt: Date.now(),

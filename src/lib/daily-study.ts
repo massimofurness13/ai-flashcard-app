@@ -1,5 +1,7 @@
 import { selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
 
+export const DAILY_STUDY_TARGET = 150;
+
 export type DailyPick = StudyPick & { group: "practice" | "retention" | "new" };
 export type RecallBand = "unrated" | "dont-know" | "kind-of" | "secure";
 
@@ -32,12 +34,12 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
       return due(a)-due(b);
     }).map(p => ({ ...p, group: "retention" as const, studyReason: "Retention — secure both ways" }));
   const selected: DailyPick[] = retention.slice(0,30);
-  // Normally 70 learning slots. If retention has fewer than 30 unique
+  // Normally 120 learning slots. If retention has fewer than 30 unique
   // cards, use the spare room for learning rather than duplicate reviews.
-  selected.push(...practice.slice(0,100-selected.length));
-  if (selected.length < 100) {
+  selected.push(...practice.slice(0,DAILY_STUDY_TARGET-selected.length));
+  if (selected.length < DAILY_STUDY_TARGET) {
     selected.push(...selectStudyCards(newCards, "created", "auto", now, random)
-      .slice(0,100-selected.length)
+      .slice(0,DAILY_STUDY_TARGET-selected.length)
       .map(p => ({ ...p, group: "new" as const, studyReason: "New vocabulary" })));
   }
   // Interleave the chosen groups so the session does not arrive pack by pack.

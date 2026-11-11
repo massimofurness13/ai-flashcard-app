@@ -39,6 +39,7 @@ export interface StudyResumeCard {
 }
 
 export interface StudyResumeSnapshot {
+  timingKey?: string;
   progressOffset?: number;
   cards: StudyResumeCard[];
   currentIndex: number;
