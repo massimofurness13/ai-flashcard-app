@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { invalidateDeviceQueries } from "@/hooks/use-device-query";
+import { setPackArchived } from "@/lib/archive-pack";
 import { gradeColor, type LetterGrade } from "@/lib/sm2";
 
 interface DeckCardProps {
@@ -59,6 +62,24 @@ export function DeckCard({
   lastStudiedAt,
   createdAt,
 }: DeckCardProps) {
+  const [archiving, setArchiving] = useState(false);
+  const [archived, setArchived] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function archivePack() {
+    if (archiving) return;
+    setArchiving(true);
+    setError(null);
+    try {
+      await setPackArchived(id, true);
+      setArchived(true);
+      invalidateDeviceQueries();
+    } catch {
+      setError("Couldn't archive this pack. Please try again.");
+    } finally {
+      setArchiving(false);
+    }
+  }
+  if (archived) return null;
   const isStudied = grade !== "New";
   const gradeLabel = isStudied ? grade : "New";
 
@@ -68,8 +89,9 @@ export function DeckCard({
     // truncate inside doesn't apply because the parent's intrinsic
     // min-width still respects content width — caused the home page
     // to scroll horizontally on iPhone width.
-    <Link href={`/decks/${id}`} prefetch={true} className="block w-full min-w-0">
-      <article className="editorial-card group relative w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card px-3 py-2.5 transition-colors hover:border-[color:var(--primary)]/40 sm:px-4">
+      <article className="editorial-card group relative w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-[color:var(--primary)]/40">
+        <div className="flex min-w-0 items-center">
+        <Link href={`/decks/${id}`} prefetch={true} className="block min-w-0 flex-1 px-3 py-2.5 sm:px-4">
         {/* Folder-color spine */}
         {folderColor && (
           <div
@@ -125,7 +147,19 @@ export function DeckCard({
             </>
           )}
         </div>
+        </Link>
+        <button
+          type="button"
+          aria-label={`Archive ${name}`}
+          title="Hide this pack from your library and study sessions. Cards and progress are kept."
+          onClick={archivePack}
+          disabled={archiving}
+          className="mr-2 min-h-11 shrink-0 rounded-lg px-2 text-xs text-muted-foreground hover:bg-primary/10 hover:text-foreground disabled:opacity-50"
+        >
+          {archiving ? "Archiving…" : "Archive"}
+        </button>
+        </div>
+        {error && <p role="alert" className="px-3 pb-2 text-xs text-destructive">{error}</p>}
       </article>
-    </Link>
   );
 }

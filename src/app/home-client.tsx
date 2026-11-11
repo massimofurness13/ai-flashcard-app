@@ -8,6 +8,7 @@ import { DeckCard } from "@/components/deck/deck-card";
 import { Button } from "@/components/ui/button";
 import { GoalCelebrationDialog } from "@/components/home/goal-celebration-dialog";
 import { FirstTimeWelcome } from "@/components/home/first-time-welcome";
+import { DailyStudyButton } from "@/components/home/daily-study-button";
 
 interface Deck {
   id: string;
@@ -278,6 +279,7 @@ export function HomePage({
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <CreateMenu />
+            <Link href="/archive" className="text-sm underline">Archived packs</Link>
           </div>
         </div>
       </div>
@@ -407,6 +409,7 @@ export function HomePage({
                   </p>
 
                   <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <DailyStudyButton />
                     <Link
                       href={
                         goalHit
@@ -414,7 +417,7 @@ export function HomePage({
                           : `/study?filter=due&limit=${remaining}`
                       }
                     >
-                      <Button size="md">
+                      <Button size="md" variant="outline">
                         {goalHit
                           ? "Study a little more"
                           : cardsReviewedToday > 0
@@ -490,7 +493,8 @@ export function HomePage({
               <h2 className="font-editorial text-2xl font-medium text-foreground">
                 Library
               </h2>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Link href="/archive" className="text-sm text-muted-foreground underline hover:text-foreground">Archived packs</Link>
                 {/* Sort dropdown — applies to both the unfoldered
                  *  list and each folder's contents. Choice persists
                  *  to localStorage via updateSort(). */}

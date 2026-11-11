@@ -1,5 +1,6 @@
 "use client";
 import { invalidateDeviceQueries } from "@/hooks/use-device-query";
+import { setPackArchived } from "@/lib/archive-pack";
 import { DeviceImage } from "@/components/flashcard/device-image";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -75,6 +76,8 @@ export function DeckView({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [generationActive, setGenerationActive] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
   const [initialPending, setInitialPending] = useState(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -311,18 +314,24 @@ export function DeckView({
   }
 
   async function handleArchive() {
-    await fetch(`/api/decks/${deck.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ archive: true }),
-    });
-    router.push("/");
-    invalidateDeviceQueries();
-    router.refresh();
+    if (archiving) return;
+    setArchiving(true);
+    setArchiveError(null);
+    try {
+      await setPackArchived(deck.id, true);
+      invalidateDeviceQueries();
+      router.push("/");
+      router.refresh();
+    } catch {
+      setArchiveError("Couldn't archive this pack. Please try again.");
+    } finally {
+      setArchiving(false);
+    }
   }
 
   return (
     <div className="space-y-6">
+      {archiveError && <p role="alert" className="text-sm text-destructive">{archiveError}</p>}
       {/* min-w-0 on the title column + shrink-0 on the action column
        *  so a long pack name wraps within its own space instead of
        *  pushing the Study button off the edge / overlapping it. */}
@@ -379,7 +388,7 @@ export function DeckView({
               </DropdownItem>
             )}
             <DropdownItem onClick={handleArchive}>
-              Archive Pack
+              {archiving ? "Archiving…" : "Archive Pack"}
             </DropdownItem>
             <DropdownItem destructive onClick={handleDelete}>
               Delete Pack

@@ -53,6 +53,16 @@ model User {
   purchases         CreditPurchase[]
   pushSubscriptions PushSubscription[]
   creditLedger      CreditLedger[]
+  dailyStudyPlans   DailyStudyPlan[]
+}
+
+model DailyStudyPlan {
+  userId    String
+  day       String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  picks     Json
+  createdAt DateTime @default(now())
+  @@id([userId, day])
 }
 
 model PushSubscription {

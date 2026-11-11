@@ -7,6 +7,8 @@ import { StudyCountdown } from "@/components/study/study-countdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { peekStudyResume, clearStudyResume } from "@/lib/study-resume";
+import { deviceOwner } from "@/lib/device-media";
+import { flushReviews } from "@/lib/review-outbox";
 
 interface StudyCard {
   id: string;
@@ -44,6 +46,7 @@ function StudySessionContent() {
   const [completed, setCompleted] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stats, setStats] = useState<StudyStats | null>(null);
+  const [daily, setDaily] = useState<{completed:number;total:number;ratings:Record<number,number>;mix:{practice:number;retention:number;new:number}} | null>(null);
   // Onboarding learning language — drives the voice fallback for
   // decks with no explicit language code (so we never use the
   // robotic device voice).
@@ -88,11 +91,17 @@ function StudySessionContent() {
     params.set("orientation", orientation);
     if (tags) params.set("tags", tags);
 
-    fetch(`/api/review?${params.toString()}`)
+    const sync = filter === "daily" ? deviceOwner().then(owner=>owner ? flushReviews(owner) : undefined) : Promise.resolve();
+    sync.then(()=>fetch(`/api/review?${params.toString()}`))
       .then(async (res) => { if (!res.ok) throw new Error("Unable to load this session. Please try again."); return res.json(); })
       .then((data) => {
         setCards(data.cards);
         setLearningLanguage(data.learningLanguage ?? null);
+        if (data.daily) {
+          setDaily(data.daily);
+          setStats({cardsReviewed:data.daily.completed,ratings:data.daily.ratings});
+          if (data.daily.total>0 && data.daily.completed===data.daily.total) setCompleted(true);
+        }
         setLoading(false);
       }).catch(() => { setLoadError("Unable to load this session. Your reviews are still saved. Please try again."); setLoading(false); });
   }, [resume, deckIds, limit, filter, tags, orientation]);
@@ -112,7 +121,7 @@ function StudySessionContent() {
 
   if (loadError) return <div role="alert" className="space-y-4 py-12"><p>{loadError}</p><Button onClick={() => router.push("/study")}>Back to study options</Button></div>;
 
-  if (cards.length === 0) {
+  if (cards.length === 0 && !completed) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <span className="text-5xl mb-4">{"\u2705"}</span>
@@ -137,7 +146,7 @@ function StudySessionContent() {
       <div className="space-y-6 max-w-md mx-auto">
         <div className="text-center py-8">
           <span className="text-5xl mb-4 block">{"\ud83c\udf1f"}</span>
-          <h2 className="font-editorial text-3xl font-medium sm:text-4xl">Session complete</h2>
+          <h2 className="font-editorial text-3xl font-medium sm:text-4xl">{filter==="daily" ? "Daily session complete" : "Session complete"}</h2>
           <p className="text-muted-foreground mt-2">
             You studied {stats.cardsReviewed} cards
           </p>
@@ -149,8 +158,12 @@ function StudySessionContent() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-green-500">Knew it</span>
+              <span className="text-green-500">Secure</span>
               <span className="font-medium">{stats.ratings[4] || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-amber-500">Kind of</span>
+              <span className="font-medium">{stats.ratings[2] || 0}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-red-500">Didn&apos;t know</span>
@@ -173,17 +186,25 @@ function StudySessionContent() {
 
   // Cards are loaded but the user hasn't passed the get-ready
   // countdown yet — show it (and preload the opening audio behind it).
+  const dailyHeading = daily && <div className="mb-4 text-sm text-muted-foreground">
+    <p className="font-medium text-foreground">Your daily set: {daily.total} cards</p>
+    <p>{daily.mix.practice} practice · {daily.mix.retention} retention · {daily.mix.new} new</p>
+    {daily.total<100 && <p>There aren’t enough eligible cards to fill 100 without repeats or introducing too many new words.</p>}
+  </div>;
   if (!prepared) {
     return (
+      <>{dailyHeading}
       <StudyCountdown
         cards={cards}
         learningLanguage={learningLanguage}
         onComplete={handlePrepared}
       />
+      </>
     );
   }
 
   return (
+    <>{dailyHeading}
     <StudySession
       initialCards={cards}
       learningLanguage={learningLanguage}
@@ -192,9 +213,11 @@ function StudySessionContent() {
       orientation={orientation}
       onComplete={handleComplete}
       initialIndex={resume?.currentIndex ?? 0}
-      initialStats={resume?.stats}
+      initialStats={resume?.stats ?? (daily ? {cardsReviewed:daily.completed,ratings:daily.ratings} : undefined)}
+      progressOffset={resume?.progressOffset ?? daily?.completed ?? 0}
       initialFlipped={resume?.isFlipped ?? false}
     />
+    </>
   );
 }
 

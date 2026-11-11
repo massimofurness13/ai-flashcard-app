@@ -1,0 +1,11 @@
+BEGIN;
+CREATE TABLE IF NOT EXISTS "DailyStudyPlan" (
+  "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "day" TEXT NOT NULL,
+  "picks" JSONB NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY ("userId", "day")
+);
+ALTER TABLE "DailyStudyPlan" ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON "DailyStudyPlan" FROM anon, authenticated;
+COMMIT;
