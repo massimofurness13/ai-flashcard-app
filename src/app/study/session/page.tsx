@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { peekStudyResume, clearStudyResume } from "@/lib/study-resume";
 import { deviceOwner } from "@/lib/device-media";
+import { DAILY_STUDY_TARGET } from "@/lib/daily-study";
+import { readStudyTime, formatStudyTime } from "@/lib/study-time";
 import { flushReviews } from "@/lib/review-outbox";
 
 interface StudyCard {
@@ -46,7 +48,7 @@ function StudySessionContent() {
   const [completed, setCompleted] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stats, setStats] = useState<StudyStats | null>(null);
-  const [daily, setDaily] = useState<{completed:number;total:number;ratings:Record<number,number>;mix:{practice:number;retention:number;new:number}} | null>(null);
+  const [daily, setDaily] = useState<{timingKey?:string;completed:number;total:number;ratings:Record<number,number>;mix:{practice:number;retention:number;new:number}} | null>(null);
   // Onboarding learning language — drives the voice fallback for
   // decks with no explicit language code (so we never use the
   // robotic device voice).
@@ -99,7 +101,7 @@ function StudySessionContent() {
         setLearningLanguage(data.learningLanguage ?? null);
         if (data.daily) {
           setDaily(data.daily);
-          setStats({cardsReviewed:data.daily.completed,ratings:data.daily.ratings});
+          setStats({cardsReviewed:data.daily.completed,ratings:data.daily.ratings,...readStudyTime(data.daily.timingKey)});
           if (data.daily.total>0 && data.daily.completed===data.daily.total) setCompleted(true);
         }
         setLoading(false);
@@ -157,6 +159,10 @@ function StudySessionContent() {
             <CardTitle>Session summary</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {stats.elapsedMs !== undefined && <div className="border-b border-border pb-3">
+              <div className="flex justify-between gap-4"><span>Active study time</span><span className="font-semibold tabular-nums">{formatStudyTime(stats.elapsedMs)}</span></div>
+              <p className="mt-1 text-xs text-muted-foreground">{stats.timedCards ?? 0} cards timed on this device · pauses excluded</p>
+            </div>}
             <div className="flex justify-between">
               <span className="text-green-500">Secure</span>
               <span className="font-medium">{stats.ratings[4] || 0}</span>
@@ -189,7 +195,7 @@ function StudySessionContent() {
   const dailyHeading = daily && <div className="mb-4 text-sm text-muted-foreground">
     <p className="font-medium text-foreground">Your daily set: {daily.total} cards</p>
     <p>{daily.mix.practice} practice · {daily.mix.retention} retention · {daily.mix.new} new</p>
-    {daily.total<100 && <p>You’ve used the available learning cards. Add a pack for more new vocabulary; retention stays capped at 30.</p>}
+    {daily.total<DAILY_STUDY_TARGET && <p>You’ve used the available learning cards. Add a pack for more new vocabulary; retention stays capped at 30.</p>}
   </div>;
   if (!prepared) {
     return (
@@ -206,6 +212,7 @@ function StudySessionContent() {
   return (
     <>{dailyHeading}
     <StudySession
+      timingKey={resume?.timingKey ?? daily?.timingKey}
       initialCards={cards}
       learningLanguage={learningLanguage}
       autoFlipSeconds={autoFlip}
