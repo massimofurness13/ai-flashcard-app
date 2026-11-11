@@ -66,6 +66,7 @@ interface Card {
 }
 
 interface StudySessionProps {
+  progressOffset?: number;
   initialCards: Card[];
   autoFlipSeconds: number;
   autoAdvanceSeconds?: number;
@@ -109,6 +110,7 @@ export function StudySession({
   initialIndex = 0,
   initialStats,
   initialFlipped = false,
+  progressOffset = 0,
 }: StudySessionProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -138,7 +140,7 @@ export function StudySession({
       initialStats ?? {
         cardsReviewed: 0,
         // Binary swipe grading: 1 = Don't know, 4 = Know it.
-        ratings: { 1: 0, 4: 0 },
+        ratings: { 1: 0, 2: 0, 4: 0 },
       },
   );
 
@@ -160,7 +162,7 @@ export function StudySession({
   const isAutoAdvance = autoAdvanceSeconds > 0;
   const currentCard = cards[currentIndex];
   const total = cards.length;
-  const progress = total > 0 ? currentIndex / total : 0;
+  const progress = total > 0 ? (currentIndex+progressOffset) / (total+progressOffset) : 0;
   const showBackFirst = currentCard?.studyDirection === "back";
 
   // Voice fallback for decks with no explicit language code. front
@@ -389,6 +391,7 @@ export function StudySession({
               // + stats) so the return trip restores it verbatim — no
               // re-fetch that would drop the cards already reviewed.
               writeStudyResume({
+                progressOffset,
                 cards: cards as StudyResumeCard[],
                 currentIndex,
                 stats,
@@ -406,7 +409,7 @@ export function StudySession({
             </svg>
           </Link>
           <span className="text-sm text-muted-foreground">
-            {currentIndex + 1} / {total}
+            {currentIndex + progressOffset + 1} / {total + progressOffset}
           </span>
         </div>
       </div>
@@ -479,6 +482,7 @@ export function StudySession({
         {!isAutoAdvance && isFlipped && !dealingOut && (
           <SwipeControls
             onKnow={() => handleRate(QUALITY_KNOW)}
+            onKindOf={() => handleRate(2)}
             onDontKnow={() => handleRate(QUALITY_DONT_KNOW)}
             disabled={dealingOut}
           />

@@ -1,0 +1,60 @@
+import {describe,it,expect} from "vitest";
+import {buildDailyPlan,dailyProgress,recallBand,isSecureBothWays} from "@/lib/daily-study";
+import {scheduleDirection,type StudyCandidate,type RecallState} from "@/lib/study-selection";
+const now=new Date("2026-11-11T12:00:00Z"),future=new Date(now.getTime()+86400000);
+function state(direction:string,lastQuality=4):RecallState{return {direction,lastQuality,lastReviewedAt:new Date(0),nextReviewAt:future,easeFactor:2.5,interval:6,repetitions:2};}
+function card(id:string,kind:"weak"|"secure"|"new"):StudyCandidate {
+ return {id,front:id,tags:null,createdAt:new Date(0),nextReviewAt:new Date(0),easeFactor:2.5,interval:0,repetitions:0,
+  recallStates:kind==="secure"?[state("front"),state("back")]:kind==="weak"?[state("front",1)]:[],
+  reviews:kind==="new"?[]:[{quality:kind==="weak"?1:4,reviewedAt:new Date(0)}]};
+}
+const pool=(weak:number,secure:number,fresh:number)=>[
+ ...Array.from({length:weak},(_,i)=>card("w"+i,"weak")),...Array.from({length:secure},(_,i)=>card("s"+i,"secure")),...Array.from({length:fresh},(_,i)=>card("n"+i,"new"))];
+const counts=(p:ReturnType<typeof buildDailyPlan>)=>["practice","retention","new"].map(g=>p.filter(x=>x.group===g).length);
+describe("adaptive daily 100",()=>{
+ it("uses 70 practice and 30 retention without forcing new words",()=>{
+  const picks=buildDailyPlan(pool(90,100,100),now);
+  expect(counts(picks)).toEqual([70,30,0]);expect(new Set(picks.map(p=>p.id)).size).toBe(100);
+ });
+ it("introduces at most ten when practice is short and fills with retention",()=>{
+  expect(counts(buildDailyPlan(pool(40,100,100),now))).toEqual([40,50,10]);
+  expect(counts(buildDailyPlan(pool(0,100,100),now))).toEqual([0,90,10]);
+ });
+ it("clears overdue retention before introducing new words",()=>{
+  const cards=pool(40,100,100);for(const c of cards.filter(isSecureBothWays)) for(const s of c.recallStates)s.nextReviewAt=new Date(0);
+  expect(counts(buildDailyPlan(cards,now))).toEqual([40,60,0]);
+ });
+ it("does not repeat cards or introduce 100 new ones to fill an empty library",()=>{
+  expect(buildDailyPlan(pool(0,0,200),now)).toHaveLength(10);
+  expect(buildDailyPlan([],now)).toEqual([]);
+ });
+ it("introduces older Pack 3 cards before Pack 4 regardless of input order",()=>{
+  const older=Array.from({length:12},(_,i)=>({...card(`pack3-${String(i).padStart(2,"0")}`,"new"),createdAt:new Date("2026-11-10")}));
+  const newer=Array.from({length:20},(_,i)=>({...card(`pack4-${i}`,"new"),createdAt:new Date("2026-11-11")}));
+  const first=buildDailyPlan([...newer,...older.slice().reverse()],now);
+  expect(first.map(p=>p.id).sort()).toEqual(older.slice(0,10).map(c=>c.id));
+  // Once those ten have been introduced, the next batch drains the older remainder first.
+  const next=buildDailyPlan([...newer,...older.slice(10)],now);
+  expect(next.map(p=>p.id)).toEqual(expect.arrayContaining(older.slice(10).map(c=>c.id)));
+  expect(next.filter(p=>p.id.startsWith("pack4-")).length).toBe(8);
+ });
+ it("uses legacy confidence without pretending both directions were tested",()=>{
+  const c=card("old","new");c.reviews=[{quality:4,reviewedAt:new Date(0)}];
+  expect(isSecureBothWays(c)).toBe(false);
+  expect(counts(buildDailyPlan([c],now))).toEqual([1,0,0]);
+  expect([0,1,2,3,4,5].map(recallBand)).toEqual(["unrated","dont-know","kind-of","secure","secure","secure"]);
+ });
+ it("keeps Kind of in practice with a one-day retry, even after a long interval",()=>{
+  const next=scheduleDirection(2,state("front"),now);
+  expect(next).toMatchObject({interval:1,repetitions:0,nextReviewAt:future});
+  const c=card("a","secure");c.recallStates[0].lastQuality=2;expect(isSecureBothWays(c)).toBe(false);
+ });
+ it("resumes the same set without counting retries, other faces or passive views",()=>{
+  const picks=buildDailyPlan(pool(3,0,0),now,()=>0.5);
+  const first=picks[0];
+  const progress=dailyProgress(picks,[{cardId:first.id,direction:first.studyDirection,quality:2},{cardId:first.id,direction:first.studyDirection,quality:4},
+   {cardId:picks[1].id,direction:picks[1].studyDirection,quality:0},
+   {cardId:picks[2].id,direction:picks[2].studyDirection==="front"?"back":"front",quality:4}]);
+  expect(progress.completed).toBe(1);expect(progress.remaining).toHaveLength(2);expect(progress.ratings).toEqual({1:0,2:1,4:0});
+ });
+});

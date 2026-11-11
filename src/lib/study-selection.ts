@@ -27,6 +27,8 @@ export function scheduleDirection(quality: number, previous: RecallState | null,
       repetitions: previous.repetitions, nextReviewAt: previous.nextReviewAt };
   }
   const next = sm2(quality, previous ?? defaultSM2State());
+  // Partial recall is still learning, not a consecutive secure success.
+  if (quality === 2) { next.interval = 1; next.repetitions = 0; }
   next.nextReviewAt = new Date(when.getTime() + (quality < 2 ? 10 * 60_000 : next.interval * DAY));
   return next;
 }
@@ -40,7 +42,7 @@ function directionInfo(card: StudyCandidate, direction: Direction, now: Date) {
   return { direction, state, failed, unseen, needs: failed || unseen,
     due: !state || state.nextReviewAt <= now,
     time: state?.nextReviewAt.getTime() ?? card.nextReviewAt.getTime(),
-    reason: failed ? "Needs practice" : unseen ? "Not yet tested this way" : "Due again" };
+    reason: failed ? (state?.lastQuality === 2 || (!state && legacy?.quality === 2) ? "Kind of — keep practising" : "Needs practice") : unseen ? "Not yet tested this way" : "Retention" };
 }
 
 export function selectStudyCards(cards: StudyCandidate[], filter: string, orientation: Orientation,
@@ -60,7 +62,7 @@ export function selectStudyCards(cards: StudyCandidate[], filter: string, orient
     Number(b.failed)-Number(a.failed) || a.time-b.time || a.tie-b.tie;
   if (filter === "random") candidates.sort((a,b) => a.tie-b.tie);
   else if (filter === "mastery") candidates.sort((a,b) => Number(b.failed)-Number(a.failed) || Number(b.unseen)-Number(a.unseen) || a.time-b.time || a.card.id.localeCompare(b.card.id));
-  else if (filter === "created") candidates.sort((a,b) => a.card.createdAt.getTime()-b.card.createdAt.getTime());
+  else if (filter === "created") candidates.sort((a,b) => a.card.createdAt.getTime()-b.card.createdAt.getTime() || a.card.id.localeCompare(b.card.id));
   else if (filter === "recent") candidates.sort((a,b) => b.card.createdAt.getTime()-a.card.createdAt.getTime());
   else if (filter === "alpha") candidates.sort((a,b) => a.card.front.localeCompare(b.card.front));
   else {

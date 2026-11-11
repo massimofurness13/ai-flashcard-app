@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { setPackArchived } from "@/lib/archive-pack";
 
 interface ArchiveRowProps {
   id: string;
@@ -31,17 +32,17 @@ export function ArchiveRow({
 }: ArchiveRowProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleUnarchive() {
     setLoading(true);
+    setError(null);
     try {
-      await fetch(`/api/decks/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archive: false }),
-      });
+      await setPackArchived(id, false);
       invalidateDeviceQueries();
-    router.refresh();
+      router.refresh();
+    } catch {
+      setError("Couldn't restore this pack. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -57,9 +58,12 @@ export function ArchiveRow({
     }
     setLoading(true);
     try {
-      await fetch(`/api/decks/${id}`, { method: "DELETE" });
+      const response = await fetch(`/api/decks/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Delete failed");
       invalidateDeviceQueries();
-    router.refresh();
+      router.refresh();
+    } catch {
+      setError("Couldn't delete this pack. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -85,7 +89,7 @@ export function ArchiveRow({
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={handleUnarchive} disabled={loading}>
-            Unarchive
+            {loading ? "Working…" : "Restore pack"}
           </Button>
           <Button
             size="sm"
@@ -97,6 +101,7 @@ export function ArchiveRow({
             Delete
           </Button>
         </div>
+        {error && <p role="alert" className="w-full text-sm text-destructive">{error}</p>}
       </CardContent>
     </Card>
   );

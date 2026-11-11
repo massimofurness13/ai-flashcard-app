@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
 
 export async function GET(
   _request: Request,
@@ -35,7 +36,11 @@ export async function PATCH(
   if (auth.error) return auth.error;
 
   const { deckId } = await params;
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
+      (body.archive !== undefined && typeof body.archive !== "boolean")) {
+    return NextResponse.json({ error: "Invalid pack update" }, { status: 400 });
+  }
 
   // Verify ownership
   const existing = await prisma.deck.findUnique({
@@ -87,6 +92,12 @@ export async function PATCH(
     },
   });
 
+  if (body.archive !== undefined) {
+    revalidatePath("/");
+    revalidatePath("/archive");
+    revalidatePath("/study");
+    revalidatePath(`/decks/${deckId}`);
+  }
   return NextResponse.json(deck);
 }
 

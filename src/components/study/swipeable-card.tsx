@@ -166,7 +166,7 @@ export function SwipeableCard({
           className="pointer-events-none absolute left-4 top-6 z-30 rotate-[-16deg] rounded-xl border-4 border-green-500 px-4 py-1 text-2xl font-extrabold uppercase tracking-wider text-green-500"
           style={{ opacity: knowOp }}
         >
-          Know it
+          Secure
         </div>
         {/* "Don't know" stamp — top-right, leans in as you pull left. */}
         <div

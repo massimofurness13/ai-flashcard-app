@@ -6,9 +6,11 @@ import type { Prisma } from "@/generated/prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { fillRandomSession, scheduleDirection, selectStudyCards, type Orientation, type StudyCandidate } from "@/lib/study-selection";
+import { buildDailyPlan, dailyProgress, type DailyPick } from "@/lib/daily-study";
+import { toLocalDateKey } from "@/lib/timezone";
 
 const ReviewInput = z.object({ cardId: z.string().min(1).max(128), quality: z.number().int().min(0).max(5), direction: z.enum(["front", "back"]).optional(), eventId: z.string().uuid().optional(), reviewedAt: z.string().datetime().optional() });
-const filters = ["due", "random", "mastery", "created", "recent", "alpha"];
+const filters = ["due", "random", "mastery", "created", "recent", "alpha", "daily"];
 const integer = (value: string | null, fallback: number, max: number) => {
   const n = Number(value ?? fallback);
   return Number.isSafeInteger(n) && n >= 0 ? Math.min(n,max) : fallback;
@@ -26,10 +28,10 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const where: Prisma.CardWhereInput = { deck: { userId: auth.userId, archivedAt: null } };
   const deckIds = params.get("deckIds")?.split(",").filter(Boolean);
-  if (deckIds?.length) where.deckId = { in: deckIds };
+  if (deckIds?.length && filter !== "daily") where.deckId = { in: deckIds };
   // Only explicit user exclusions: the old 6-hour blanket also hid failed cards.
-  if (cutoff) where.reviews = { none: { reviewedAt: { gte: new Date(now.getTime()-cutoff*86400000) } } };
-  const tags = (params.get("tags") || "").split(",").map(t=>t.trim().toLowerCase()).filter(Boolean);
+  if (cutoff && filter !== "daily") where.reviews = { none: { reviewedAt: { gte: new Date(now.getTime()-cutoff*86400000) } } };
+  const tags = (filter === "daily" ? "" : params.get("tags") || "").split(",").map(t=>t.trim().toLowerCase()).filter(Boolean);
   const candidates: StudyCandidate[] = [];
   let cursor: string | undefined;
   // Scan lightweight metadata across ALL selected packs, not an oldest-first subset.
@@ -44,13 +46,37 @@ export async function GET(request: NextRequest) {
     if(batch.length<1000)break;
     cursor=batch.at(-1)!.id;
   }
-  const eligible = selectStudyCards(candidates,filter,orientation,now);
-  const selected = filter === "random" ? fillRandomSession(eligible,limit) : eligible.slice(offset,offset+limit);
+  const user = await prisma.user.findUnique({where:{id:auth.userId},select:{learningLanguage:true,reminderTimezone:true}});
+  let eligible = selectStudyCards(candidates,filter,orientation,now);
+  let selected = filter === "random" ? fillRandomSession(eligible,limit) : eligible.slice(offset,offset+limit);
+  let daily = null;
+  if (filter === "daily") {
+    let day: string;
+    try { day=toLocalDateKey(now,user?.reminderTimezone || "UTC"); }
+    catch { day=toLocalDateKey(now,"UTC"); }
+    const key={userId_day:{userId:auth.userId,day}};
+    let plan=await prisma.dailyStudyPlan.findUnique({where:key});
+    if (!plan && candidates.length) {
+      plan=await prisma.dailyStudyPlan.upsert({where:key,update:{},create:{
+        userId:auth.userId,day,picks:buildDailyPlan(candidates,now) as unknown as Prisma.InputJsonValue,
+      }});
+    }
+    const activeIds=new Set(candidates.map(c=>c.id));
+    const picks=(plan?.picks as unknown as DailyPick[] | undefined || []).filter(p=>activeIds.has(p.id));
+    const logs=plan && picks.length ? await prisma.reviewLog.findMany({where:{
+      card:{deck:{userId:auth.userId}},cardId:{in:picks.map(p=>p.id)},
+      quality:{gt:0},reviewedAt:{gte:plan.createdAt},
+    },orderBy:{reviewedAt:"desc"},select:{cardId:true,direction:true,quality:true}}) : [];
+    const progress=dailyProgress(picks,logs);
+    selected=progress.remaining;
+    eligible=selected;
+    daily={day,completed:progress.completed,total:progress.total,ratings:progress.ratings,
+      mix:{practice:picks.filter(p=>p.group==="practice").length,retention:picks.filter(p=>p.group==="retention").length,new:picks.filter(p=>p.group==="new").length}};
+  }
   const cards = selected.length ? await prisma.card.findMany({where:{...where,id:{in:[...new Set(selected.map(c=>c.id))]}},include:{deck:{select:{id:true,name:true,emoji:true,frontVoice:true,backVoice:true,frontLanguageCode:true,backLanguageCode:true}}}}) : [];
   const byId = new Map(cards.map(c=>[c.id,c]));
-  const user = await prisma.user.findUnique({where:{id:auth.userId},select:{learningLanguage:true}});
   return NextResponse.json({cards:selected.flatMap(p=>{const c=byId.get(p.id);return c?[{...c,...p}]:[];}),totalDue:eligible.length,total:eligible.length,
-    nextOffset: offset+limit<eligible.length ? offset+limit : null, learningLanguage:user?.learningLanguage??null},
+    daily,nextOffset: filter!=="daily" && offset+limit<eligible.length ? offset+limit : null, learningLanguage:user?.learningLanguage??null},
     {headers:{"Cache-Control":"private, no-store"}});
 }
 
