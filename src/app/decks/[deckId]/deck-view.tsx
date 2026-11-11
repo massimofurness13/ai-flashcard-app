@@ -12,6 +12,7 @@ import { Card as CardUI, CardContent, CardHeader, CardTitle } from "@/components
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { type LetterGrade, gradeColor } from "@/lib/sm2";
 import { estimateImageGenTime } from "@/lib/utils";
+import { IMAGE_PROGRESS_IDLE_MS, progressExpiry } from "@/lib/image-progress";
 import {
   downloadPack,
   isPackDownloaded,
@@ -82,6 +83,7 @@ export function DeckView({
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   const cardsWithoutImages = deck.cards.filter((c) => !c.imageUrl).length;
+  const previousPending = useRef(cardsWithoutImages);
   const generationKey = `gen-active-${deck.id}`;
   const generationTotalKey = `gen-total-${deck.id}`;
 
@@ -107,7 +109,7 @@ export function DeckView({
   useEffect(() => {
     const fromGenerate = searchParams.get("generating") === "true";
     if (fromGenerate) {
-      const expiresAt = Date.now() + 10 * 60 * 1000;
+      const expiresAt = Date.now() + IMAGE_PROGRESS_IDLE_MS;
       sessionStorage.setItem(generationKey, String(expiresAt));
       sessionStorage.setItem(generationTotalKey, String(cardsWithoutImages));
       setInitialPending(cardsWithoutImages);
@@ -130,6 +132,17 @@ export function DeckView({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The timeout measures inactivity, not total runtime: large packs can
+  // legitimately take longer than ten minutes. Never start an unrequested job.
+  useEffect(() => {
+    if (generationActive) {
+      const current = Number(sessionStorage.getItem(generationKey) || 0);
+      const renewed = progressExpiry(previousPending.current, cardsWithoutImages, current, Date.now());
+      if (renewed !== current) sessionStorage.setItem(generationKey, String(renewed));
+    }
+    previousPending.current = cardsWithoutImages;
+  }, [cardsWithoutImages, generationActive, generationKey]);
 
   // Halt an in-flight generation. Clears imageTier on every pending
   // card in this deck (server-side), tears down the local polling
@@ -245,9 +258,8 @@ export function DeckView({
   //
   // This makes the queue self-driving from the user's open tab — no
   // dependency on Vercel cron (which on the hobby plan is capped at
-  // once per day). Stops once all cards have images or the 10-minute
-  // window expires; the user can simply revisit the deck to pick up
-  // wherever it left off.
+  // once per day). Stops once all cards have images or no progress has
+  // arrived for ten minutes. Server jobs remain independent of this UI.
   useEffect(() => {
     if (!generationActive) return;
 
