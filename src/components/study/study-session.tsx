@@ -21,7 +21,7 @@ const PRELOAD_AHEAD = 5;
 
 // Two-choice swipe grading maps onto the existing SM-2 scale:
 //   Know it    → 4 — successful recall; interval multiplies, seen less
-//   Don't know → 1 (Again) — failed recall, resets to 1 day, seen soon
+//   Don't know → 1 (Again) — failed direction is due again in 10 minutes
 //
 // "Know it" is quality 4, NOT 3 (Good), on purpose. On SM-2's ease
 // formula, q=3 nudges the ease factor DOWN by ~0.14 every pass, so a
@@ -47,6 +47,8 @@ const VOICE_PRELOAD_AHEAD = 10;
 
 interface Card {
   id: string;
+  studyDirection?: "front" | "back";
+  studyReason?: string;
   front: string;
   back: string;
   imageUrl: string | null;
@@ -67,7 +69,7 @@ interface StudySessionProps {
   initialCards: Card[];
   autoFlipSeconds: number;
   autoAdvanceSeconds?: number;
-  orientation: "front" | "back" | "mixed";
+  orientation: "front" | "back" | "mixed" | "auto";
   onComplete: (stats: StudyStats) => void;
   /** The user's onboarding learning language ("es", "fr", …). Used
    *  to pick a native-speaker voice for any deck that has no explicit
@@ -114,7 +116,9 @@ export function StudySession({
   // The page hands us the exact card list to use (a fresh fetch, or the
   // resumed snapshot's cards after an edit/delete). We freeze it into
   // state so mid-session re-renders never swap it out.
-  const [cards] = useState<Card[]>(initialCards);
+  const [cards] = useState<Card[]>(() => initialCards.map(c => ({...c,
+    studyDirection: c.studyDirection ?? (orientation === "back" || (orientation === "mixed" && Math.random()<0.5) ? "back" : "front")
+  })));
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isFlipped, setIsFlipped] = useState(initialFlipped);
   const [dealingOut, setDealingOut] = useState(false);
@@ -152,19 +156,12 @@ export function StudySession({
   // Pre-compute each card's initial orientation ONCE at session start.
   // Random coin flip per card in mixed mode — no mid-session recomputation,
   // no animation flash between cards.
-  const [showBackFirstPerCard] = useState<boolean[]>(() =>
-    initialCards.map(() => {
-      if (orientation === "back") return true;
-      if (orientation === "mixed") return Math.random() < 0.5;
-      return false;
-    })
-  );
 
   const isAutoAdvance = autoAdvanceSeconds > 0;
   const currentCard = cards[currentIndex];
   const total = cards.length;
   const progress = total > 0 ? currentIndex / total : 0;
-  const showBackFirst = showBackFirstPerCard[currentIndex];
+  const showBackFirst = currentCard?.studyDirection === "back";
 
   // Voice fallback for decks with no explicit language code. front
   // falls back to the user's learning language (best guess for the
@@ -270,7 +267,7 @@ export function StudySession({
   const handleCountdownComplete = useCallback(async () => {
     if (!isAutoAdvance || !isFlipped || dealingOut || savingReview.current) return;
     savingReview.current = true;
-    try { await queueReview(currentCard.id, 0); setReviewError(null); }
+    try { await queueReview(currentCard.id, 0, currentCard.studyDirection); setReviewError(null); }
     catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
     const newStats = {
       ...stats,
@@ -293,7 +290,7 @@ export function StudySession({
 
       // Commit to the device before advancing. Only the network part runs
       // in the background; unacknowledged reviews survive app restarts.
-      try { await queueReview(currentCard.id, quality); setReviewError(null); }
+      try { await queueReview(currentCard.id, quality, currentCard.studyDirection); setReviewError(null); }
       catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
 
       const newStats = {
@@ -361,6 +358,7 @@ export function StudySession({
     <div className="space-y-6">
       <ImagePreloader urls={upcomingImageUrls} />
       {reviewError && <p role="alert" className="text-sm text-destructive">{reviewError}</p>}
+      {currentCard.studyReason && <p className="text-xs text-muted-foreground">{currentCard.studyReason} · {showBackFirst ? "Back" : "Front"} face first</p>}
       <VoicePreloader items={upcomingVoiceItems} />
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm text-muted-foreground truncate">

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { createDeckSchema } from "@/lib/validations";
+import { directionalDueWhere } from "@/lib/recall-query";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -23,7 +24,7 @@ export async function GET() {
       const dueCount = await prisma.card.count({
         where: {
           deckId: deck.id,
-          nextReviewAt: { lte: now },
+          ...directionalDueWhere(now),
         },
       });
       return { ...deck, dueCount };

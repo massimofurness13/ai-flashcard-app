@@ -12,9 +12,9 @@ beforeEach(() => {
 });
 describe("durable reviews", () => {
   it("survives failed requests and retries the exact same identifier", async () => {
-    await queueReview("card", 4); await flushReviews(owner);
+    await queueReview("card", 4, "back"); await flushReviews(owner);
     const first = (await listRecords(owner))[0];
-    expect(first.value).toMatchObject({ cardId: "card", quality: 4 });
+    expect(first.value).toMatchObject({ cardId: "card", quality: 4, direction: "back" });
     const sent = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ recorded: true }) }); vi.stubGlobal("fetch", sent);
     await flushReviews(owner);
     expect(JSON.parse(sent.mock.calls[0][1].body)).toEqual(first.value);

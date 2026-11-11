@@ -1,4 +1,4 @@
-export type CardOrientation = "front" | "back" | "mixed";
+export type CardOrientation = "front" | "back" | "mixed" | "auto";
 
 export interface ReviewSessionConfig {
   deckIds: string[];

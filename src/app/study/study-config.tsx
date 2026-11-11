@@ -16,12 +16,9 @@ import {
 type StudyFilter = "due" | "random" | "created" | "mastery" | "recent" | "alpha";
 
 const FILTER_OPTIONS: { value: StudyFilter; label: string; description: string }[] = [
-  { value: "due", label: "Due for review", description: "Cards that are due based on spaced repetition (recommended)" },
+  { value: "due", label: "Spaced review", description: "Due and forgotten cards, mixed with untested directions" },
   { value: "random", label: "Random", description: "A random sample from the selected packs" },
-  { value: "mastery", label: "Needs practice", description: "Cards with the lowest mastery first" },
-  { value: "created", label: "Created order", description: "Oldest cards first, in the order you added them" },
-  { value: "recent", label: "Recently added", description: "Newest cards first" },
-  { value: "alpha", label: "Alphabetical", description: "Sorted by the card's front text, A to Z" },
+  { value: "mastery", label: "Needs practice", description: "Failed recall first, then untested sides. Known both ways leave this list." },
 ];
 
 interface Deck {
@@ -48,7 +45,7 @@ interface PersistedDefaults {
   defaultCards?: number;
   defaultAutoFlip?: number;
   defaultAutoAdvance?: number;
-  defaultOrientation?: "front" | "back" | "mixed";
+  defaultOrientation?: "front" | "back" | "mixed" | "auto";
   /** Which packs the user last selected on this screen. We
    *  re-apply this on next visit so a returning user doesn't have
    *  to re-uncheck the same packs every session. Saved as an array
@@ -148,7 +145,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
       ? preselectedDeckIds
       : decks.map((d) => d.id)
   );
-  const [filter, setFilter] = useState<StudyFilter>(preselectedFilter || "due");
+  const [filter, setFilter] = useState<StudyFilter>(FILTER_OPTIONS.some(o=>o.value===preselectedFilter) ? preselectedFilter! : "due");
   // Start with hardcoded defaults to stay SSR-safe — the useEffect
   // below hydrates with localStorage values on the client. A brief
   // flash of defaults is acceptable since the session-settings card
@@ -158,7 +155,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
   const [isCustomCards, setIsCustomCards] = useState(false);
   const [autoFlip, setAutoFlip] = useState(0);
   const [autoAdvance, setAutoAdvance] = useState(0);
-  const [orientation, setOrientation] = useState<"front" | "back" | "mixed">("front");
+  const [orientation, setOrientation] = useState<"front" | "back" | "mixed" | "auto">("auto");
 
   // Hydrate session-settings from localStorage on mount. URL params
   // win over saved defaults for this visit (e.g. home page sends
@@ -195,8 +192,11 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
     if (typeof d.defaultAutoFlip === "number") setAutoFlip(d.defaultAutoFlip);
     if (typeof d.defaultAutoAdvance === "number")
       setAutoAdvance(d.defaultAutoAdvance);
-    if (
-      d.defaultOrientation === "front" ||
+    const requestedOrientation = searchParams.get("orientation");
+    if (requestedOrientation === "auto" || requestedOrientation === "front" || requestedOrientation === "back" || requestedOrientation === "mixed") {
+      setOrientation(requestedOrientation);
+    } else if (
+      d.defaultOrientation === "auto" || d.defaultOrientation === "front" ||
       d.defaultOrientation === "back" ||
       d.defaultOrientation === "mixed"
     ) {
@@ -224,7 +224,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
     // "Today's session" can pin filter=due regardless of saved
     // preference. Otherwise honour what the user last picked.
     if (!preselectedFilter && d.defaultFilter) {
-      setFilter(d.defaultFilter);
+      setFilter(FILTER_OPTIONS.some(o=>o.value===d.defaultFilter) ? d.defaultFilter : "due");
     }
     // Intentional: only run once on mount. searchParams listening here
     // would re-hydrate mid-edit and stomp the user's choices. Tag
@@ -286,7 +286,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
         filter: preselectedFilter || "due",
         autoFlip: "0",
         autoAdvance: "0",
-        orientation: "front",
+        orientation: "auto",
       });
       router.replace(`/study/session?${params.toString()}`);
     }
@@ -445,6 +445,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
           {activeFilter && (
             <p className="text-xs text-muted-foreground">{activeFilter.description}</p>
           )}
+          <a className="inline-block text-sm underline underline-offset-4" href={"/study/needs-practice?"+new URLSearchParams({deckIds:selectedDeckIds.join(","),tags:selectedTags.join(",")}).toString()}>See my needs-practice list</a>
         </CardContent>
       </Card>
 
@@ -622,8 +623,9 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
           </div>
 
           <div>
-            <label className="text-sm font-medium mb-2 block">Card orientation</label>
-            <div className="flex gap-2">
+            <label className="text-sm font-medium mb-2 block">Which side first?</label>
+            <p className="text-xs text-muted-foreground mb-2">Smart tests the weaker or untried direction. Knowing one side does not mark the other as learned.</p>
+            <div className="flex flex-wrap gap-2">
               {CARD_ORIENTATION_OPTIONS.map((opt) => (
                 <Button
                   key={opt.value}
