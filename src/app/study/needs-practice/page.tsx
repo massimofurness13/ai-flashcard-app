@@ -29,11 +29,11 @@ function PracticeList() {
   return <main className="mx-auto max-w-2xl space-y-4 py-6">
     <Link href="/study" className="text-sm underline">Back to study</Link>
     <h1 className="font-editorial text-3xl">Needs practice</h1>
-    <p className="text-sm text-muted-foreground">Failed recall comes first, followed by directions you haven’t tested. Cards known both ways leave this list, but return in Spaced review when due.</p>
+    <p className="text-sm text-muted-foreground">Don’t know and repeated Kind of ratings stay here until you mark the card Secure. Known cards return through spaced retention reviews.</p>
     {total!==null&&<p className="text-sm">{total} cards need attention</p>}
     <Link className={buttonVariants()} href={"/study?"+new URLSearchParams({filter:"mastery",orientation:"auto",deckIds,tags})}>Practise these packs</Link>
     {error&&<p role="alert">{error} <button className="underline" onClick={()=>{setLoading(true);setError("");setRetry(n=>n+1);}}>Retry</button></p>}
-    {total===0&&!loading&&<p>No weak or untested directions remain in these packs.</p>}
+    {total===0&&!loading&&<p>No learning cards remain in these packs.</p>}
     <ul className="divide-y divide-border">{cards.map(c=><li key={c.id} className="py-3">
       <div className="text-xs text-muted-foreground">{c.deck.name} · {c.studyReason} · {c.studyDirection==="front"?"Front":"Back"} first</div>
       <p className="font-medium break-words">{c.studyDirection==="front"?c.front:c.back}</p>

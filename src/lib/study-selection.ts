@@ -1,3 +1,4 @@
+import { isRetentionCard, latestRecallQualities } from "./recall-history";
 import { defaultSM2State, sm2, type SM2State } from "./sm2";
 
 export type Direction = "front" | "back";
@@ -48,15 +49,18 @@ function directionInfo(card: StudyCandidate, direction: Direction, now: Date) {
 export function selectStudyCards(cards: StudyCandidate[], filter: string, orientation: Orientation,
   now = new Date(), random: () => number = Math.random): StudyPick[] {
   const candidates = cards.map(card => {
+    if (filter === "mastery" && isRetentionCard(card)) return null;
     let choices = (orientation === "front" || orientation === "back" ? [orientation] : ["front", "back"])
       .map(d => directionInfo(card, d as Direction, now));
     if (filter === "due") choices = choices.filter(c => c.due);
-    if (filter === "mastery") choices = choices.filter(c => c.needs);
+
     if (!choices.length) return null;
     // Smart orientation selects the weaker / untested side, rather than proving the easy side repeatedly.
     choices.sort((a,b) => Number(b.failed)-Number(a.failed) || Number(b.unseen)-Number(a.unseen) || a.time-b.time);
     const choice = orientation === "mixed" ? choices[Math.floor(random()*choices.length)] : choices[0];
-    return { card, ...choice, tie: random() };
+    return { card, ...choice,
+      reason: filter === "mastery" ? (latestRecallQualities(card)[0] === 2 ? "Kind of — keep practising" : card.reviews.length || card.recallStates.length ? "Needs practice" : "New vocabulary") : choice.reason,
+      tie: random() };
   }).filter(c => c !== null);
   const priority = (a: typeof candidates[number], b: typeof candidates[number]) =>
     Number(b.failed)-Number(a.failed) || a.time-b.time || a.tie-b.tie;

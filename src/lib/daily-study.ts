@@ -1,3 +1,4 @@
+import { isRetentionCard, latestRecallQualities } from "./recall-history";
 import { toLocalDateKey } from "./timezone";
 import { selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
 
@@ -16,16 +17,11 @@ export function recallBand(quality: number | undefined): RecallBand {
   return "secure"; // Old Good / Know it / Easy all recorded successful recall.
 }
 
-export function isSecureBothWays(card: StudyCandidate): boolean {
-  return ["front", "back"].every(direction =>
-    card.recallStates.some(s => s.direction === direction && recallBand(s.lastQuality) === "secure"));
-}
-
 /** Reserve 50 retention and 100 learning slots; practice precedes oldest new cards. */
-export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random: () => number = Math.random): DailyPick[] {
+export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random: () => number = Math.random, previousPicks: DailyPick[] = []): DailyPick[] {
   const practiced = cards.filter(c => c.reviews.length > 0 || c.recallStates.length > 0);
-  const weak = practiced.filter(c => !isSecureBothWays(c));
-  const secure = practiced.filter(isSecureBothWays);
+  const weak = practiced.filter(c => !isRetentionCard(c));
+  const secure = practiced.filter(isRetentionCard);
   const newCards = cards.filter(c => !c.reviews.length && !c.recallStates.length);
   const byId = new Map(cards.map(c => [c.id, c]));
   const practice = selectStudyCards(weak, "mastery", "auto", now, random)
@@ -33,14 +29,33 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
   // Retention queue: due first, then the earliest next review. Every card is unique.
   const retention = selectStudyCards(secure, "random", "auto", now, random)
     .sort((a,b) => {
-      const due = (p: StudyPick) => Math.min(...byId.get(p.id)!.recallStates.map(s => s.nextReviewAt.getTime()));
-      return due(a)-due(b);
-    }).map(p => ({ ...p, group: "retention" as const, studyReason: "Retention — secure both ways" }));
-  const learning: DailyPick[] = practice.slice(0, DAILY_LEARNING_TARGET);
+      const due = (p: StudyPick) => {
+        const card = byId.get(p.id)!;
+        return card.recallStates.find(s => s.direction === p.studyDirection)?.nextReviewAt.getTime() ?? card.nextReviewAt.getTime();
+      };
+      // A single "Kind of" earns a prompt retry before the normal rotation.
+      const retry = (p: StudyPick) => latestRecallQualities(byId.get(p.id)!)[0] === 2;
+      return Number(retry(b))-Number(retry(a)) || due(a)-due(b);
+    }).map(p => ({ ...p, group: "retention" as const, studyReason: "Retention" }));
+  const fresh = selectStudyCards(newCards, "created", "auto", now, random)
+    .map(p => ({ ...p, group: "new" as const, studyReason: "New vocabulary" }));
+  const learningById = new Map([...practice, ...fresh].map(p => [p.id, p]));
+  const learning: DailyPick[] = [];
+  const included = new Set<string>();
+  // Keep the active learning cohort across days. Only promotion, archive or
+  // deletion frees a place; unfinished/unreviewed learning cards cannot vanish.
+  for (const previous of previousPicks) {
+    const pick = learningById.get(previous.id);
+    if (previous.group !== "retention" && pick && !included.has(pick.id) && learning.length < DAILY_LEARNING_TARGET) {
+      learning.push(pick); included.add(pick.id);
+    }
+  }
+  for (const pick of practice) {
+    if (learning.length >= DAILY_LEARNING_TARGET) break;
+    if (!included.has(pick.id)) { learning.push(pick); included.add(pick.id); }
+  }
   if (learning.length < DAILY_LEARNING_TARGET) {
-    learning.push(...selectStudyCards(newCards, "created", "auto", now, random)
-      .slice(0, DAILY_LEARNING_TARGET - learning.length)
-      .map(p => ({ ...p, group: "new" as const, studyReason: "New vocabulary" })));
+    learning.push(...fresh.filter(p => !included.has(p.id)).slice(0, DAILY_LEARNING_TARGET - learning.length));
   }
   // Keep the workload predictable: missing retention must not turn into extra
   // difficult/new cards. A smaller pool yields a shorter, unique-card session.

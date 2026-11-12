@@ -6,8 +6,9 @@ const tomorrow = new Date(now.getTime()+86400000);
 const state = (direction: string, quality=4, nextReviewAt=tomorrow): RecallState => ({direction,lastQuality:quality,lastReviewedAt:yesterday,nextReviewAt,easeFactor:2.5,interval:6,repetitions:2});
 const card = (id: string, recallStates: RecallState[]=[]): StudyCandidate => ({id,front:id,tags:null,createdAt:yesterday,nextReviewAt:yesterday,easeFactor:2.5,interval:0,repetitions:0,recallStates,reviews:[]});
 describe("direction-aware study",()=>{
-  it("tests the other direction after a successful first face",()=>{
-    expect(selectStudyCards([card("a",[state("front")])],"mastery","auto",now)[0].studyDirection).toBe("back");
+  it("moves a known card to retention and tests its other direction there",()=>{
+    expect(selectStudyCards([card("a",[state("front")])],"mastery","auto",now)).toEqual([]);
+    expect(selectStudyCards([card("a",[state("front")])],"random","auto",now)[0].studyDirection).toBe("back");
   });
   it("excludes cards known both ways from practice, but recalls them when overdue",()=>{
     const a=card("a",[state("front",4,yesterday),state("back")]);
@@ -25,9 +26,9 @@ describe("direction-aware study",()=>{
   it("honours a manually selected side",()=>{
     expect(selectStudyCards([card("a",[state("front")])],"mastery","front",now)).toEqual([]);
   });
-  it("never infers known directions from old directionless ratings",()=>{
+  it("honours old known ratings without requiring both directions to be re-proved",()=>{
     const a=card("a"); a.reviews=[{quality:4,reviewedAt:yesterday}];
-    expect(selectStudyCards([a],"mastery","auto",now)).toHaveLength(1);
+    expect(selectStudyCards([a],"mastery","auto",now)).toHaveLength(0);
   });
   it("random covers every unique card before repeating and avoids boundary repeats",()=>{
     const picks=selectStudyCards(Array.from({length:100},(_,i)=>card(String(i))),"random","auto",now);
