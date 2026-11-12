@@ -2,6 +2,8 @@ import { toLocalDateKey } from "./timezone";
 import { selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
 
 export const DAILY_STUDY_TARGET = 150;
+export const DAILY_RETENTION_TARGET = 50;
+export const DAILY_LEARNING_TARGET = DAILY_STUDY_TARGET - DAILY_RETENTION_TARGET;
 
 export type DailyPick = StudyPick & { group: "practice" | "retention" | "new" };
 export type RecallBand = "unrated" | "dont-know" | "kind-of" | "secure";
@@ -19,7 +21,7 @@ export function isSecureBothWays(card: StudyCandidate): boolean {
     card.recallStates.some(s => s.direction === direction && recallBand(s.lastQuality) === "secure"));
 }
 
-/** Up to 30 retention; fill the learning slots with practice first, then oldest new cards. */
+/** Reserve 50 retention and 100 learning slots; practice precedes oldest new cards. */
 export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random: () => number = Math.random): DailyPick[] {
   const practiced = cards.filter(c => c.reviews.length > 0 || c.recallStates.length > 0);
   const weak = practiced.filter(c => !isSecureBothWays(c));
@@ -34,15 +36,15 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
       const due = (p: StudyPick) => Math.min(...byId.get(p.id)!.recallStates.map(s => s.nextReviewAt.getTime()));
       return due(a)-due(b);
     }).map(p => ({ ...p, group: "retention" as const, studyReason: "Retention — secure both ways" }));
-  const selected: DailyPick[] = retention.slice(0,30);
-  // Normally 120 learning slots. If retention has fewer than 30 unique
-  // cards, use the spare room for learning rather than duplicate reviews.
-  selected.push(...practice.slice(0,DAILY_STUDY_TARGET-selected.length));
-  if (selected.length < DAILY_STUDY_TARGET) {
-    selected.push(...selectStudyCards(newCards, "created", "auto", now, random)
-      .slice(0,DAILY_STUDY_TARGET-selected.length)
+  const learning: DailyPick[] = practice.slice(0, DAILY_LEARNING_TARGET);
+  if (learning.length < DAILY_LEARNING_TARGET) {
+    learning.push(...selectStudyCards(newCards, "created", "auto", now, random)
+      .slice(0, DAILY_LEARNING_TARGET - learning.length)
       .map(p => ({ ...p, group: "new" as const, studyReason: "New vocabulary" })));
   }
+  // Keep the workload predictable: missing retention must not turn into extra
+  // difficult/new cards. A smaller pool yields a shorter, unique-card session.
+  const selected: DailyPick[] = [...retention.slice(0, DAILY_RETENTION_TARGET), ...learning];
   // Interleave the chosen groups so the session does not arrive pack by pack.
   for (let i=selected.length-1;i>0;i--) {
     const j=Math.floor(random()*(i+1)); [selected[i],selected[j]]=[selected[j],selected[i]];
