@@ -3,6 +3,8 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { StudySession, type StudyStats } from "@/components/study/study-session";
+import Link from "next/link";
+import { DailyResultsPanel } from "@/components/study/daily-results";
 import { StudyCountdown } from "@/components/study/study-countdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +49,7 @@ function StudySessionContent() {
   const [completed, setCompleted] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stats, setStats] = useState<StudyStats | null>(null);
-  const [daily, setDaily] = useState<{timingKey?:string;completed:number;total:number;ratings:Record<number,number>;mix:{practice:number;retention:number;new:number}} | null>(null);
+  const [daily, setDaily] = useState<{day:string;timingKey?:string;completed:number;total:number;ratings:Record<number,number>;mix:{practice:number;retention:number;new:number}} | null>(null);
   // Onboarding learning language — drives the voice fallback for
   // decks with no explicit language code (so we never use the
   // robotic device voice).
@@ -144,14 +146,15 @@ function StudySessionContent() {
 
   if (completed && stats) {
     return (
-      <div className="space-y-6 max-w-md mx-auto">
-        <div className="text-center py-8">
-          <span className="text-5xl mb-4 block">{"\ud83c\udf1f"}</span>
+      <div className="space-y-4 max-w-md mx-auto">
+        <div className="text-center pt-3 pb-1">
           <h2 className="font-editorial text-3xl font-medium sm:text-4xl">{filter==="daily" ? "Daily session complete" : "Session complete"}</h2>
           <p className="text-muted-foreground mt-2">
             You studied {stats.cardsReviewed} cards
           </p>
         </div>
+
+        {(daily?.day ?? resume?.dailyDay) && <DailyResultsPanel day={(daily?.day ?? resume?.dailyDay)!} />}
 
         <Card>
           <CardHeader>
@@ -177,6 +180,7 @@ function StudySessionContent() {
           </CardContent>
         </Card>
 
+        <p className="text-center text-xs text-muted-foreground"><Link className="underline underline-offset-4" href="/study/trial">View the scheduling trial</Link></p>
         <div className="flex gap-3">
           <Button className="flex-1" onClick={() => router.push("/study")}>
             Study more
@@ -206,6 +210,7 @@ function StudySessionContent() {
   return (
     <>
     <StudySession
+      dailyDay={resume?.dailyDay ?? daily?.day}
       timingKey={resume?.timingKey ?? daily?.timingKey}
       initialCards={cards}
       learningLanguage={learningLanguage}

@@ -39,6 +39,7 @@ export interface StudyResumeCard {
 }
 
 export interface StudyResumeSnapshot {
+  dailyDay?: string;
   timingKey?: string;
   progressOffset?: number;
   cards: StudyResumeCard[];

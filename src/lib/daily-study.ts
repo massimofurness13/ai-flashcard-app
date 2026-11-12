@@ -1,4 +1,4 @@
-import { isRetentionCard, latestRecallQualities } from "./recall-history";
+import { isRetentionCard, justLostRetention, latestRecallQualities } from "./recall-history";
 import { toLocalDateKey } from "./timezone";
 import { selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
 
@@ -42,8 +42,15 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
   const learningById = new Map([...practice, ...fresh].map(p => [p.id, p]));
   const learning: DailyPick[] = [];
   const included = new Set<string>();
+  const previouslyRetained = new Set(previousPicks.filter(p => p.group === "retention").map(p => p.id));
+  // A new lapse takes a learning slot before the existing cohort. The displaced
+  // card remains in the practice bank; it is neither promoted nor deleted.
+  const relapsed = practice.filter(p => previouslyRetained.has(p.id) || justLostRetention(byId.get(p.id)!));
+  for (const pick of relapsed.slice(0, DAILY_LEARNING_TARGET)) {
+    learning.push(pick); included.add(pick.id);
+  }
   // Keep the active learning cohort across days. Only promotion, archive or
-  // deletion frees a place; unfinished/unreviewed learning cards cannot vanish.
+  // deletion frees a place, except for the explicit recent-lapse priority above.
   for (const previous of previousPicks) {
     const pick = learningById.get(previous.id);
     if (previous.group !== "retention" && pick && !included.has(pick.id) && learning.length < DAILY_LEARNING_TARGET) {
