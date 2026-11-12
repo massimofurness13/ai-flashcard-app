@@ -1,3 +1,4 @@
+import { toLocalDateKey } from "./timezone";
 import { selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
 
 export const DAILY_STUDY_TARGET = 150;
@@ -64,4 +65,15 @@ export function dailyProgress(picks: DailyPick[], logs: {cardId:string;direction
     else { const band=quality>=3?4:quality; ratings[band]++; }
   }
   return { remaining, completed:picks.length-remaining.length,total:picks.length,ratings };
+}
+
+export type DailyStudySummary = { day: string; timeZone: string; completed: number; total: number };
+
+/** Ignore yesterday's device cache; count the frozen set, not unrelated/repeated reviews. */
+export function dailyStudyStatus(summary?: DailyStudySummary | null, now = new Date()) {
+  let current = false;
+  try { current = !!summary && summary.day === toLocalDateKey(now, summary.timeZone); } catch { /* stale/invalid cache */ }
+  if (!current || !summary || summary.total <= 0) return { total: DAILY_STUDY_TARGET, completed: 0, remaining: DAILY_STUDY_TARGET, finished: false };
+  const completed = Math.max(0, Math.min(summary.total, summary.completed));
+  return { total: summary.total, completed, remaining: summary.total - completed, finished: completed === summary.total };
 }

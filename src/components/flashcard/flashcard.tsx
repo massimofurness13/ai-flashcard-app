@@ -129,16 +129,13 @@ export function Flashcard({
   }, [autoPlayVoice, paused, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode]);
 
   return (
-    // Widened from max-w-md to max-w-2xl so the card consumes more of
-    // the viewport — user feedback: previous card was too small and
-    // left lots of dead space below on mobile. minHeight bumped from
-    // 320 to 520 so the image + text get visual breathing room.
+    // Study sessions supply a viewport-sized height; other surfaces keep 520px.
     <div
       className={cn(
         "flashcard-container relative w-full max-w-2xl mx-auto",
         className
       )}
-      style={{ minHeight: "520px" }}
+      style={{ minHeight: "var(--study-card-height, 520px)" }}
     >
       <div
         className={cn(
@@ -147,12 +144,12 @@ export function Flashcard({
           isFlipped && "flipped"
         )}
         onClick={onFlip}
-        style={{ minHeight: "520px" }}
+        style={{ minHeight: "var(--study-card-height, 520px)" }}
       >
         {/* Front face */}
         <div className="flashcard-front rounded-2xl border border-border bg-card shadow-lg p-5 sm:p-8 flex flex-col">
           {showImage && (
-            <div className="mb-4 flex justify-center">
+            <div className="flashcard-illustration mb-4 flex justify-center">
               <FlashcardImage
                 imageUrl={imageUrl}
                 cardText={front}
@@ -176,7 +173,7 @@ export function Flashcard({
         {/* Back face */}
         <div className="flashcard-back rounded-2xl border border-border bg-card shadow-lg p-5 sm:p-8 flex flex-col">
           {showImage && (
-            <div className="mb-4 flex justify-center">
+            <div className="flashcard-illustration mb-4 flex justify-center">
               <FlashcardImage
                 imageUrl={imageUrl}
                 cardText={front}

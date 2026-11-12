@@ -366,10 +366,9 @@ export function StudySession({
   const backVoiceName = showBackFirst ? currentCard.deck.frontVoice : currentCard.deck.backVoice;
 
   return (
-    <div className="space-y-6">
+    <div className="study-session space-y-2 max-w-2xl mx-auto">
       <ImagePreloader urls={upcomingImageUrls} />
       {reviewError && <p role="alert" className="text-sm text-destructive">{reviewError}</p>}
-      {currentCard.studyReason && <p className="text-xs text-muted-foreground">{currentCard.studyReason} · {showBackFirst ? "Back" : "Front"} face first</p>}
       <VoicePreloader items={upcomingVoiceItems} />
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm text-muted-foreground truncate">
@@ -438,6 +437,7 @@ export function StudySession({
       >
         <div className="flashcard-enter">
           <Flashcard
+            className="study-flashcard"
             front={frontText}
             back={backText}
             imageUrl={currentCard.imageUrl}
@@ -471,7 +471,7 @@ export function StudySession({
       </SwipeableCard>
 
       {/* Single action area — either Show Answer OR rating, never both */}
-      <div className="min-h-[80px] flex items-start justify-center">
+      <div className="min-h-12 flex items-start justify-center">
         {/* Pre-flip action area. The card itself is tappable to flip
          * (Flashcard's outer div has onClick={onFlip}) so we don't
          * need an explicit "Show Answer" button. When auto-flip is

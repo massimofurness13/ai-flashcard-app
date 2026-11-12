@@ -1,4 +1,5 @@
 "use client";
+import type { DailyStudySummary } from "@/lib/daily-study";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -103,6 +104,7 @@ function sortDecks(decks: Deck[], key: SortKey): Deck[] {
 }
 
 interface HomePageProps {
+  dailyStudy?: DailyStudySummary | null;
   folders: Folder[];
   unfolderedDecks: Deck[];
   totalCards: number;
@@ -121,6 +123,7 @@ interface HomePageProps {
 }
 
 export function HomePage({
+  dailyStudy,
   folders,
   unfolderedDecks,
   totalCards,
@@ -238,7 +241,7 @@ export function HomePage({
     <div className="space-y-7 sm:space-y-9">
       <section aria-label="Daily study" className="space-y-4">
         <h1 className="sr-only">Your daily study</h1>
-        <DailyStudyButton />
+        <DailyStudyButton summary={dailyStudy} />
         <div className="space-y-2 px-1">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
             <p className="text-muted-foreground">
