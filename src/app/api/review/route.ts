@@ -6,7 +6,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { fillRandomSession, scheduleDirection, selectStudyCards, type Orientation, type StudyCandidate } from "@/lib/study-selection";
-import { buildDailyPlan, dailyProgress, type DailyPick } from "@/lib/daily-study";
+import { buildDailyPlan } from "@/lib/daily-study";
+import { readDailyPlanProgress } from "@/lib/daily-plan-progress";
 import { toLocalDateKey } from "@/lib/timezone";
 
 const ReviewInput = z.object({ cardId: z.string().min(1).max(128), quality: z.number().int().min(0).max(5), direction: z.enum(["front", "back"]).optional(), eventId: z.string().uuid().optional(), reviewedAt: z.string().datetime().optional() });
@@ -62,12 +63,8 @@ export async function GET(request: NextRequest) {
       }});
     }
     const activeIds=new Set(candidates.map(c=>c.id));
-    const picks=(plan?.picks as unknown as DailyPick[] | undefined || []).filter(p=>activeIds.has(p.id));
-    const logs=plan && picks.length ? await prisma.reviewLog.findMany({where:{
-      card:{deck:{userId:auth.userId}},cardId:{in:picks.map(p=>p.id)},
-      quality:{gt:0},reviewedAt:{gte:plan.createdAt},
-    },orderBy:{reviewedAt:"desc"},select:{cardId:true,direction:true,quality:true}}) : [];
-    const progress=dailyProgress(picks,logs);
+    const progress=await readDailyPlanProgress(auth.userId,plan,activeIds);
+    const { picks }=progress;
     selected=progress.remaining;
     eligible=selected;
     daily={day,timingKey:plan ? createHash("sha256").update(`${auth.userId}:${day}:${plan.createdAt.toISOString()}`).digest("hex").slice(0,32) : undefined,completed:progress.completed,total:progress.total,ratings:progress.ratings,

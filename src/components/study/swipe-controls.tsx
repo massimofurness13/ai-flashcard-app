@@ -19,10 +19,7 @@ interface SwipeControlsProps {
  */
 export function SwipeControls({ onKnow, onDontKnow, onKindOf, disabled }: SwipeControlsProps) {
   return (
-    <div className="w-full space-y-2">
-      <p className="text-center text-sm text-muted-foreground">
-        How well did you recall it?
-      </p>
+    <div className="w-full" role="group" aria-label="How well did you recall it?">
       <div className="flex justify-center gap-2">
         <Button
           variant="outline"

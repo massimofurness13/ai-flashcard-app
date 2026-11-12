@@ -1,4 +1,5 @@
 import "server-only";
+import { readDailyPlanProgress } from "@/lib/daily-plan-progress";
 import { prisma } from "@/lib/db";
 import { masteryLevel, letterGrade } from "@/lib/sm2";
 import { toLocalDateKey, startOfTodayInTz } from "@/lib/timezone";
@@ -123,6 +124,11 @@ export async function getLibraryData(userId: string) {
   const tz = userData?.reminderTimezone || "UTC";
   const startOfToday = startOfTodayInTz(tz);
 
+  const day = toLocalDateKey(new Date(), tz);
+  const plan = await prisma.dailyStudyPlan.findUnique({ where: { userId_day: { userId, day } } });
+  const planProgress = plan ? await readDailyPlanProgress(userId, plan) : null;
+  const dailyStudy = planProgress ? { day, timeZone: tz, completed: planProgress.completed, total: planProgress.total } : null;
+
   // 60 days back from today's local start is plenty for a streak calc.
   const yearAgo = new Date(startOfToday.getTime() - 60 * 86_400_000);
 
@@ -163,6 +169,6 @@ export async function getLibraryData(userId: string) {
     }
   }
 
-  return { folders: foldersWithGrades, unfolderedDecks: unfolderedWithGrades, totalCards, userName: displayName, cardsReviewedToday, dailyGoal, streak, goalHitCelebrationShown, onboardingCompleted };
+  return { dailyStudy, folders: foldersWithGrades, unfolderedDecks: unfolderedWithGrades, totalCards, userName: displayName, cardsReviewedToday, dailyGoal, streak, goalHitCelebrationShown, onboardingCompleted };
 }
 

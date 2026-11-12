@@ -514,3 +514,17 @@ body.font-xlarge { font-size: 20px; }
     transition: none !important;
   }
 }
+
+/* Keep the card and touch ratings together, including short phone viewports.
+   Only study sessions opt in; editor/landing cards keep their existing size. */
+.app-content:has(.study-session) { padding-bottom: 0; }
+.app-content:has(.study-session) > div { padding-top: 8px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+body:has(.study-session) > footer { display: none; }
+.study-session { --study-card-height: clamp(230px, calc(100dvh - 200px - env(safe-area-inset-bottom, 0px)), 660px); }
+.study-flashcard .flashcard-front,
+.study-flashcard .flashcard-back { padding: 16px; overflow-y: auto; }
+.study-flashcard .flashcard-illustration { flex-shrink: 0; margin-bottom: 12px; }
+.study-flashcard .flashcard-illustration img { max-height: min(320px, calc(var(--study-card-height) * .55)); }
+@media (min-width: 640px) {
+  .study-flashcard .flashcard-front, .study-flashcard .flashcard-back { padding: 24px; }
+}

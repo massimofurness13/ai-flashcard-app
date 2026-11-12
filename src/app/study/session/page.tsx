@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { peekStudyResume, clearStudyResume } from "@/lib/study-resume";
 import { deviceOwner } from "@/lib/device-media";
-import { DAILY_STUDY_TARGET } from "@/lib/daily-study";
 import { readStudyTime, formatStudyTime } from "@/lib/study-time";
 import { flushReviews } from "@/lib/review-outbox";
 
@@ -192,14 +191,9 @@ function StudySessionContent() {
 
   // Cards are loaded but the user hasn't passed the get-ready
   // countdown yet — show it (and preload the opening audio behind it).
-  const dailyHeading = daily && <div className="mb-4 text-sm text-muted-foreground">
-    <p className="font-medium text-foreground">Your daily set: {daily.total} cards</p>
-    <p>{daily.mix.practice} practice · {daily.mix.retention} retention · {daily.mix.new} new</p>
-    {daily.total<DAILY_STUDY_TARGET && <p>You’ve used the available learning cards. Add a pack for more new vocabulary; retention stays capped at 30.</p>}
-  </div>;
   if (!prepared) {
     return (
-      <>{dailyHeading}
+      <>
       <StudyCountdown
         cards={cards}
         learningLanguage={learningLanguage}
@@ -210,7 +204,7 @@ function StudySessionContent() {
   }
 
   return (
-    <>{dailyHeading}
+    <>
     <StudySession
       timingKey={resume?.timingKey ?? daily?.timingKey}
       initialCards={cards}
