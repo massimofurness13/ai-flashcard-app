@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       ...(cursor ? { cursor: {id:cursor}, skip:1 } : {}),
       select: { id:true, front:true, tags:true, createdAt:true, easeFactor:true, interval:true,
         repetitions:true, nextReviewAt:true, recallStates:true,
-        reviews:{where:{quality:{gt:0}},orderBy:{reviewedAt:"desc"},take:2,select:{quality:true,reviewedAt:true}} }
+        reviews:{where:{quality:{gt:0}},orderBy:{reviewedAt:"desc"},take:3,select:{quality:true,reviewedAt:true}} }
     });
     candidates.push(...batch.filter(c=>tags.every(t=>(c.tags||"").split(",").map(s=>s.trim().toLowerCase()).includes(t))));
     if(batch.length<1000)break;

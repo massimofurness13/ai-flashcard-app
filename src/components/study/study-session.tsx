@@ -67,6 +67,7 @@ interface Card {
 }
 
 interface StudySessionProps {
+  dailyDay?: string;
   timingKey?: string;
   progressOffset?: number;
   initialCards: Card[];
@@ -105,6 +106,7 @@ const DEAL_OUT_MS = 100;
 // See src/lib/study-resume.ts.
 
 export function StudySession({
+  dailyDay,
   timingKey,
   initialCards,
   learningLanguage,
@@ -404,6 +406,7 @@ export function StudySession({
                 currentIndex,
                 stats: { ...stats, ...stopClock() },
                 timingKey,
+                dailyDay,
                 isFlipped,
                 learningLanguage: learningLanguage ?? null,
                 savedAt: Date.now(),

@@ -101,6 +101,27 @@ describe("daily 150 with fixed learning and retention allocations",()=>{
   partial.reviews=[{quality:1,reviewedAt:now},{quality:4,reviewedAt:new Date(0)}];
   expect(buildDailyPlan([partial],now)[0].group).toBe("practice");
  });
+ it("admits a failed retention card ahead of a full learning cohort without changing the split",()=>{
+  const cards=pool(100,60,0);
+  const yesterday=buildDailyPlan(cards,now,()=>0.5);
+  const failed=yesterday.find(p=>p.group==="retention")!;
+  const updated=cards.map(c=>c.id===failed.id?{...c,reviews:[{quality:1,reviewedAt:now},...c.reviews]}:c);
+  const next=buildDailyPlan(updated,now,()=>0.5,yesterday);
+  expect(counts(next)).toEqual([100,50,0]);
+  expect(next.find(p=>p.id===failed.id)?.group).toBe("practice");
+  const priorLearning=yesterday.filter(p=>p.group==="practice");
+  expect(priorLearning.filter(p=>next.some(n=>n.id===p.id))).toHaveLength(99);
+  expect(updated.filter(c=>!isRetentionCard(c))).toHaveLength(101);
+ });
+ it("prioritises a lapse outside yesterday's set, including two partial recalls",()=>{
+  const original=pool(100,60,0),previous=buildDailyPlan(original,now,()=>0.5);
+  for(const grades of [[1,4],[2,2,4],[1,2,4]]){
+   const lapse={...card("manual-lapse","weak"),reviews:grades.map((quality,i)=>({quality,reviewedAt:new Date(now.getTime()-i*86400000)}))};
+   const next=buildDailyPlan([...original,lapse],now,()=>0.5,previous);
+   expect(next.find(p=>p.id===lapse.id)?.group).toBe("practice");
+   expect(counts(next)).toEqual([100,50,0]);
+  }
+ });
  it("resumes the same set without counting retries, other faces or passive views",()=>{
   const picks=buildDailyPlan(pool(3,0,0),now,()=>0.5);
   const first=picks[0];
