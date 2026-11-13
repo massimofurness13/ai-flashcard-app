@@ -15,7 +15,7 @@ describe("Home daily-set progress", () => {
   it("does not show yesterday's cached completion after local midnight", () => {
     const finished = { ...summary, completed: 150 };
     expect(dailyStudyStatus(finished, new Date("2026-11-13T04:59:00Z")).finished).toBe(true);
-    expect(dailyStudyStatus(finished, new Date("2026-11-13T05:00:00Z")).remaining).toBe(150);
+    expect(dailyStudyStatus(finished, new Date("2026-11-13T05:00:00Z")).remaining).toBe(100);
   });
   it("does not claim an empty or not-yet-created set is finished", () => {
     expect(dailyStudyStatus(null, now).finished).toBe(false);

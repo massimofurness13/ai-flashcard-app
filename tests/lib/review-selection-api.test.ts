@@ -21,6 +21,15 @@ describe("study selection API",()=>{
     expect(mocks.previous).not.toHaveBeenCalled();
     expect(mocks.cards.mock.calls[0][0].where.deckId).toBeUndefined();
   });
+  it("keeps today's older set complete after a card deletion instead of replacing it with 100",async()=>{
+    const picks=Array.from({length:150},(_,i)=>({id:"c"+i,studyDirection:"front",studyReason:"",group:"practice"}));
+    mocks.plan.mockResolvedValue({createdAt:new Date(0),picks});
+    mocks.cards.mockResolvedValueOnce(picks.slice(1).map(p=>card(p.id)));
+    mocks.logs.mockResolvedValue(picks.slice(1).map(p=>({cardId:p.id,direction:"front",quality:4})));
+    const data=await(await GET(new NextRequest("https://huella.example/api/review?filter=daily&limit=100"))).json();
+    expect(data.daily).toMatchObject({completed:149,total:149});expect(data.cards).toEqual([]);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
   it("uses the plan returned by the atomic upsert when two devices start together",async()=>{
     mocks.plan.mockResolvedValue(null);
     mocks.upsert.mockResolvedValue({createdAt:new Date(0),picks:[{id:"b",studyDirection:"back",studyReason:"New",group:"new"}]});
@@ -39,7 +48,7 @@ describe("study selection API",()=>{
     mocks.cards.mockResolvedValueOnce([...waiting,card("kept")]).mockResolvedValueOnce([card("kept"),...waiting]);
     const data=await(await GET(new NextRequest("https://huella.example/api/review?filter=daily"))).json();
     expect(data.cards.some((c:{id:string})=>c.id==="kept")).toBe(true);
-    expect(data.daily.total).toBe(100);
+    expect(data.daily.total).toBe(50);
     expect(mocks.previous.mock.calls[0][0].where).toMatchObject({userId:"owner",day:{lt:expect.any(String)}});
   });
   it("scans past 1000 cards and applies tags before counting or selecting",async()=>{

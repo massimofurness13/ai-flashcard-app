@@ -2,7 +2,7 @@ import { isRetentionCard, justLostRetention, latestRecallQualities } from "./rec
 import { toLocalDateKey } from "./timezone";
 import { selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
 
-export const DAILY_STUDY_TARGET = 150;
+export const DAILY_STUDY_TARGET = 100;
 export const DAILY_RETENTION_TARGET = 50;
 export const DAILY_LEARNING_TARGET = DAILY_STUDY_TARGET - DAILY_RETENTION_TARGET;
 
@@ -17,7 +17,7 @@ export function recallBand(quality: number | undefined): RecallBand {
   return "secure"; // Old Good / Know it / Easy all recorded successful recall.
 }
 
-/** Reserve 50 retention and 100 learning slots; practice precedes oldest new cards. */
+/** Reserve 50 retention and 50 learning slots; practice precedes oldest new cards. */
 export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random: () => number = Math.random, previousPicks: DailyPick[] = []): DailyPick[] {
   const practiced = cards.filter(c => c.reviews.length > 0 || c.recallStates.length > 0);
   const weak = practiced.filter(c => !isRetentionCard(c));
