@@ -1,10 +1,12 @@
 import { isRetentionCard, justLostRetention, latestRecallQualities } from "./recall-history";
 import { toLocalDateKey } from "./timezone";
-import { selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
+import { lastCardReviewAt, reviewDueAt, selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
 
 import { DAILY_STUDY_TARGET, DAILY_RETENTION_TARGET, initialDailyAllocation, type DailyAllocation } from "./daily-allocation";
 export { DAILY_STUDY_TARGET, DAILY_RETENTION_TARGET } from "./daily-allocation";
 export const DAILY_LEARNING_TARGET = DAILY_STUDY_TARGET - DAILY_RETENTION_TARGET;
+
+export const DAILY_OLDEST_RETENTION_TARGET = 20;
 
 export type DailyPick = StudyPick & { group: "practice" | "retention" | "new"; dailyAllocation?: DailyAllocation };
 export type RecallBand = "unrated" | "dont-know" | "kind-of" | "secure";
@@ -28,17 +30,20 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
   const byId = new Map(cards.map(c => [c.id, c]));
   const practice = selectStudyCards(weak, "mastery", "auto", now, random)
     .map(p => ({ ...p, group: "practice" as const }));
-  // Retention queue: due first, then the earliest next review. Every card is unique.
-  const retention = selectStudyCards(secure, "random", "auto", now, random)
-    .sort((a,b) => {
-      const due = (p: StudyPick) => {
-        const card = byId.get(p.id)!;
-        return card.recallStates.find(s => s.direction === p.studyDirection)?.nextReviewAt.getTime() ?? card.nextReviewAt.getTime();
-      };
-      // A single "Kind of" earns a prompt retry before the normal rotation.
-      const retry = (p: StudyPick) => latestRecallQualities(byId.get(p.id)!)[0] === 2;
-      return Number(retry(b))-Number(retry(a)) || due(a)-due(b);
-    }).map(p => ({ ...p, group: "retention" as const, studyReason: "Retention" }));
+  // Reserve coverage within retention, then use the remaining slots for retries/due cards.
+  // Reviewing either face moves a card to the back of the coverage rotation.
+  const retentionPicks = selectStudyCards(secure, "random", "auto", now, random);
+  const oldest = [...retentionPicks].sort((a,b) =>
+    lastCardReviewAt(byId.get(a.id)!).getTime()-lastCardReviewAt(byId.get(b.id)!).getTime()
+    || a.id.localeCompare(b.id)).slice(0, Math.min(DAILY_OLDEST_RETENTION_TARGET, retentionTarget));
+  const covered = new Set(oldest.map(p => p.id));
+  const scheduled = retentionPicks.filter(p => !covered.has(p.id)).sort((a,b) => {
+    const retry = (p: StudyPick) => latestRecallQualities(byId.get(p.id)!)[0] === 2;
+    return Number(retry(b))-Number(retry(a))
+      || reviewDueAt(byId.get(a.id)!, a.studyDirection).getTime()-reviewDueAt(byId.get(b.id)!, b.studyDirection).getTime();
+  });
+  const retention = [...oldest, ...scheduled]
+    .map(p => ({ ...p, group: "retention" as const, studyReason: "Retention" }));
   const fresh = selectStudyCards(newCards, "created", "auto", now, random)
     .map(p => ({ ...p, group: "new" as const, studyReason: "New vocabulary" }));
   const learningById = new Map([...practice, ...fresh].map(p => [p.id, p]));

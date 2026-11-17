@@ -35,10 +35,11 @@ describe("daily 120 with a 70:50 starting allocation",()=>{
  it("returns a shorter set when learning runs out rather than exceeding 50 retention",()=>{
   expect(counts(buildDailyPlan(pool(5,100,2),now))).toEqual([5,50,2]);
  });
- it("selects the 50 earliest-due retention cards and keeps practice within 70",()=>{
+ it("selects the 20 oldest plus 30 earliest-due retention cards within 120",()=>{
   const cards=pool(200,80,200);
   for(const [i,c] of cards.filter(isRetentionCard).entries()) {
-   for(const s of c.recallStates) s.nextReviewAt=new Date(now.getTime()+i*86400000);
+   c.reviews=[{quality:4,reviewedAt:new Date(now.getTime()-(80-i)*3600000)}];
+   for(const s of c.recallStates) { s.lastReviewedAt=c.reviews[0].reviewedAt; s.nextReviewAt=new Date(now.getTime()+i*3600000); }
   }
   const picks=buildDailyPlan(cards,now);
   expect(counts(picks)).toEqual([70,50,0]);
