@@ -2,11 +2,11 @@ import { isRetentionCard, justLostRetention, latestRecallQualities } from "./rec
 import { toLocalDateKey } from "./timezone";
 import { selectStudyCards, type StudyCandidate, type StudyPick } from "./study-selection";
 
-export const DAILY_STUDY_TARGET = 100;
-export const DAILY_RETENTION_TARGET = 50;
+import { DAILY_STUDY_TARGET, DAILY_RETENTION_TARGET, initialDailyAllocation, type DailyAllocation } from "./daily-allocation";
+export { DAILY_STUDY_TARGET, DAILY_RETENTION_TARGET } from "./daily-allocation";
 export const DAILY_LEARNING_TARGET = DAILY_STUDY_TARGET - DAILY_RETENTION_TARGET;
 
-export type DailyPick = StudyPick & { group: "practice" | "retention" | "new" };
+export type DailyPick = StudyPick & { group: "practice" | "retention" | "new"; dailyAllocation?: DailyAllocation };
 export type RecallBand = "unrated" | "dont-know" | "kind-of" | "secure";
 
 /** Read historical scores in place; passive views are never proof of recall. */
@@ -17,8 +17,10 @@ export function recallBand(quality: number | undefined): RecallBand {
   return "secure"; // Old Good / Know it / Easy all recorded successful recall.
 }
 
-/** Reserve 50 retention and 50 learning slots; practice precedes oldest new cards. */
-export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random: () => number = Math.random, previousPicks: DailyPick[] = []): DailyPick[] {
+/** Start 70:50, then adapt between 80:40 and 40:80. Practice precedes new cards. */
+export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random: () => number = Math.random, previousPicks: DailyPick[] = [], allocation = initialDailyAllocation()): DailyPick[] {
+  const retentionTarget = allocation.retentionTarget;
+  const learningTarget = DAILY_STUDY_TARGET-retentionTarget;
   const practiced = cards.filter(c => c.reviews.length > 0 || c.recallStates.length > 0);
   const weak = practiced.filter(c => !isRetentionCard(c));
   const secure = practiced.filter(isRetentionCard);
@@ -46,31 +48,32 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
   // A new lapse takes a learning slot before the existing cohort. The displaced
   // card remains in the practice bank; it is neither promoted nor deleted.
   const relapsed = practice.filter(p => previouslyRetained.has(p.id) || justLostRetention(byId.get(p.id)!));
-  for (const pick of relapsed.slice(0, DAILY_LEARNING_TARGET)) {
+  for (const pick of relapsed.slice(0, learningTarget)) {
     learning.push(pick); included.add(pick.id);
   }
   // Keep the active learning cohort across days. Only promotion, archive or
   // deletion frees a place, except for the explicit recent-lapse priority above.
   for (const previous of previousPicks) {
     const pick = learningById.get(previous.id);
-    if (previous.group !== "retention" && pick && !included.has(pick.id) && learning.length < DAILY_LEARNING_TARGET) {
+    if (previous.group !== "retention" && pick && !included.has(pick.id) && learning.length < learningTarget) {
       learning.push(pick); included.add(pick.id);
     }
   }
   for (const pick of practice) {
-    if (learning.length >= DAILY_LEARNING_TARGET) break;
+    if (learning.length >= learningTarget) break;
     if (!included.has(pick.id)) { learning.push(pick); included.add(pick.id); }
   }
-  if (learning.length < DAILY_LEARNING_TARGET) {
-    learning.push(...fresh.filter(p => !included.has(p.id)).slice(0, DAILY_LEARNING_TARGET - learning.length));
+  if (learning.length < learningTarget) {
+    learning.push(...fresh.filter(p => !included.has(p.id)).slice(0, learningTarget - learning.length));
   }
   // Keep the workload predictable: missing retention must not turn into extra
   // difficult/new cards. A smaller pool yields a shorter, unique-card session.
-  const selected: DailyPick[] = [...retention.slice(0, DAILY_RETENTION_TARGET), ...learning];
+  const selected: DailyPick[] = [...retention.slice(0, retentionTarget), ...learning];
   // Interleave the chosen groups so the session does not arrive pack by pack.
   for (let i=selected.length-1;i>0;i--) {
     const j=Math.floor(random()*(i+1)); [selected[i],selected[j]]=[selected[j],selected[i]];
   }
+  if (selected.length) selected[0] = {...selected[0], dailyAllocation: allocation};
   return selected;
 }
 

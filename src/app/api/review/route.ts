@@ -10,6 +10,7 @@ import { isRetentionCard } from "@/lib/recall-history";
 import { buildDailyPlan, type DailyPick } from "@/lib/daily-study";
 import { readDailyPlanProgress } from "@/lib/daily-plan-progress";
 import { toLocalDateKey } from "@/lib/timezone";
+import { readDailyAllocation } from "@/lib/daily-allocation-reader";
 
 const ReviewInput = z.object({ cardId: z.string().min(1).max(128), quality: z.number().int().min(0).max(5), direction: z.enum(["front", "back"]).optional(), eventId: z.string().uuid().optional(), reviewedAt: z.string().datetime().optional() });
 const filters = ["due", "random", "mastery", "created", "recent", "alpha", "daily"];
@@ -62,8 +63,10 @@ export async function GET(request: NextRequest) {
       const previous = await prisma.dailyStudyPlan.findFirst({
         where: { userId: auth.userId, day: { lt: day } }, orderBy: { day: "desc" }, select: { picks: true },
       });
+      const previousPicks = (previous?.picks ?? []) as unknown as DailyPick[];
+      const allocation = await readDailyAllocation(auth.userId,day,previousPicks,new Set(candidates.map(c => c.id)),now);
       plan=await prisma.dailyStudyPlan.upsert({where:key,update:{},create:{
-        userId:auth.userId,day,picks:buildDailyPlan(candidates,now,Math.random,(previous?.picks ?? []) as unknown as DailyPick[]) as unknown as Prisma.InputJsonValue,
+        userId:auth.userId,day,picks:buildDailyPlan(candidates,now,Math.random,previousPicks,allocation) as unknown as Prisma.InputJsonValue,
       }});
     }
     const activeIds=new Set(candidates.map(c=>c.id));
