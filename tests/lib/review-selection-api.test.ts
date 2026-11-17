@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const mocks=vi.hoisted(()=>({auth:vi.fn(),cards:vi.fn(),user:vi.fn(),plan:vi.fn(),previous:vi.fn(),upsert:vi.fn(),logs:vi.fn()}));
+const mocks=vi.hoisted(()=>({auth:vi.fn(),cards:vi.fn(),user:vi.fn(),plan:vi.fn(),previous:vi.fn(),history:vi.fn(),upsert:vi.fn(),logs:vi.fn()}));
 vi.mock("@/lib/auth",()=>({requireAuth:mocks.auth}));
-vi.mock("@/lib/db",()=>({prisma:{card:{findMany:mocks.cards},user:{findUnique:mocks.user},dailyStudyPlan:{findUnique:mocks.plan,findFirst:mocks.previous,upsert:mocks.upsert},reviewLog:{findMany:mocks.logs}}}));
+vi.mock("@/lib/db",()=>({prisma:{card:{findMany:mocks.cards},user:{findUnique:mocks.user},dailyStudyPlan:{findUnique:mocks.plan,findFirst:mocks.previous,findMany:mocks.history,upsert:mocks.upsert},reviewLog:{findMany:mocks.logs}}}));
 import { GET } from "@/app/api/review/route";
 const card=(id:string,tags="spanish")=>({id,front:id,tags,createdAt:new Date(0),nextReviewAt:new Date(0),easeFactor:2.5,interval:0,repetitions:0,recallStates:[],reviews:[]});
 beforeEach(()=>{vi.resetAllMocks();mocks.auth.mockResolvedValue({userId:"owner"});mocks.user.mockResolvedValue({learningLanguage:"Spanish"});});
@@ -21,7 +21,7 @@ describe("study selection API",()=>{
     expect(mocks.previous).not.toHaveBeenCalled();
     expect(mocks.cards.mock.calls[0][0].where.deckId).toBeUndefined();
   });
-  it("keeps today's older set complete after a card deletion instead of replacing it with 100",async()=>{
+  it("keeps today's older set complete after a card deletion instead of replacing it with 120",async()=>{
     const picks=Array.from({length:150},(_,i)=>({id:"c"+i,studyDirection:"front",studyReason:"",group:"practice"}));
     mocks.plan.mockResolvedValue({createdAt:new Date(0),picks});
     mocks.cards.mockResolvedValueOnce(picks.slice(1).map(p=>card(p.id)));
@@ -39,6 +39,33 @@ describe("study selection API",()=>{
     expect(data.cards[0]).toMatchObject({id:"b",studyDirection:"back"});
     expect(mocks.upsert.mock.calls[0][0].update).toEqual({});
   });
+  it("adapts new sets from owner-scoped saved retention results and freezes that allocation",async()=>{
+    vi.useFakeTimers();vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+    try {
+      const allocation={version:1,retentionTarget:50,assessedThroughDay:null,reason:"starting"};
+      const picks=Array.from({length:50},(_,i)=>({id:"s"+i,group:"retention",studyDirection:"front",studyReason:"Retention",...(i===0?{dailyAllocation:allocation}:{})}));
+      const history=[17,18,19].map(n=>({day:`2026-11-${n}`,createdAt:new Date(`2026-11-${n}T10:00:00Z`),picks}));
+      mocks.plan.mockResolvedValue(null);mocks.previous.mockResolvedValue({picks});mocks.history.mockResolvedValue(history);
+      mocks.logs.mockResolvedValueOnce(history.flatMap(p=>picks.map(c=>({cardId:c.id,direction:"front",quality:4,reviewedAt:new Date(p.createdAt.getTime()+60000)})))).mockResolvedValueOnce([]);
+      const candidates=[...Array.from({length:100},(_,i)=>({...card("s"+i),reviews:[{quality:4,reviewedAt:new Date(0)}]})),...Array.from({length:100},(_,i)=>card("new"+i))];
+      mocks.cards.mockResolvedValueOnce(candidates).mockResolvedValueOnce(candidates);
+      mocks.upsert.mockImplementation(async args=>({...args.create,createdAt:new Date()}));
+      const data=await(await GET(new NextRequest("https://huella.example/api/review?filter=daily"))).json();
+      expect(data.daily).toMatchObject({total:120,mix:{retention:45,new:75,practice:0}});
+      expect(mocks.history.mock.calls[0][0].where).toMatchObject({userId:"owner",day:{lt:"2026-11-20"}});
+      expect(mocks.logs.mock.calls[0][0].where.card.deck).toEqual({userId:"owner",archivedAt:null});
+      expect(mocks.upsert.mock.calls[0][0].create.picks[0].dailyAllocation).toMatchObject({retentionTarget:45,assessedThroughDay:"2026-11-19"});
+    } finally { vi.useRealTimers(); }
+  });
+  it("preserves a completed 100-card plan on rollout and never recalculates its allocation",async()=>{
+    const picks=Array.from({length:100},(_,i)=>({id:"c"+i,studyDirection:"front",studyReason:"",group:"practice"}));
+    mocks.plan.mockResolvedValue({createdAt:new Date(0),picks});
+    mocks.cards.mockResolvedValueOnce(picks.map(p=>card(p.id)));
+    mocks.logs.mockResolvedValue(picks.map(p=>({cardId:p.id,direction:"front",quality:4})));
+    const data=await(await GET(new NextRequest("https://huella.example/api/review?filter=daily&limit=120"))).json();
+    expect(data.daily).toMatchObject({completed:100,total:100});expect(data.cards).toEqual([]);
+    expect(mocks.upsert).not.toHaveBeenCalled();expect(mocks.history).not.toHaveBeenCalled();
+  });
   it("carries forward the previous owner's learning cohort when creating a new day",async()=>{
     mocks.plan.mockResolvedValue(null);
     mocks.previous.mockResolvedValue({picks:[{id:"kept",studyDirection:"front",studyReason:"New",group:"new"}]});
@@ -48,7 +75,7 @@ describe("study selection API",()=>{
     mocks.cards.mockResolvedValueOnce([...waiting,card("kept")]).mockResolvedValueOnce([card("kept"),...waiting]);
     const data=await(await GET(new NextRequest("https://huella.example/api/review?filter=daily"))).json();
     expect(data.cards.some((c:{id:string})=>c.id==="kept")).toBe(true);
-    expect(data.daily.total).toBe(50);
+    expect(data.daily.total).toBe(70);
     expect(mocks.previous.mock.calls[0][0].where).toMatchObject({userId:"owner",day:{lt:expect.any(String)}});
   });
   it("scans past 1000 cards and applies tags before counting or selecting",async()=>{
