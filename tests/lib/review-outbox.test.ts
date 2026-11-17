@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ owner: vi.fn() }));
 vi.mock("@/lib/device-media", () => ({ deviceOwner: mock.owner }));
-import { queueReview, flushReviews } from "@/lib/review-outbox";
+import { queueReview, queueUndo, flushReviews } from "@/lib/review-outbox";
 import { listRecords } from "@/lib/device-db";
 let owner: string;
 beforeEach(() => {
@@ -64,4 +64,23 @@ describe("durable reviews", () => {
     await flushReviews(owner);
     expect(await listRecords(owner, "review:")).toHaveLength(1);
   });
+});
+
+describe("offline undo ordering",()=>{
+ it("durably sends rate, undo, corrected rating in order even within one millisecond",async()=>{
+  const first=await queueReview("card",4,"front");await flushReviews(owner);
+  await queueUndo(first);await flushReviews(owner);
+  await queueReview("card",1,"front");await flushReviews(owner);
+  const sent=vi.fn().mockResolvedValue({ok:true,json:async()=>({recorded:true})});vi.stubGlobal("fetch",sent);
+  await flushReviews(owner);
+  expect(sent.mock.calls.map(c=>[c[1].method,JSON.parse(c[1].body).quality])).toEqual([["POST",4],["DELETE",4],["POST",1]]);
+  expect(await listRecords(owner,"review:")).toHaveLength(0);
+ });
+ it("keeps a failed undo and blocks its dependent correction instead of double-counting",async()=>{
+  const first=await queueReview("card",4,"back");await flushReviews(owner);
+  await queueUndo(first);await flushReviews(owner);await queueReview("card",1,"back");await flushReviews(owner);
+  const sent=vi.fn().mockImplementation((_url,options)=>Promise.resolve(options.method==="DELETE" ? {ok:false,status:409,json:async()=>({error:"Newer review"})} : {ok:true,json:async()=>({recorded:true})}));
+  vi.stubGlobal("fetch",sent);await flushReviews(owner);
+  expect(sent).toHaveBeenCalledTimes(2);expect(await listRecords(owner,"review:")).toHaveLength(2);
+ });
 });

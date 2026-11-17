@@ -7,6 +7,7 @@ export function useStudyClock(paused: boolean, key?: string, initial?: StudyTime
   const persist = useCallback(() => { const time = clock.read(); saveStudyTime(key, time); return time; }, [clock, key]);
   const stop = useCallback(() => { clock.stop(); return persist(); }, [clock, persist]);
   const reviewed = useCallback(() => { clock.reviewed(); return persist(); }, [clock, persist]);
+  const undoReviewed = useCallback(() => { clock.undoReviewed(); return persist(); }, [clock, persist]);
   useEffect(() => {
     const sync = () => { if (paused || document.hidden) stop(); else clock.start(); };
     sync();
@@ -22,5 +23,5 @@ export function useStudyClock(paused: boolean, key?: string, initial?: StudyTime
       window.removeEventListener("pageshow", sync);
     };
   }, [clock, paused, persist, stop]);
-  return { stop, reviewed };
+  return { stop, reviewed, undoReviewed };
 }

@@ -47,6 +47,7 @@ function StudySessionContent() {
   );
   const [loading, setLoading] = useState(() => resume === null);
   const [completed, setCompleted] = useState(false);
+  const [undoComplete, setUndoComplete] = useState<(() => Promise<void>) | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stats, setStats] = useState<StudyStats | null>(null);
   const [daily, setDaily] = useState<{day:string;timingKey?:string;completed:number;total:number;ratings:Record<number,number>;mix:{practice:number;retention:number;new:number}} | null>(null);
@@ -109,7 +110,8 @@ function StudySessionContent() {
       }).catch(() => { setLoadError("Unable to load this session. Your reviews are still saved. Please try again."); setLoading(false); });
   }, [resume, deckIds, limit, filter, tags, orientation]);
 
-  function handleComplete(sessionStats: StudyStats) {
+  function handleComplete(sessionStats: StudyStats, undo: () => Promise<void>) {
+    setUndoComplete(() => undo);
     setStats(sessionStats);
     setCompleted(true);
   }
@@ -144,8 +146,7 @@ function StudySessionContent() {
     );
   }
 
-  if (completed && stats) {
-    return (
+  const results = completed && stats ? (
       <div className="space-y-4 max-w-md mx-auto">
         <div className="text-center pt-3 pb-1">
           <h2 className="font-editorial text-3xl font-medium sm:text-4xl">{filter==="daily" ? "Daily session complete" : "Session complete"}</h2>
@@ -181,6 +182,7 @@ function StudySessionContent() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground"><Link className="underline underline-offset-4" href="/study/trial">View the scheduling trial</Link></p>
+        {undoComplete && <Button variant="outline" className="w-full" onClick={() => void undoComplete?.()}>↶ Undo last rating</Button>}
         <div className="flex gap-3">
           <Button className="flex-1" onClick={() => router.push("/study")}>
             Study more
@@ -190,12 +192,11 @@ function StudySessionContent() {
           </Button>
         </div>
       </div>
-    );
-  }
+    ) : null;
 
   // Cards are loaded but the user hasn't passed the get-ready
   // countdown yet — show it (and preload the opening audio behind it).
-  if (!prepared) {
+  if (!prepared && !completed) {
     return (
       <>
       <StudyCountdown
@@ -209,20 +210,26 @@ function StudySessionContent() {
 
   return (
     <>
+    {results}
+    <div hidden={completed}>
     <StudySession
       dailyDay={resume?.dailyDay ?? daily?.day}
       timingKey={resume?.timingKey ?? daily?.timingKey}
       initialCards={cards}
+      initialUndoHistory={resume?.undoHistory}
       learningLanguage={learningLanguage}
       autoFlipSeconds={autoFlip}
       autoAdvanceSeconds={autoAdvance}
       orientation={orientation}
       onComplete={handleComplete}
+      completed={completed}
+      onUndoComplete={() => setCompleted(false)}
       initialIndex={resume?.currentIndex ?? 0}
       initialStats={resume?.stats ?? (daily ? {cardsReviewed:daily.completed,ratings:daily.ratings} : undefined)}
       progressOffset={resume?.progressOffset ?? daily?.completed ?? 0}
       initialFlipped={resume?.isFlipped ?? false}
     />
+    </div>
     </>
   );
 }

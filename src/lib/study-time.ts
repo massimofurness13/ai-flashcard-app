@@ -13,6 +13,7 @@ export class StudyClock {
     if (this.started !== null) { this.elapsed += Math.max(0, this.now() - this.started); this.started = null; }
     return this.read();
   }
+  undoReviewed() { this.cards = Math.max(0,this.cards-1); return this.read(); }
   reviewed() { this.cards++; return this.read(); }
   read(): StudyTime { return { elapsedMs: this.elapsed + (this.started === null ? 0 : Math.max(0, this.now() - this.started)), timedCards: this.cards }; }
 }

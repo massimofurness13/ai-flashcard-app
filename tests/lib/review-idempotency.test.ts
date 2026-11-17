@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mock = vi.hoisted(() => ({ auth: vi.fn(), transaction: vi.fn(), lock: vi.fn(), existing: vi.fn(), card: vi.fn(), latest: vi.fn(), update: vi.fn(), create: vi.fn(), recall: vi.fn(), upsert: vi.fn() }));
+const mock = vi.hoisted(() => ({ auth: vi.fn(), transaction: vi.fn(), lock: vi.fn(), existing: vi.fn(), card: vi.fn(), latest: vi.fn(), update: vi.fn(), create: vi.fn(), recall: vi.fn(), upsert: vi.fn(), undoFind:vi.fn(), undoCreate:vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireAuth: mock.auth }));
 vi.mock("@/lib/db", () => ({ prisma: { $transaction: mock.transaction } }));
 import { POST } from "@/app/api/review/route";
@@ -10,12 +10,18 @@ beforeEach(() => {
   mock.auth.mockResolvedValue({ userId: "owner" });
   mock.lock.mockResolvedValue([{ id: "card" }]);
   mock.existing.mockResolvedValue(null);
-  mock.card.mockResolvedValue({ id: "card", easeFactor: 2.5, interval: 0, repetitions: 0 });
+  mock.undoFind.mockResolvedValue(null);
+  mock.card.mockResolvedValue({ id: "card", easeFactor: 2.5, interval: 0, repetitions: 0, nextReviewAt:new Date() });
   mock.latest.mockResolvedValue(null);
   mock.recall.mockResolvedValue(null);
-  mock.transaction.mockImplementation(fn => fn({ $queryRaw: mock.lock, card: { findUniqueOrThrow: mock.card, update: mock.update }, cardRecall: {findUnique:mock.recall,upsert:mock.upsert}, reviewLog: { findUnique: mock.existing, findFirst: mock.latest, create: mock.create } }));
+  mock.transaction.mockImplementation(fn => fn({ $queryRaw: mock.lock, reviewUndo:{findUnique:mock.undoFind,create:mock.undoCreate}, card: { findUniqueOrThrow: mock.card, update: mock.update }, cardRecall: {findUnique:mock.recall,upsert:mock.upsert}, reviewLog: { findUnique: mock.existing, findFirst: mock.latest, create: mock.create } }));
 });
 describe("review sync API", () => {
+  it("never resurrects an undone review when the original POST is retried",async()=>{
+    mock.undoFind.mockResolvedValue({cardId:"card",undoneAt:new Date()});
+    expect(await (await POST(request(review))).json()).toMatchObject({recorded:true,undone:true});
+    expect(mock.create).not.toHaveBeenCalled();expect(mock.update).not.toHaveBeenCalled();
+  });
   it("stores the actual first face and independently schedules it", async()=>{
     expect((await POST(request({...review,direction:"back"}))).status).toBe(200);
     expect(mock.upsert.mock.calls[0][0].create).toMatchObject({cardId:"card",direction:"back",lastQuality:4,repetitions:1});

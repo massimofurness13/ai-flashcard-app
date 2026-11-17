@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { scheduleSnapshot, recallSnapshot, restoreSchedule, restoreRecall, sameSnapshot, type UndoSnapshot } from "@/lib/review-undo";
 import { sm2 } from "@/lib/sm2";
 import { requireAuth } from "@/lib/auth";
 import type { Prisma } from "@/generated/prisma/client";
@@ -103,6 +104,8 @@ export async function POST(request: Request) {
       WHERE c.id = ${cardId} AND d."userId" = ${auth.userId} FOR UPDATE OF c
     `;
     if (!locked.length) return { error: "Card not found", status: 404 };
+    const undone = await tx.reviewUndo.findUnique({where:{id}});
+    if (undone?.undoneAt) return undone.cardId === cardId ? {recorded:true,undone:true} : {error:"Review identifier already used",status:409};
     const existing = await tx.reviewLog.findUnique({ where: { id } });
     if (existing) return existing.cardId === cardId && existing.quality === quality && (existing.direction ?? null) === (direction ?? null)
       ? { recorded: true, duplicate: true }
@@ -111,9 +114,11 @@ export async function POST(request: Request) {
     const latest = await tx.reviewLog.findFirst({ where: { cardId, quality: {gt:0} }, orderBy: { reviewedAt: "desc" } });
     // Keep delayed offline history, but don't rewind a newer device's schedule.
     const updateSchedule = quality !== 0 && (!latest || latest.reviewedAt <= when);
+    const snapshot: UndoSnapshot = {card:null,recall:null};
     const next = updateSchedule ? sm2(quality, card) : null;
     if (next) {
       next.nextReviewAt = new Date(when.getTime()+next.interval*86400000);
+      snapshot.card = {before:scheduleSnapshot(card),after:scheduleSnapshot(next)};
       await tx.card.update({ where: { id: cardId }, data: next });
     }
     // Independent clocks: a newer opposite-side rating cannot discard this side.
@@ -124,6 +129,7 @@ export async function POST(request: Request) {
       if (!previous || previous.lastReviewedAt <= when) {
         directionalNext = scheduleDirection(quality,previous,when);
         const data = {...directionalNext,lastQuality:quality,lastReviewedAt:when};
+        snapshot.recall = {direction,before:recallSnapshot(previous),after:recallSnapshot({...data,direction})};
         await tx.cardRecall.upsert({where:key,create:{cardId,direction,...data},update:data});
       }
     }
@@ -132,8 +138,50 @@ export async function POST(request: Request) {
       easeFactor: directionalNext?.easeFactor ?? next?.easeFactor ?? card.easeFactor,
       interval: directionalNext?.interval ?? next?.interval ?? card.interval,
     } });
+    await tx.reviewUndo.create({data:{id,cardId,snapshot: snapshot as unknown as Prisma.InputJsonValue}});
     return { recorded: true, passive: quality === 0, interval: directionalNext?.interval ?? next?.interval ?? card.interval };
   });
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(result);
+}
+
+
+/** Reverse only this event's effects; never overwrite later work from another device. */
+export async function DELETE(request: Request) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+  const parsed = z.object({cardId:z.string().min(1).max(128),eventId:z.string().uuid()}).safeParse(await request.json().catch(()=>null));
+  if (!parsed.success) return NextResponse.json({error:"Invalid undo"},{status:400});
+  const {cardId,eventId}=parsed.data;
+  const id=createHash("sha256").update(auth.userId+":"+eventId).digest("hex");
+  const result=await prisma.$transaction(async tx=>{
+    const locked=await tx.$queryRaw<Array<{id:string}>>`
+      SELECT c.id FROM "Card" c JOIN "Deck" d ON d.id=c."deckId"
+      WHERE c.id=${cardId} AND d."userId"=${auth.userId} FOR UPDATE OF c
+    `;
+    if (!locked.length) return {error:"Card not found",status:404};
+    const undo=await tx.reviewUndo.findUnique({where:{id}});
+    if (!undo || undo.cardId!==cardId) return {error:"This review cannot be undone. Sync the original review first.",status:409};
+    if (undo.undoneAt) return {recorded:true,undone:true};
+    const snapshot=undo.snapshot as unknown as UndoSnapshot;
+    if (snapshot.card) {
+      const card=await tx.card.findUniqueOrThrow({where:{id:cardId}});
+      if (!sameSnapshot(scheduleSnapshot(card),snapshot.card.after)) return {error:"This card has a newer review. Undo the newer review first.",status:409};
+    }
+    if (snapshot.recall) {
+      const current=await tx.cardRecall.findUnique({where:{cardId_direction:{cardId,direction:snapshot.recall.direction}}});
+      if (!sameSnapshot(recallSnapshot(current),snapshot.recall.after)) return {error:"This card has a newer review. Undo the newer review first.",status:409};
+    }
+    if (snapshot.card) await tx.card.update({where:{id:cardId},data:restoreSchedule(snapshot.card.before)});
+    if (snapshot.recall) {
+      const key={cardId_direction:{cardId,direction:snapshot.recall.direction}};
+      if (snapshot.recall.before) await tx.cardRecall.update({where:key,data:restoreRecall(snapshot.recall.before)});
+      else await tx.cardRecall.delete({where:key});
+    }
+    await tx.reviewLog.delete({where:{id}});
+    await tx.reviewUndo.update({where:{id},data:{undoneAt:new Date()}});
+    return {recorded:true,undone:true};
+  });
+  if ("error" in result) return NextResponse.json({error:result.error},{status:result.status});
   return NextResponse.json(result);
 }

@@ -1,3 +1,4 @@
+import type { PendingReview } from "./review-outbox";
 import type { StudyStats } from "@/components/study/study-session";
 
 /**
@@ -38,7 +39,10 @@ export interface StudyResumeCard {
   };
 }
 
+export type StudyUndoEntry = {index:number;review:PendingReview};
+
 export interface StudyResumeSnapshot {
+  undoHistory?: StudyUndoEntry[];
   dailyDay?: string;
   timingKey?: string;
   progressOffset?: number;
@@ -127,5 +131,5 @@ export function removeStudyResumeCard(cardId: string): void {
   // the next card, which is what we want.
   if (idx < currentIndex) currentIndex -= 1;
   if (currentIndex > cards.length) currentIndex = cards.length;
-  writeStudyResume({ ...snap, cards, currentIndex });
+  writeStudyResume({ ...snap, cards, currentIndex, undoHistory:snap.undoHistory?.filter(h=>h.review.cardId!==cardId).map(h=>({...h,index:h.index>idx?h.index-1:h.index})) });
 }
