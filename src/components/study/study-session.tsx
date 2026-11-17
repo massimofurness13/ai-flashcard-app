@@ -1,10 +1,10 @@
 "use client";
 import { useStudyClock } from "@/hooks/use-study-clock";
-import { queueReview } from "@/lib/review-outbox";
+import { queueReview, queueUndo } from "@/lib/review-outbox";
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { Flashcard } from "@/components/flashcard/flashcard";
 import { SwipeableCard } from "./swipeable-card";
 import { SwipeControls } from "./swipe-controls";
@@ -16,7 +16,7 @@ import { VoicePreloader, type VoicePreloadItem } from "./voice-preloader";
 import { useCreditBalance } from "@/components/subscription/credit-balance";
 import { CountdownWheel } from "./countdown-wheel";
 import { fallbackVoiceCodes } from "@/lib/language-codes";
-import { writeStudyResume, type StudyResumeCard } from "@/lib/study-resume";
+import { writeStudyResume, type StudyResumeCard, type StudyUndoEntry } from "@/lib/study-resume";
 
 const PRELOAD_AHEAD = 5;
 
@@ -67,6 +67,7 @@ interface Card {
 }
 
 interface StudySessionProps {
+  initialUndoHistory?: StudyUndoEntry[];
   dailyDay?: string;
   timingKey?: string;
   progressOffset?: number;
@@ -74,7 +75,9 @@ interface StudySessionProps {
   autoFlipSeconds: number;
   autoAdvanceSeconds?: number;
   orientation: "front" | "back" | "mixed" | "auto";
-  onComplete: (stats: StudyStats) => void;
+  onComplete: (stats: StudyStats, undo: () => Promise<void>) => void;
+  onUndoComplete?: () => void;
+  completed?: boolean;
   /** The user's onboarding learning language ("es", "fr", …). Used
    *  to pick a native-speaker voice for any deck that has no explicit
    *  language code, so we never drop to the robotic device voice. */
@@ -107,6 +110,7 @@ const DEAL_OUT_MS = 100;
 
 export function StudySession({
   dailyDay,
+  initialUndoHistory = [],
   timingKey,
   initialCards,
   learningLanguage,
@@ -114,6 +118,8 @@ export function StudySession({
   autoAdvanceSeconds = 0,
   orientation,
   onComplete,
+  onUndoComplete,
+  completed = false,
   initialIndex = 0,
   initialStats,
   initialFlipped = false,
@@ -132,6 +138,9 @@ export function StudySession({
   const [isFlipped, setIsFlipped] = useState(initialFlipped);
   const [dealingOut, setDealingOut] = useState(false);
   const savingReview = useRef(false);
+  const undoAction = useRef<() => Promise<void>>(async () => {});
+  const [undoHistory, setUndoHistory] = useState<StudyUndoEntry[]>(initialUndoHistory);
+  const [undoing, setUndoing] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   // Tracks which (card-id, side) combination has finished playing
   // its TTS clip. Storing the identity rather than a boolean lets us
@@ -142,7 +151,7 @@ export function StudySession({
   // User-facing pause: freezes the countdown wheel and cancels any
   // in-flight audio. Resume picks up from the same offset.
   const [isPaused, setIsPaused] = useState(false);
-  const { stop: stopClock, reviewed: timeReview } = useStudyClock(isPaused, timingKey,
+  const { stop: stopClock, reviewed: timeReview, undoReviewed: undoTimeReview } = useStudyClock(isPaused || completed, timingKey,
     { elapsedMs: initialStats?.elapsedMs ?? 0, timedCards: initialStats?.timedCards ?? 0 });
   const [stats, setStats] = useState<StudyStats>(
     () =>
@@ -252,9 +261,11 @@ export function StudySession({
         if (currentIndex < total - 1) {
           setCurrentIndex((prev) => prev + 1);
           setIsFlipped(false);
+          setIsPaused(false);
           setDealingOut(false);
         } else {
-          onComplete({ ...finalStats, ...stopClock() });
+          setDealingOut(false);
+          onComplete({ ...finalStats, ...stopClock() }, () => undoAction.current());
         }
       }, DEAL_OUT_MS);
     },
@@ -278,7 +289,7 @@ export function StudySession({
   const handleCountdownComplete = useCallback(async () => {
     if (!isAutoAdvance || !isFlipped || dealingOut || savingReview.current) return;
     savingReview.current = true;
-    try { await queueReview(currentCard.id, 0, currentCard.studyDirection); setReviewError(null); }
+    try { const review = await queueReview(currentCard.id, 0, currentCard.studyDirection); setUndoHistory(h=>[...h,{index:currentIndex,review}]); setReviewError(null); }
     catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
     const newStats = {
       ...stats,
@@ -288,7 +299,7 @@ export function StudySession({
     setStats(newStats);
     dealAndAdvance(newStats);
     savingReview.current = false;
-  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance, currentCard, timeReview]);
+  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance, currentCard, currentIndex, timeReview]);
 
   const handleFlip = useCallback(() => {
     if (dealingOut) return;
@@ -302,7 +313,7 @@ export function StudySession({
 
       // Commit to the device before advancing. Only the network part runs
       // in the background; unacknowledged reviews survive app restarts.
-      try { await queueReview(currentCard.id, quality, currentCard.studyDirection); setReviewError(null); }
+      try { const review = await queueReview(currentCard.id, quality, currentCard.studyDirection); setUndoHistory(h=>[...h,{index:currentIndex,review}]); setReviewError(null); }
       catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
 
       const newStats = {
@@ -317,8 +328,26 @@ export function StudySession({
       dealAndAdvance(newStats);
       savingReview.current = false;
     },
-    [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance, timeReview]
+    [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance, currentIndex, timeReview]
   );
+
+  const handleUndo = useCallback(async () => {
+    const previous = undoHistory.at(-1);
+    if (!previous || dealingOut || savingReview.current) return;
+    savingReview.current = true; setUndoing(true);
+    try {
+      await queueUndo(previous.review);
+      const timing = undoTimeReview();
+      setStats(current=>({...current,...timing,cardsReviewed:Math.max(0,current.cardsReviewed-1),
+        ratings:previous.review.quality > 0 ? {...current.ratings,[previous.review.quality]:Math.max(0,(current.ratings[previous.review.quality]||0)-1)} : current.ratings}));
+      setUndoHistory(history=>history.slice(0,-1));
+      setCurrentIndex(previous.index); setIsFlipped(true); setLastAudioKey(null);
+      setIsPaused(true); setReviewError(null); onUndoComplete?.();
+    } catch { setReviewError("Couldn't save the undo on your device. Please try again."); }
+    finally { savingReview.current=false;setUndoing(false); }
+  }, [undoHistory,dealingOut,undoTimeReview,onUndoComplete]);
+  // The finish screen uses the same mounted session, including its undo history.
+  useEffect(() => { undoAction.current = handleUndo; }, [handleUndo]);
 
   // Once the answer is revealed, ← / → grade the card (don't know /
   // know it) — the keyboard twin of the swipe. Space flips.
@@ -326,14 +355,14 @@ export function StudySession({
     onFlip: handleFlip,
     onNext: isAutoAdvance ? undefined : () => handleRate(QUALITY_KNOW),
     onPrev: isAutoAdvance ? undefined : () => handleRate(QUALITY_DONT_KNOW),
-    enabled: isFlipped && !dealingOut,
+    enabled: isFlipped && !dealingOut && !completed && !undoing,
   });
 
   // Before the flip, the card is just waiting to be revealed — Space
   // (or a tap) flips it; arrows do nothing yet.
   useKeyboardNav({
     onFlip: handleFlip,
-    enabled: !isFlipped && !dealingOut,
+    enabled: !isFlipped && !dealingOut && !completed && !undoing,
   });
 
   if (!currentCard) {
@@ -382,6 +411,11 @@ export function StudySession({
           )}
         </span>
         <div className="flex items-center gap-2 shrink-0">
+          <button type="button" onClick={handleUndo} disabled={!undoHistory.length || dealingOut || undoing}
+            aria-label="Undo previous rating" title="Go back and correct the previous rating"
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm text-muted-foreground hover:bg-primary/10 hover:text-foreground disabled:opacity-35">
+            <span aria-hidden="true">↶</span> {undoing ? "Undoing…" : "Undo"}
+          </button>
           {/* Edit-this-card affordance — same-tab navigation so the
            *  edit page replaces the session view (timer/audio/auto-
            *  advance all stop, no background drift). On click we
@@ -401,6 +435,7 @@ export function StudySession({
               // + stats) so the return trip restores it verbatim — no
               // re-fetch that would drop the cards already reviewed.
               writeStudyResume({
+                undoHistory,
                 progressOffset,
                 cards: cards as StudyResumeCard[],
                 currentIndex,
@@ -433,8 +468,8 @@ export function StudySession({
        *  to flip (handled by Flashcard's onClick); the card is only
        *  swipeable once the answer shows, where left/right grades it. */}
       <SwipeableCard
-        key={currentCard.id}
-        enabled={!isAutoAdvance && isFlipped && !dealingOut}
+        key={`${currentIndex}:${currentCard.id}`}
+        enabled={!isAutoAdvance && isFlipped && !dealingOut && !undoing && !completed}
         onSwipeRight={() => handleRate(QUALITY_KNOW)}
         onSwipeLeft={() => handleRate(QUALITY_DONT_KNOW)}
       >
@@ -467,7 +502,7 @@ export function StudySession({
                 : effBack(currentCard.deck.backLanguageCode)
             }
             autoPlayVoice
-            paused={isPaused}
+            paused={isPaused || completed || undoing}
             onAudioEnd={() => setLastAudioKey(currentAudioKey)}
           />
         </div>
@@ -485,10 +520,10 @@ export function StudySession({
             <CountdownWheel
               seconds={autoFlipSeconds}
               runId={`flip:${currentCard.id}`}
-              active={audioFinished && !isPaused}
+              active={audioFinished && !isPaused && !completed && !undoing}
               onComplete={() => setIsFlipped(true)}
             />
-            <PauseToggle paused={isPaused} onToggle={() => setIsPaused((p) => !p)} />
+            <PauseToggle paused={isPaused || completed || undoing} onToggle={() => setIsPaused((p) => !p)} />
           </div>
         )}
 
@@ -497,7 +532,7 @@ export function StudySession({
             onKnow={() => handleRate(QUALITY_KNOW)}
             onKindOf={() => handleRate(2)}
             onDontKnow={() => handleRate(QUALITY_DONT_KNOW)}
-            disabled={dealingOut}
+            disabled={dealingOut || undoing}
           />
         )}
 
@@ -506,10 +541,10 @@ export function StudySession({
             <CountdownWheel
               seconds={autoAdvanceSeconds}
               runId={`adv:${currentCard.id}`}
-              active={audioFinished && !isPaused}
+              active={audioFinished && !isPaused && !completed && !undoing}
               onComplete={handleCountdownComplete}
             />
-            <PauseToggle paused={isPaused} onToggle={() => setIsPaused((p) => !p)} />
+            <PauseToggle paused={isPaused || completed || undoing} onToggle={() => setIsPaused((p) => !p)} />
           </div>
         )}
       </div>

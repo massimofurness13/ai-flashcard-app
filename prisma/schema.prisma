@@ -224,6 +224,7 @@ model Card {
   deckId String
   deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
 
+  reviewUndos    ReviewUndo[]
   reviews        ReviewLog[]
   recallStates   CardRecall[]
   imageFeedback  ImageFeedback[]
@@ -319,4 +320,15 @@ model StarterCard {
   position      Int         @default(0)
 
   @@index([starterPackId])
+}
+
+// Immutable before/after snapshots plus a tombstone for idempotent rating undo.
+model ReviewUndo {
+  id        String @id
+  cardId    String
+  card      Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  snapshot  Json
+  undoneAt  DateTime?
+  createdAt DateTime @default(now())
+  @@index([cardId])
 }

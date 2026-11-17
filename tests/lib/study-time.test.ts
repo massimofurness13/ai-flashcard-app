@@ -20,3 +20,9 @@ describe("active study timing", () => {
     expect(formatStudyTime(clock.read().elapsedMs)).toBe("22 min 30 sec");
   });
 });
+
+it("undo removes a timed card without erasing time spent studying",()=>{
+ let now=0;const clock=new StudyClock(undefined,()=>now);clock.start();now=5000;clock.reviewed();
+ expect(clock.undoReviewed()).toEqual({elapsedMs:5000,timedCards:0});
+ expect(clock.undoReviewed().timedCards).toBe(0);
+});
