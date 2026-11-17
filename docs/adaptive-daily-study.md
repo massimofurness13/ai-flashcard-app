@@ -21,7 +21,7 @@ Use only the first graded attempt on each selected face, from the plan's creatio
 until the following plan's creation (or now). Ignore passive views, repeats,
 wrong faces, incomplete sets, and plans from before this policy. Deleted and
 archived cards leave the required set. Queries are scoped to the authenticated
-owner. The existing per-card spaced-repetition scheduler is unchanged.
+owner.
 
 Persist the allocation and last assessed day as optional `dailyAllocation`
 metadata on the first pick in DailyStudyPlan's existing JSON array. Always read
@@ -37,3 +37,16 @@ shorter unique-card session rather than duplicates or invented Secure cards.
 Tests cover recall thresholds, weighting, fresh evidence, bounds, direction and
 time windows, deletions, cohort ordering, owner-scoped API integration, concurrent
 creation and preserving completed older sets.
+
+Retention reserves 20 slots for cards with the oldest last graded review on either
+face, regardless of their due date. These are part of the retention allocation,
+not extra cards. Remaining slots prioritise a single partial recall, then the
+earliest effective due date, excluding the coverage cards. Passive views do not
+reset the rotation. Historical cards without directional states use their review
+logs; states are a fallback when logs are unavailable.
+
+All new intervals are capped at 60 days. Existing longer schedules are treated as
+due no later than 60 days after their last review, without rewriting history.
+Early successful reviews preserve the existing capped due date. The cap is a
+scheduling deadline, not a guarantee of presentation within 60 days: missed study
+days or more due cards than available daily slots can still create a backlog.

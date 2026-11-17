@@ -1,5 +1,5 @@
 import { isRetentionCard, latestRecallQualities } from "./recall-history";
-import { defaultSM2State, sm2, type SM2State } from "./sm2";
+import { cappedReviewDate, MAX_REVIEW_INTERVAL_DAYS, defaultSM2State, sm2, type SM2State } from "./sm2";
 
 export type Direction = "front" | "back";
 export type Orientation = Direction | "mixed" | "auto";
@@ -21,11 +21,26 @@ export interface StudyCandidate extends SM2State {
 export interface StudyPick { id: string; studyDirection: Direction; studyReason: string }
 const DAY = 86_400_000;
 
+/** Last genuine review on either face; passive views cannot reset coverage. */
+export function lastCardReviewAt(card: StudyCandidate): Date {
+  const reviews = card.reviews.filter(r => r.quality > 0);
+  const times = reviews.length ? reviews.map(r => r.reviewedAt.getTime())
+    : card.recallStates.filter(s => s.lastQuality > 0).map(s => s.lastReviewedAt.getTime());
+  return new Date(times.length ? Math.max(...times) : card.createdAt.getTime());
+}
+
+export function reviewDueAt(card: StudyCandidate, direction: Direction): Date {
+  const state = card.recallStates.find(s => s.direction === direction);
+  return state ? cappedReviewDate(state.nextReviewAt, state.lastReviewedAt)
+    : cappedReviewDate(card.nextReviewAt, lastCardReviewAt(card));
+}
+
 /** Short failed-recall retry; practising early cannot inflate a successful interval. */
 export function scheduleDirection(quality: number, previous: RecallState | null, when: Date) {
-  if (quality >= 3 && previous && previous.lastQuality >= 3 && previous.nextReviewAt > when) {
-    return { easeFactor: previous.easeFactor, interval: previous.interval,
-      repetitions: previous.repetitions, nextReviewAt: previous.nextReviewAt };
+  const previousDue = previous && cappedReviewDate(previous.nextReviewAt, previous.lastReviewedAt);
+  if (quality >= 3 && previous && previous.lastQuality >= 3 && previousDue && previousDue > when) {
+    return { easeFactor: previous.easeFactor, interval: Math.min(previous.interval, MAX_REVIEW_INTERVAL_DAYS),
+      repetitions: previous.repetitions, nextReviewAt: previousDue };
   }
   const next = sm2(quality, previous ?? defaultSM2State());
   // Partial recall is still learning, not a consecutive secure success.
@@ -41,8 +56,8 @@ function directionInfo(card: StudyCandidate, direction: Direction, now: Date) {
   const failed = state ? state.lastQuality < 3 : !!legacy && legacy.quality < 3;
   const unseen = !state;
   return { direction, state, failed, unseen, needs: failed || unseen,
-    due: !state || state.nextReviewAt <= now,
-    time: state?.nextReviewAt.getTime() ?? card.nextReviewAt.getTime(),
+    due: !state || reviewDueAt(card, direction) <= now,
+    time: reviewDueAt(card, direction).getTime(),
     reason: failed ? (state?.lastQuality === 2 || (!state && legacy?.quality === 2) ? "Kind of — keep practising" : "Needs practice") : unseen ? "Not yet tested this way" : "Retention" };
 }
 

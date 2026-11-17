@@ -54,7 +54,7 @@ describe("SM-2 Algorithm", () => {
     expect(state.easeFactor).toBe(1.3);
   });
 
-  it("interval grows exponentially with quality 5", () => {
+  it("successful intervals grow until the 60-day ceiling", () => {
     let state = defaultSM2State();
     const intervals: number[] = [];
 
@@ -64,9 +64,11 @@ describe("SM-2 Algorithm", () => {
       state = { easeFactor: result.easeFactor, interval: result.interval, repetitions: result.repetitions };
     }
 
-    // Each interval should be larger than the last after the initial 1, 6
+    // Successful recall lengthens the interval until it reaches the ceiling.
     for (let i = 2; i < intervals.length; i++) {
-      expect(intervals[i]).toBeGreaterThan(intervals[i - 1]);
+      if (intervals[i - 1] < 60) expect(intervals[i]).toBeGreaterThan(intervals[i - 1]);
+      else expect(intervals[i]).toBe(60);
+      expect(intervals[i]).toBeLessThanOrEqual(60);
     }
   });
 

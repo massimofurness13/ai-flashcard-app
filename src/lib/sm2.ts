@@ -1,3 +1,10 @@
+export const MAX_REVIEW_INTERVAL_DAYS = 60;
+
+/** Apply the current ceiling to schedules saved under an older policy. */
+export function cappedReviewDate(nextReviewAt: Date, lastReviewedAt: Date): Date {
+  return new Date(Math.min(nextReviewAt.getTime(), lastReviewedAt.getTime() + MAX_REVIEW_INTERVAL_DAYS * 86_400_000));
+}
+
 export interface SM2State {
   easeFactor: number; // >= 1.3
   interval: number; // in days
@@ -63,6 +70,8 @@ export function sm2(quality: number, current: SM2State): SM2Result {
   if (easeFactor < 1.3) {
     easeFactor = 1.3;
   }
+
+  interval = Math.min(interval, MAX_REVIEW_INTERVAL_DAYS);
 
   const nextReviewAt = new Date();
   nextReviewAt.setDate(nextReviewAt.getDate() + interval);
