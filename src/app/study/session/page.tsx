@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { peekStudyResume, clearStudyResume } from "@/lib/study-resume";
 import { deviceOwner } from "@/lib/device-media";
 import { readStudyTime, formatStudyTime } from "@/lib/study-time";
+import { readOfflineStudy, saveStudy, studyKey, type SavedStudy } from "@/lib/offline-study";
+import type { StudyResumeSnapshot } from "@/lib/study-resume";
 import { flushReviews } from "@/lib/review-outbox";
 
 interface StudyCard {
@@ -32,13 +34,18 @@ interface StudyCard {
 function StudySessionContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const navigate = (path: string) => {
+    // Offline navigation needs the cached document, not a server RSC response.
+    if (navigator.onLine === false) window.location.assign(path);
+    else router.push(path);
+  };
   // Resume snapshot, captured once on mount (declared first so the
   // state below can seed from it). When the user edited or deleted a
   // card mid-session, this holds the FULL session (cards + position +
   // stats) so we restore it verbatim instead of re-fetching /api/review
   // — a re-fetch drops every card already reviewed this session and
   // resets the progress counter. See src/lib/study-resume.
-  const [resume] = useState(() => peekStudyResume());
+  const [resume, setResume] = useState(() => peekStudyResume());
 
   // Seed straight from the snapshot when resuming, so there's no
   // setState-in-effect and no loading flash on the way back from edit.
@@ -47,7 +54,9 @@ function StudySessionContent() {
   );
   const [loading, setLoading] = useState(() => resume === null);
   const [completed, setCompleted] = useState(false);
+  const undoCompletion = useCallback(() => setCompleted(false), []);
   const [undoComplete, setUndoComplete] = useState<(() => Promise<void>) | null>(null);
+  const registerUndo = useCallback((undo: () => Promise<void>) => setUndoComplete(() => undo), []);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stats, setStats] = useState<StudyStats | null>(null);
   const [daily, setDaily] = useState<{day:string;timingKey?:string;completed:number;total:number;ratings:Record<number,number>;mix:{practice:number;retention:number;new:number}} | null>(null);
@@ -79,6 +88,8 @@ function StudySessionContent() {
     | "back"
     | "mixed";
 
+  const offlineKey = studyKey(new URLSearchParams({...(deckIds ? {deckIds} : {}), limit, filter, orientation, ...(tags ? {tags} : {})}));
+
   useEffect(() => {
     // Resuming from an edit/delete: cards/learningLanguage were already
     // seeded from the snapshot above, so there's nothing to fetch. Just
@@ -95,20 +106,52 @@ function StudySessionContent() {
     params.set("orientation", orientation);
     if (tags) params.set("tags", tags);
 
-    const sync = filter === "daily" ? deviceOwner().then(owner=>owner ? flushReviews(owner) : undefined) : Promise.resolve();
-    sync.then(()=>fetch(`/api/review?${params.toString()}`))
-      .then(async (res) => { if (!res.ok) throw new Error("Unable to load this session. Please try again."); return res.json(); })
-      .then((data) => {
-        setCards(data.cards);
-        setLearningLanguage(data.learningLanguage ?? null);
-        if (data.daily) {
-          setDaily(data.daily);
-          setStats({cardsReviewed:data.daily.completed,ratings:data.daily.ratings,...readStudyTime(data.daily.timingKey)});
-          if (data.daily.total>0 && data.daily.completed===data.daily.total) setCompleted(true);
+    let cancelled = false;
+    const applySaved = (data: SavedStudy, snapshot: StudyResumeSnapshot | null = null) => {
+      if (cancelled) return;
+      setCards(snapshot?.cards ?? data.cards);
+      setLearningLanguage(snapshot?.learningLanguage ?? data.learningLanguage ?? null);
+      if (snapshot) {
+        setResume(snapshot); setPrepared(true); setStats({...snapshot.stats, ...readStudyTime(snapshot.timingKey)});
+        if (snapshot.currentIndex >= snapshot.cards.length) setCompleted(true);
+      } else if (data.daily) {
+        setDaily(data.daily);
+        setStats({cardsReviewed:data.daily.completed,ratings:data.daily.ratings,...readStudyTime(data.daily.timingKey)});
+        if (data.daily.total > 0 && data.daily.completed === data.daily.total) setCompleted(true);
+      }
+      setLoading(false);
+    };
+    async function load() {
+      const owner = await deviceOwner();
+      if (!owner) throw new Error("Sign in while connected before studying offline.");
+      const saved = await readOfflineStudy(owner, offlineKey);
+      // While offline, use the entire saved sequence, not a new selection.
+      if (navigator.onLine === false) {
+        if (!saved) throw new Error("Connect once to prepare this session for offline study.");
+        applySaved(saved.data, saved.snapshot); return;
+      }
+      try {
+        if (filter === "daily") await flushReviews(owner);
+        const response = await fetch(`/api/review?${params}`, {signal: AbortSignal.timeout(8000)});
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) throw new Error("Sign in again to continue.");
+          throw new Error("Unable to load this session.");
         }
-        setLoading(false);
-      }).catch(() => { setLoadError("Unable to load this session. Your reviews are still saved. Please try again."); setLoading(false); });
-  }, [resume, deckIds, limit, filter, tags, orientation]);
+        const data: SavedStudy = await response.json();
+        if (await deviceOwner() !== owner || cancelled) return;
+        await saveStudy(owner, offlineKey, data);
+        applySaved(data);
+      } catch (error) {
+        if (error instanceof Error && error.message === "Sign in again to continue.") throw error;
+        if (!saved) throw error;
+        applySaved(saved.data, saved.snapshot);
+      }
+    }
+    void load().catch(error => {
+      if (!cancelled) { setLoadError(error instanceof Error ? error.message : "Unable to load. Your saved reviews are safe."); setLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, [resume, deckIds, limit, filter, tags, orientation, offlineKey]);
 
   function handleComplete(sessionStats: StudyStats, undo: () => Promise<void>) {
     setUndoComplete(() => undo);
@@ -124,7 +167,7 @@ function StudySessionContent() {
     );
   }
 
-  if (loadError) return <div role="alert" className="space-y-4 py-12"><p>{loadError}</p><Button onClick={() => router.push("/study")}>Back to study options</Button></div>;
+  if (loadError) return <div role="alert" className="space-y-4 py-12"><p>{loadError}</p><Button onClick={() => navigate("/study")}>Back to study options</Button></div>;
 
   if (cards.length === 0 && !completed) {
     return (
@@ -137,8 +180,8 @@ function StudySessionContent() {
             : filter === "mastery" ? "No weak or untested directions remain in these packs. Spaced review will bring them back when due." : "No cards matched the selected packs and filter."}
         </p>
         <div className="flex gap-3 mt-6">
-          <Button onClick={() => router.push("/study")}>Change filter</Button>
-          <Button variant="outline" onClick={() => router.push("/")}>
+          <Button onClick={() => navigate("/study")}>Change filter</Button>
+          <Button variant="outline" onClick={() => navigate("/")}>
             Home
           </Button>
         </div>
@@ -184,10 +227,10 @@ function StudySessionContent() {
         <p className="text-center text-xs text-muted-foreground"><Link className="underline underline-offset-4" href="/study/trial">View the scheduling trial</Link></p>
         {undoComplete && <Button variant="outline" className="w-full" onClick={() => void undoComplete?.()}>↶ Undo last rating</Button>}
         <div className="flex gap-3">
-          <Button className="flex-1" onClick={() => router.push("/study")}>
+          <Button className="flex-1" onClick={() => navigate("/study")}>
             Study more
           </Button>
-          <Button variant="outline" className="flex-1" onClick={() => router.push("/")}>
+          <Button variant="outline" className="flex-1" onClick={() => navigate("/")}>
             Home
           </Button>
         </div>
@@ -213,6 +256,7 @@ function StudySessionContent() {
     {results}
     <div hidden={completed}>
     <StudySession
+      offlineKey={offlineKey}
       dailyDay={resume?.dailyDay ?? daily?.day}
       timingKey={resume?.timingKey ?? daily?.timingKey}
       initialCards={cards}
@@ -223,7 +267,8 @@ function StudySessionContent() {
       orientation={orientation}
       onComplete={handleComplete}
       completed={completed}
-      onUndoComplete={() => setCompleted(false)}
+      onUndoReady={registerUndo}
+      onUndoComplete={undoCompletion}
       initialIndex={resume?.currentIndex ?? 0}
       initialStats={resume?.stats ?? (daily ? {cardsReviewed:daily.completed,ratings:daily.ratings} : undefined)}
       progressOffset={resume?.progressOffset ?? daily?.completed ?? 0}

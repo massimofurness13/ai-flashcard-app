@@ -9,6 +9,7 @@ import { Footer } from "@/components/layout/footer";
 import { FontSizeInit } from "@/components/layout/font-size-init";
 import { MediaServiceWorker } from "@/components/layout/media-service-worker";
 import { PostHogProvider } from "@/components/posthog-provider";
+import { OfflineStudyProvider } from "@/components/layout/offline-study-provider";
 import { DeviceProvider } from "@/components/layout/device-provider";
 
 const geistSans = Geist({
@@ -73,6 +74,7 @@ export default function RootLayout({
             <FontSizeInit />
             <MediaServiceWorker />
             <Navbar />
+            <OfflineStudyProvider />
             <main className="app-content flex-1 md:pb-0">
               <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
             </main>
