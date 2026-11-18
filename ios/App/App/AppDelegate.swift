@@ -47,3 +47,32 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
 }
+
+// iOS 27 requires a scene lifecycle for apps built with the current SDK.
+// UIKit loads Main.storyboard into this window, preserving the existing
+// HuellaBridgeViewController, WebView origin and persistent website data store.
+class HuellaSceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        self.scene(scene, openURLContexts: connectionOptions.urlContexts)
+        for activity in connectionOptions.userActivities {
+            self.scene(scene, continue: activity)
+        }
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        for context in URLContexts {
+            var options: [UIApplication.OpenURLOptionsKey: Any] = [
+                .openInPlace: context.options.openInPlace
+            ]
+            if let source = context.options.sourceApplication { options[.sourceApplication] = source }
+            if let annotation = context.options.annotation { options[.annotation] = annotation }
+            _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, open: context.url, options: options)
+        }
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, continue: userActivity, restorationHandler: { _ in })
+    }
+}
