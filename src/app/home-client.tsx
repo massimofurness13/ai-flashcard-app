@@ -1,4 +1,5 @@
 "use client";
+import { currentReviewCount } from "@/lib/daily-study";
 import type { DailyStudySummary } from "@/lib/daily-study";
 
 import { useEffect, useMemo, useState } from "react";
@@ -104,6 +105,8 @@ function sortDecks(decks: Deck[], key: SortKey): Deck[] {
 }
 
 interface HomePageProps {
+  reviewDay?: string;
+  reviewTimeZone?: string;
   dailyStudy?: DailyStudySummary | null;
   folders: Folder[];
   unfolderedDecks: Deck[];
@@ -123,6 +126,8 @@ interface HomePageProps {
 }
 
 export function HomePage({
+  reviewDay,
+  reviewTimeZone,
   dailyStudy,
   folders,
   unfolderedDecks,
@@ -134,6 +139,14 @@ export function HomePage({
   goalHitCelebrationShown,
   onboardingCompleted,
 }: HomePageProps) {
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    const tick = () => setClock(new Date());
+    const timer = setInterval(tick, 60000);
+    window.addEventListener("focus", tick);
+    return () => { clearInterval(timer); window.removeEventListener("focus", tick); };
+  }, []);
+  const todayCount = currentReviewCount(cardsReviewedToday, reviewDay ?? dailyStudy?.day, reviewTimeZone ?? dailyStudy?.timeZone, clock);
   const hasDecks =
     folders.some((f) => f.decks.length > 0) || unfolderedDecks.length > 0;
 
@@ -235,8 +248,8 @@ export function HomePage({
     );
   }
 
-  const goalHit = cardsReviewedToday >= dailyGoal;
-  const progressPct = Math.min((cardsReviewedToday / dailyGoal) * 100, 100);
+  const goalHit = todayCount !== null && todayCount >= dailyGoal;
+  const progressPct = Math.min(((todayCount ?? 0) / dailyGoal) * 100, 100);
   return (
     <div className="space-y-7 sm:space-y-9">
       <section aria-label="Daily study" className="space-y-4">
@@ -245,12 +258,12 @@ export function HomePage({
         <div className="space-y-2 px-1">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
             <p className="text-muted-foreground">
-              <span className="font-semibold tabular-nums text-foreground">{cardsReviewedToday} / {dailyGoal}</span> reviewed today
+              <span className="font-semibold tabular-nums text-foreground">{todayCount === null ? "—" : `${todayCount} / ${dailyGoal}`}</span> {todayCount === null ? "Today’s progress awaiting sync" : "reviewed today"}
               {goalHit && <span className="ml-2 text-foreground">✓ Goal reached</span>}
             </p>
             {streak > 0 && <p className="text-muted-foreground">{streak}-day streak</p>}
           </div>
-          <div role="progressbar" aria-label="Daily review goal" aria-valuemin={0} aria-valuemax={dailyGoal} aria-valuenow={Math.min(cardsReviewedToday,dailyGoal)} className="h-1 overflow-hidden rounded-full bg-border">
+          <div role="progressbar" aria-label="Daily review goal" aria-valuemin={0} aria-valuemax={dailyGoal} aria-valuenow={Math.min(todayCount ?? 0,dailyGoal)} className="h-1 overflow-hidden rounded-full bg-border">
             <div className="h-full rounded-full bg-primary" style={{width: `${progressPct}%`}} />
           </div>
           <Link href="/study" className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground">Choose packs &amp; study settings</Link>

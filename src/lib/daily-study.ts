@@ -109,3 +109,9 @@ export function dailyStudyStatus(summary?: DailyStudySummary | null, now = new D
   const completed = Math.max(0, Math.min(summary.total, summary.completed));
   return { total: summary.total, completed, remaining: summary.total - completed, finished: completed === summary.total };
 }
+
+/** A persisted home snapshot must never label yesterday's total as today. */
+export function currentReviewCount(count: number, day?: string | null, timeZone = "UTC", now = new Date()): number | null {
+  try { return day === toLocalDateKey(now, timeZone) ? count : null; }
+  catch { return null; }
+}

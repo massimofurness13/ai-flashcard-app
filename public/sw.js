@@ -168,14 +168,28 @@ async function cachedShell(path) {
 }
 
 async function navigateShell(request, path) {
+  // iOS may leave an offline navigation pending instead of rejecting fetch.
+  // Never hold the home-screen launch indefinitely behind that request.
+  const saved = await cachedShell(path).catch(() => undefined);
+  if (self.navigator?.onLine === false) return saved || offlineDocument();
+  const controller = new AbortController();
+  let timer;
   try {
-    const response = await fetch(request);
-    if (response.status < 500) return response;
-    return (await cachedShell(path)) || response;
+    const response = await Promise.race([
+      fetch(request, { signal: controller.signal }).catch(() => null),
+      new Promise(resolve => { timer = setTimeout(() => { controller.abort(); resolve(null); }, saved ? 1200 : 6000); }),
+    ]);
+    if (response && response.status < 500) return response;
+    return saved || offlineDocument();
   } catch {
-    const cached = await cachedShell(path);
-    return cached || Response.error();
-  }
+    return saved || offlineDocument();
+  } finally { clearTimeout(timer); }
+}
+
+function offlineDocument() {
+  return new Response(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Huella — offline</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f0d0a;color:#f5f0e8;font:18px system-ui}main{max-width:24rem;padding:2rem}h1{color:#d4a373}p{line-height:1.5}button{padding:.8rem 1.2rem;font:inherit;background:#d4a373;border:0;border-radius:.6rem}</style><main><h1>Huella</h1><p>The offline view is not ready on this device yet. Reconnect and open Huella to finish saving it.</p><p>Your saved study data has not been removed.</p><button onclick="location.reload()">Try again</button></main></html>`, {
+    status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+  });
 }
 
 // In-memory set of URLs we have on the device. The fetch handler must

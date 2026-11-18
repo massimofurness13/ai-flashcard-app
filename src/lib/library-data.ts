@@ -169,6 +169,6 @@ export async function getLibraryData(userId: string) {
     }
   }
 
-  return { dailyStudy, folders: foldersWithGrades, unfolderedDecks: unfolderedWithGrades, totalCards, userName: displayName, cardsReviewedToday, dailyGoal, streak, goalHitCelebrationShown, onboardingCompleted };
+  return { reviewDay: day, reviewTimeZone: tz, dailyStudy, folders: foldersWithGrades, unfolderedDecks: unfolderedWithGrades, totalCards, userName: displayName, cardsReviewedToday, dailyGoal, streak, goalHitCelebrationShown, onboardingCompleted };
 }
 

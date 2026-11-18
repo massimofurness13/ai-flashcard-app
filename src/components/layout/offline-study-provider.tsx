@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { prepareAppShell } from "./media-service-worker";
 import { useDeviceAccount } from "./device-provider";
@@ -15,6 +15,8 @@ export function OfflineStudyProvider() {
   const ownerId = user?.id;
   const pathname = usePathname();
   const [status, setStatus] = useState("");
+  const [failed, setFailed] = useState(false);
+  const retry = useRef<() => void>(() => {});
   useEffect(() => {
     if (!ownerId) return;
     const owner = ownerId;
@@ -25,26 +27,42 @@ export function OfflineStudyProvider() {
     async function prepare() {
       if (source !== "session" || running || cancelled || navigator.onLine === false || Date.now() - lastPrepared < 300_000) return;
       running = true;
+      setFailed(false);
+      let stage = "session";
       try {
+        report("Preparing today’s session for offline use…");
         await flushReviews(owner);
-        const response = await fetch("/api/review?filter=daily&orientation=auto&limit=120", {signal: AbortSignal.timeout(15000)});
-        if (!response.ok) throw new Error("Daily preparation unavailable");
+        const response = await fetch("/api/review?filter=daily&orientation=auto&limit=120", {signal: AbortSignal.timeout(60000)});
+        if (!response.ok) throw new Error(`Session request failed (${response.status})`);
         const data: SavedStudy = await response.json();
         if (cancelled || await deviceOwner() !== owner) return;
         await deleteRecord(owner, "offline:daily-ready");
         await saveStudy(owner, "study:daily", data);
         report("Saving daily cards and audio for offline study…");
+        stage = "media";
         await prepareStudyMedia(owner, data, (done, total) => report(`Saving for offline study · ${done}/${total} cards`));
         if (cancelled || await deviceOwner() !== owner) return;
+        stage = "shell";
+        report("Saving the app for offline launch…");
         const shell = await prepareAppShell();
         if (!shell.ready) throw new Error("Offline app is not ready");
         await writeRecord(owner, "offline:daily-ready", {day: data.daily?.day, cards: data.cards.length});
         report("Ready offline · daily cards, audio and images saved");
         lastPrepared = Date.now();
-      } catch {
-        report("Offline preparation incomplete · reconnect to finish");
+      } catch (error) {
+        if (cancelled) return;
+        setFailed(true);
+        const name = error instanceof Error ? error.name : "";
+        const message = error instanceof Error ? error.message : "";
+        if (!navigator.onLine) report("Saving paused · reconnect to continue");
+        else if (name === "QuotaExceededError") report("Not enough device storage to finish saving offline files.");
+        else if (/\(401\)|\(403\)/.test(message)) report("Sign in again to finish preparing offline study.");
+        else if (stage === "session") report("Your session couldn’t refresh from the server. Saved reviews are safe · retry shortly.");
+        else if (stage === "media") report("Some audio or images couldn’t be saved yet · retry to continue.");
+        else report("The app’s offline view couldn’t finish saving yet · retry to continue.");
       } finally { running = false; }
     }
+    retry.current = () => { lastPrepared = 0; void prepare(); };
     const connectivity = () => {
       if (navigator.onLine === false) {
         void readRecord<SavedStudy>(owner, "study:daily").then(async saved => {
@@ -65,5 +83,5 @@ export function OfflineStudyProvider() {
     return () => { cancelled = true; clearTimeout(timer); clearInterval(retryTimer); window.removeEventListener("online", connectivity); window.removeEventListener("offline", connectivity); document.removeEventListener("visibilitychange", visible); };
   }, [ownerId, source]);
   if (!user || !status || !["/", "/study", "/account/downloads"].includes(pathname)) return null;
-  return <p role="status" className="px-4 pt-2 text-center text-xs text-muted-foreground">{status}</p>;
+  return <div role="status" className="px-4 pt-2 text-center text-xs text-muted-foreground"><p>{status}</p>{failed && <button className="mt-1 underline underline-offset-4" onClick={() => retry.current()}>Retry saving</button>}</div>;
 }
