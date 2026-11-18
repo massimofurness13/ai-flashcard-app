@@ -51,3 +51,17 @@ export async function deleteRecord(owner: string, key: string): Promise<void> {
     tx.onabort = tx.onerror = () => reject(tx.error);
   });
 }
+
+/** Commit a review and its session cursor together, including on sudden app termination. */
+export async function writeRecords(owner: string, records: { key: string; value: unknown }[]): Promise<void> {
+  if (!owner) throw new Error("An account is required for device storage.");
+  const db = await deviceDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("records", "readwrite");
+    try {
+      for (const record of records) tx.objectStore("records").put({owner, ...record, savedAt: Date.now()});
+    } catch (error) { tx.abort(); reject(error); return; }
+    tx.oncomplete = () => resolve();
+    tx.onabort = tx.onerror = () => reject(tx.error || new Error("Device storage failed."));
+  });
+}

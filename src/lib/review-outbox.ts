@@ -1,37 +1,39 @@
-import { deleteRecord, listRecords, writeRecord } from "@/lib/device-db";
+import { deleteRecord, listRecords, writeRecord, writeRecords } from "@/lib/device-db";
 import { deviceOwner } from "@/lib/device-media";
 
 export interface PendingReview { eventId: string; cardId: string; quality: number; direction?: "front" | "back"; reviewedAt: string; error?: string; operation?: "undo"; sequence?: number }
 let enqueueChain: Promise<void> = Promise.resolve();
-function enqueue(owner: string, key: string, review: PendingReview) {
+export type ReviewCheckpoint = (review: PendingReview) => { key: string; value: unknown };
+function enqueue(owner: string, key: string, review: PendingReview, checkpoint?: ReviewCheckpoint) {
   const task = enqueueChain.then(async () => {
     const pending = await listRecords(owner, "review:");
     const sequence = Math.max(Date.now(), ...pending.map(r => (r.value as PendingReview).sequence ?? r.savedAt)) + 1;
-    await writeRecord(owner, key, {...review,sequence});
+    await writeRecords(owner, [{key, value: {...review,sequence}}, ...(checkpoint ? [checkpoint(review)] : [])]);
   });
   enqueueChain = task.catch(() => {});
   return task;
 }
 const flushing = new Map<string, Promise<void>>();
 const notify = () => { if (typeof window !== "undefined") window.dispatchEvent(new Event("huella:outbox")); };
-export async function queueReview(cardId: string, quality: number, direction?: "front" | "back"): Promise<PendingReview> {
+export async function queueReview(cardId: string, quality: number, direction?: "front" | "back", checkpoint?: ReviewCheckpoint): Promise<PendingReview> {
   const owner = await deviceOwner();
   if (!owner) throw new Error("Sign in to save your review.");
   const review: PendingReview = { eventId: crypto.randomUUID(), cardId, quality, ...(direction ? {direction} : {}), reviewedAt: new Date().toISOString() };
-  await enqueue(owner, `review:${review.eventId}`, review);
+  await enqueue(owner, `review:${review.eventId}`, review, checkpoint);
   notify();
   void flushReviews(owner);
   return review;
 }
 
-export async function queueUndo(review: PendingReview): Promise<void> {
+export async function queueUndo(review: PendingReview, checkpoint?: ReviewCheckpoint): Promise<void> {
   const owner = await deviceOwner();
   if (!owner) throw new Error("Sign in to undo your review.");
-  await enqueue(owner, `review:undo:${review.eventId}`, {...review, operation:"undo"});
+  await enqueue(owner, `review:undo:${review.eventId}`, {...review, operation:"undo"}, checkpoint);
   notify();
   void flushReviews(owner);
 }
 export async function flushReviews(owner: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
   const existing = flushing.get(owner);
   if (existing) return existing;
   const task = (async () => {

@@ -1,5 +1,6 @@
 "use client";
 import { useStudyClock } from "@/hooks/use-study-clock";
+import { checkpointKey } from "@/lib/offline-study";
 import { queueReview, queueUndo } from "@/lib/review-outbox";
 
 import Link from "next/link";
@@ -67,6 +68,7 @@ interface Card {
 }
 
 interface StudySessionProps {
+  offlineKey?: string;
   initialUndoHistory?: StudyUndoEntry[];
   dailyDay?: string;
   timingKey?: string;
@@ -77,6 +79,7 @@ interface StudySessionProps {
   orientation: "front" | "back" | "mixed" | "auto";
   onComplete: (stats: StudyStats, undo: () => Promise<void>) => void;
   onUndoComplete?: () => void;
+  onUndoReady?: (undo: () => Promise<void>) => void;
   completed?: boolean;
   /** The user's onboarding learning language ("es", "fr", …). Used
    *  to pick a native-speaker voice for any deck that has no explicit
@@ -109,6 +112,7 @@ const DEAL_OUT_MS = 100;
 // See src/lib/study-resume.ts.
 
 export function StudySession({
+  offlineKey,
   dailyDay,
   initialUndoHistory = [],
   timingKey,
@@ -119,6 +123,7 @@ export function StudySession({
   orientation,
   onComplete,
   onUndoComplete,
+  onUndoReady,
   completed = false,
   initialIndex = 0,
   initialStats,
@@ -286,20 +291,24 @@ export function StudySession({
   // recalled the card, so guessing "Good" would corrupt the
   // schedule. Manual mode still uses the user's explicit
   // Again/Good/Easy rating via handleRate, which DOES drive SM-2.
+  const checkpoint = useCallback((index: number, nextStats: StudyStats, history: StudyUndoEntry[], flipped = false) => ({
+    key: checkpointKey(offlineKey || "study:last"),
+    value: {cards, currentIndex: index, stats: nextStats, undoHistory: history, isFlipped: flipped,
+      learningLanguage: learningLanguage ?? null, dailyDay, timingKey, progressOffset, savedAt: Date.now()},
+  }), [offlineKey, cards, learningLanguage, dailyDay, timingKey, progressOffset]);
+
   const handleCountdownComplete = useCallback(async () => {
     if (!isAutoAdvance || !isFlipped || dealingOut || savingReview.current) return;
     savingReview.current = true;
-    try { const review = await queueReview(currentCard.id, 0, currentCard.studyDirection); setUndoHistory(h=>[...h,{index:currentIndex,review}]); setReviewError(null); }
-    catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
-    const newStats = {
-      ...stats,
-      ...timeReview(),
-      cardsReviewed: stats.cardsReviewed + 1,
-    };
-    setStats(newStats);
-    dealAndAdvance(newStats);
-    savingReview.current = false;
-  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance, currentCard, currentIndex, timeReview]);
+    const newStats = {...stats, cardsReviewed: stats.cardsReviewed + 1};
+    try {
+      const review = await queueReview(currentCard.id, 0, currentCard.studyDirection,
+        review => checkpoint(currentIndex + 1, newStats, [...undoHistory, {index: currentIndex, review}]));
+      setUndoHistory(h => [...h, {index: currentIndex, review}]); setReviewError(null);
+    } catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
+    const timedStats = {...newStats, ...timeReview()};
+    setStats(timedStats); dealAndAdvance(timedStats); savingReview.current = false;
+  }, [isAutoAdvance, isFlipped, dealingOut, stats, dealAndAdvance, currentCard, currentIndex, timeReview, checkpoint, undoHistory]);
 
   const handleFlip = useCallback(() => {
     if (dealingOut) return;
@@ -311,24 +320,24 @@ export function StudySession({
       if (dealingOut || isAutoAdvance || savingReview.current) return;
       savingReview.current = true;
 
-      // Commit to the device before advancing. Only the network part runs
-      // in the background; unacknowledged reviews survive app restarts.
-      try { const review = await queueReview(currentCard.id, quality, currentCard.studyDirection); setUndoHistory(h=>[...h,{index:currentIndex,review}]); setReviewError(null); }
-      catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
-
       const newStats = {
-        ...timeReview(),
+        ...stats,
         cardsReviewed: stats.cardsReviewed + 1,
-        ratings: {
-          ...stats.ratings,
-          [quality]: (stats.ratings[quality] || 0) + 1,
-        },
+        ratings: {...stats.ratings, [quality]: (stats.ratings[quality] || 0) + 1},
       };
+      // The cursor and rating share one IndexedDB transaction. A restart
+      // can never replay a rated card merely because syncing is offline.
+      try {
+        const review = await queueReview(currentCard.id, quality, currentCard.studyDirection,
+          review => checkpoint(currentIndex + 1, newStats, [...undoHistory, {index: currentIndex, review}]));
+        setUndoHistory(h => [...h, {index: currentIndex, review}]); setReviewError(null);
+      } catch { setReviewError("Couldn't save this review on your device. Free some storage, then try again."); savingReview.current = false; return; }
+      Object.assign(newStats, timeReview());
       setStats(newStats);
       dealAndAdvance(newStats);
       savingReview.current = false;
     },
-    [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance, currentIndex, timeReview]
+    [currentCard, stats, dealingOut, isAutoAdvance, dealAndAdvance, currentIndex, timeReview, checkpoint, undoHistory]
   );
 
   const handleUndo = useCallback(async () => {
@@ -336,7 +345,9 @@ export function StudySession({
     if (!previous || dealingOut || savingReview.current) return;
     savingReview.current = true; setUndoing(true);
     try {
-      await queueUndo(previous.review);
+      const restoredStats = {...stats, cardsReviewed: Math.max(0, stats.cardsReviewed - 1),
+        ratings: previous.review.quality > 0 ? {...stats.ratings, [previous.review.quality]: Math.max(0, (stats.ratings[previous.review.quality] || 0) - 1)} : stats.ratings};
+      await queueUndo(previous.review, () => checkpoint(previous.index, restoredStats, undoHistory.slice(0, -1), true));
       const timing = undoTimeReview();
       setStats(current=>({...current,...timing,cardsReviewed:Math.max(0,current.cardsReviewed-1),
         ratings:previous.review.quality > 0 ? {...current.ratings,[previous.review.quality]:Math.max(0,(current.ratings[previous.review.quality]||0)-1)} : current.ratings}));
@@ -345,9 +356,9 @@ export function StudySession({
       setIsPaused(true); setReviewError(null); onUndoComplete?.();
     } catch { setReviewError("Couldn't save the undo on your device. Please try again."); }
     finally { savingReview.current=false;setUndoing(false); }
-  }, [undoHistory,dealingOut,undoTimeReview,onUndoComplete]);
+  }, [undoHistory,dealingOut,undoTimeReview,onUndoComplete,stats,checkpoint]);
   // The finish screen uses the same mounted session, including its undo history.
-  useEffect(() => { undoAction.current = handleUndo; }, [handleUndo]);
+  useEffect(() => { undoAction.current = handleUndo; onUndoReady?.(handleUndo); }, [handleUndo, onUndoReady]);
 
   // Once the answer is revealed, ← / → grade the card (don't know /
   // know it) — the keyboard twin of the swipe. Space flips.

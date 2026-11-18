@@ -1,9 +1,10 @@
 // Huella service worker.
 //
-// Two jobs:
+// Three jobs:
 //   1. Push notifications + click-through.
 //   2. Offline media cache — audio/images from a DOWNLOADED pack are
 //      served from the device.
+//   3. Anonymous, audited application shells and their immutable assets.
 //
 // CRITICAL LESSON (fixed here): the first version intercepted EVERY
 // Supabase media request and did a full-file re-fetch on each one to
@@ -17,6 +18,165 @@
 // there.
 
 const MEDIA_CACHE = "huella-media-v2";
+const ASSET_CACHE = "huella-static-v1";
+const SHELL_INDEX = "huella-shell-index-v1";
+const SHELL_PREFIX = "huella-shell-v1-";
+const SHELL_POINTER = new URL("/__huella_shell__", self.location.origin).href;
+// These pages and their shared layout render NO account data on the server.
+// Re-audit before adding a route or moving personal data into server props.
+const SHELL_ROUTES = ["/", "/study", "/study/session", "/account", "/account/downloads", "/stats"];
+let preparingShell = null;
+
+function isFlight(request, url) {
+  return url.searchParams.has("_rsc") || request.headers.has("rsc") ||
+    request.headers.has("next-router-state-tree") ||
+    request.headers.has("next-router-prefetch") ||
+    request.headers.has("next-router-segment-prefetch") ||
+    (request.headers.get("accept") || "").includes("text/x-component");
+}
+
+function isStaticAsset(url) {
+  return url.origin === self.location.origin && !url.search &&
+    /^\/_next\/static\/[\w./-]+\.(?:js|css|woff2?|ttf|otf|png|svg|webp|jpe?g|gif|ico)$/.test(url.pathname);
+}
+
+function publicResponse(response, contentType) {
+  return response.status === 200 && !response.redirected &&
+    response.type !== "opaque" &&
+    !response.headers.has("set-cookie") &&
+    !/(?:private|no-store)/i.test(response.headers.get("cache-control") || "") &&
+    !/(?:\*|cookie|authorization)/i.test(response.headers.get("vary") || "") &&
+    contentType.test(response.headers.get("content-type") || "");
+}
+
+// Only immutable, same-origin Next build assets. No image optimizer, APIs,
+// source maps, external scripts, or arbitrary URLs supplied by a client.
+function assetReferences(text, base, css = false) {
+  const urls = new Set();
+  for (const match of text.matchAll(/(?:\/_next\/static\/|static\/chunks\/)[\w./-]+\.(?:js|css|woff2?|ttf|otf|png|svg|webp|jpe?g|gif|ico)/g)) {
+    const path = match[0].startsWith("/") ? match[0] : `/_next/${match[0]}`;
+    const url = new URL(path, self.location.origin);
+    if (isStaticAsset(url)) urls.add(url.href);
+  }
+  if (css) {
+    for (const match of text.matchAll(/url\(\s*["']?([^\s"')]+)["']?\s*\)/g)) {
+      const url = new URL(match[1], base);
+      if (isStaticAsset(url)) urls.add(url.href);
+    }
+  }
+  return urls;
+}
+
+async function saveAsset(url, cache) {
+  const cached = await cache.match(url);
+  if (cached) return cached;
+  const response = await fetch(url, { credentials: "omit", redirect: "error", cache: "no-cache", signal: AbortSignal.timeout(15000) });
+  const pathname = new URL(url).pathname;
+  const type = pathname.endsWith(".js") ? /(?:javascript|ecmascript)/i :
+    pathname.endsWith(".css") ? /^text\/css/i : /^(?:font\/|image\/|application\/(?:font|octet-stream|vnd\.ms-fontobject))/i;
+  if (!publicResponse(response, type)) throw new Error("Unsafe or unavailable application asset");
+  await cache.put(url, response.clone());
+  return response;
+}
+
+async function prepareAppShell() {
+  const documents = [];
+  const assets = new Set();
+  let build;
+  for (const path of SHELL_ROUTES) {
+    // Never save the actual navigation response: it may carry identity,
+    // query-specific data, or auth cookies. Fetch a clean public document.
+    const response = await fetch(new URL(path, self.location.origin).href, {
+      credentials: "omit", redirect: "error", cache: "no-store",
+      headers: { Accept: "text/html" },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!publicResponse(response, /^text\/html/i)) throw new Error("Public shell unavailable");
+    const html = await response.clone().text();
+    // Next's initial Flight payload embeds the navigation build id. Fail
+    // closed if its format changes; never publish shells from mixed builds.
+    const id = html.replace(/\\"/g, '"').match(/"b"\s*:\s*"([\w-]+)"/)?.[1];
+    if (!id || (build && id !== build)) throw new Error("Application build changed during preparation");
+    build = id;
+    const refs = assetReferences(html, self.location.origin);
+    if (!refs.size) throw new Error("Application shell has no build assets");
+    for (const url of refs) assets.add(url);
+    documents.push({ path, response });
+  }
+  const cache = await caches.open(ASSET_CACHE);
+  // Set iteration visits newly discovered dependencies too. Fetching bounded
+  // batches avoids competing with the study audio connection pool.
+  const pending = [...assets];
+  for (let i = 0; i < pending.length;) {
+    const batch = pending.slice(i, i + 4);
+    i += batch.length;
+    await Promise.all(batch.map(async (url) => {
+      const response = await saveAsset(url, cache);
+      if (/\.(?:js|css)$/.test(new URL(url).pathname)) {
+        for (const dependency of assetReferences(await response.text(), url, url.endsWith(".css"))) {
+          if (!assets.has(dependency)) { assets.add(dependency); pending.push(dependency); }
+        }
+      }
+    }));
+  }
+  const cacheName = `${SHELL_PREFIX}${build}`;
+  const shells = await caches.open(cacheName);
+  for (const { path, response } of documents) {
+    await shells.put(new URL(path, self.location.origin).href, response);
+  }
+  // One atomic pointer update, only AFTER every document and asset succeeded.
+  // A failed update keeps the previous working build available.
+  const index = await caches.open(SHELL_INDEX);
+  const oldPointer = await index.match(SHELL_POINTER);
+  const previous = oldPointer ? (await oldPointer.json()).cacheName : null;
+  await index.put(SHELL_POINTER, new Response(JSON.stringify({ cacheName, build, assets: [...assets] }), {
+    headers: { "Content-Type": "application/json" },
+  }));
+  // Keep the previous shell as well. Hashed assets intentionally outlive both:
+  // an already-open tab may still request a lazy chunk from an older build.
+  const keys = await caches.keys();
+  await Promise.all(keys.filter(key => key.startsWith(SHELL_PREFIX) && key !== cacheName && key !== previous)
+    .map(key => caches.delete(key)));
+  return { ready: true, build, routes: SHELL_ROUTES };
+}
+
+async function checkAppShell() {
+  const pointer = await (await caches.open(SHELL_INDEX)).match(SHELL_POINTER);
+  if (!pointer) return { ready: false };
+  const { cacheName, build, assets } = await pointer.json();
+  const shells = await caches.open(cacheName);
+  const files = await caches.open(ASSET_CACHE);
+  for (const path of SHELL_ROUTES) {
+    if (!(await shells.match(new URL(path, self.location.origin).href, { ignoreVary: true }))) return { ready: false };
+  }
+  if (!Array.isArray(assets) || !assets.length) return { ready: false };
+  for (const asset of assets) {
+    if (!(await files.match(asset))) return { ready: false };
+  }
+  return { ready: true, build, routes: SHELL_ROUTES };
+}
+
+async function cachedShell(path) {
+  const index = await caches.open(SHELL_INDEX);
+  const pointer = await index.match(SHELL_POINTER);
+  if (!pointer) return undefined;
+  const { cacheName } = await pointer.json();
+  const cache = await caches.open(cacheName);
+  // This lookup is ONLY reached for document navigation, never RSC. Ignore
+  // Next's Vary headers because the stored response is explicitly HTML.
+  return cache.match(new URL(path, self.location.origin).href, { ignoreVary: true });
+}
+
+async function navigateShell(request, path) {
+  try {
+    const response = await fetch(request);
+    if (response.status < 500) return response;
+    return (await cachedShell(path)) || response;
+  } catch {
+    const cached = await cachedShell(path);
+    return cached || Response.error();
+  }
+}
 
 // In-memory set of URLs we have on the device. The fetch handler must
 // decide synchronously whether to intercept (you can't "un-intercept"
@@ -111,7 +271,23 @@ async function serveDownloaded(request) {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET" || !isCacheableMedia(req.url)) return; // native
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  // RSC/Flight and prefetch responses must NEVER share an HTML cache key.
+  // Next itself falls back to document navigation if an RSC fetch fails.
+  if (isFlight(req, url)) return;
+  if (url.origin === self.location.origin && req.mode === "navigate" && SHELL_ROUTES.includes(url.pathname)) {
+    event.respondWith(navigateShell(req, url.pathname));
+    return;
+  }
+  if (isStaticAsset(url) && !req.headers.has("range")) {
+    event.respondWith((async () => {
+      try { return await saveAsset(url.href, await caches.open(ASSET_CACHE)); }
+      catch { return fetch(req); }
+    })());
+    return;
+  }
+  if (!isCacheableMedia(req.url)) return;
   // ONLY intercept media we've explicitly downloaded. Everything else is
   // left to the browser (no interception, no stalls, no regression).
   if (!cachedUrls.has(req.url)) return;
@@ -160,7 +336,22 @@ self.addEventListener("message", (event) => {
   const data = event.data;
   if (!data) return;
   if (data.type === "PRECACHE" && Array.isArray(data.urls)) {
-    event.waitUntil(precache(data.urls, event.source));
+    event.waitUntil(precache(data.urls.filter(url => typeof url === "string" && isCacheableMedia(url)), event.source));
+  }
+  if (data.type === "PREPARE_APP_SHELL") {
+    if (!preparingShell) preparingShell = prepareAppShell().finally(() => { preparingShell = null; });
+    const reply = event.ports?.[0] || event.source;
+    event.waitUntil(preparingShell.then(
+      result => reply?.postMessage({ type: "APP_SHELL_RESULT", ...result }),
+      () => reply?.postMessage({ type: "APP_SHELL_RESULT", ready: false }),
+    ));
+  }
+  if (data.type === "CHECK_APP_SHELL") {
+    const reply = event.ports?.[0] || event.source;
+    event.waitUntil(checkAppShell().then(
+      result => reply?.postMessage({ type: "APP_SHELL_RESULT", ...result }),
+      () => reply?.postMessage({ type: "APP_SHELL_RESULT", ready: false }),
+    ));
   }
 });
 

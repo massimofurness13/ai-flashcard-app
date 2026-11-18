@@ -7,8 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { APP_NAME } from "@/lib/constants";
 import { ThemeToggle } from "./theme-toggle";
-import { createClient } from "@/lib/supabase/client";
-import type { User } from "@supabase/supabase-js";
+import { useDeviceAccount } from "./device-provider";
 import { CreditBalance } from "@/components/subscription/credit-balance";
 
 const navItems = [
@@ -54,7 +53,7 @@ const navItems = [
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, signOut } = useDeviceAccount();
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -77,29 +76,8 @@ export function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showDropdown]);
 
-  useEffect(() => {
-    const supabase = createClient();
-
-    // Read the session immediately (fast, from local cookies)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-
-    // Subscribe to sign-in / sign-out / token-refresh so the navbar
-    // stays in sync even on mobile Safari where the initial load can
-    // beat the cookie rehydration.
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
-  async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+  function handleLogout() {
+    signOut();
     router.push("/auth/login");
     invalidateDeviceQueries();
     router.refresh();

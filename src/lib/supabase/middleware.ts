@@ -6,7 +6,7 @@ export async function updateSession(request: NextRequest) {
   // Server-rendered edit pages and API routes must not bypass authentication.
   const path = request.nextUrl.pathname;
   if (/^\/pdf\.worker\.\d+\.\d+\.\d+\.min\.mjs$/.test(path)
-      || ["/", "/study", "/stats", "/account", "/account/billing", "/account/downloads"].includes(path)
+      || ["/", "/study/session", "/study", "/stats", "/account", "/account/billing", "/account/downloads"].includes(path)
       || (path !== "/decks/new" && /^\/decks\/[^/]+$/.test(path))) return NextResponse.next({ request });
   let supabaseResponse = NextResponse.next({ request });
 

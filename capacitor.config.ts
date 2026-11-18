@@ -11,8 +11,9 @@ import type { CapacitorConfig } from "@capacitor/cli";
  * shell + native plugins (status bar, splash, push later); the actual
  * UI is served from the same place the website is.
  *
- * `webDir` points at a tiny offline fallback page that only shows if
- * the device can't reach the server at launch.
+ * Prepared offline launches use the service worker on that same HTTPS
+ * origin. App-bound domains enable service workers in WKWebView. `webDir`
+ * is only a reconnect screen when no prepared cache can serve the launch.
  *
  * IAP note: Stripe checkout opens in the EXTERNAL browser (see
  * src/lib/stripe-checkout.ts), not inside this WebView, which is what
@@ -34,8 +35,13 @@ const config: CapacitorConfig = {
     url: SERVER_URL,
     // HTTPS only — never allow cleartext traffic.
     cleartext: false,
+    errorPath: "index.html",
   },
   ios: {
+    // Required alongside WKAppBoundDomains in Info.plist for the remote
+    // origin's service worker to handle a cold launch without a connection.
+    // Keep OAuth in ASWebAuthenticationSession and external links in Safari.
+    limitsNavigationsToAppBoundDomains: true,
     // "always" keeps web content below the status bar so the top
     // nav isn't hidden under the clock/battery. The web app handles
     // the bottom safe area via its own layout. (We can revisit

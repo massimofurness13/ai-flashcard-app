@@ -24,6 +24,13 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Keep in sync with capacitor.config.ts server.url. This enables the
+	     same-origin service worker; it does not bundle or prefill offline data. -->
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>flashmind-35q4.onrender.com</string>
+		<string>localhost</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array><dict>
 		<key>CFBundleURLName</key><string>app.huella.auth</string>

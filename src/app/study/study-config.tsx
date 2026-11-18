@@ -347,7 +347,9 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
     if (selectedTags.length > 0) {
       params.set("tags", selectedTags.join(","));
     }
-    router.push(`/study/session?${params.toString()}`);
+    const target = `/study/session?${params.toString()}`;
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    if (navigator.onLine === false) window.location.assign(target); else router.push(target);
   }
 
   const activeFilter = FILTER_OPTIONS.find((f) => f.value === filter);

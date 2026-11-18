@@ -8,7 +8,6 @@ import Link from "next/link";
 import { useDeviceAccount } from "@/components/layout/device-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
 import { CARDS_PER_SESSION_OPTIONS, AUTO_FLIP_MAX, CARD_ORIENTATION_OPTIONS, FONT_SIZE_OPTIONS } from "@/lib/constants";
 import { readDeviceSettings, updateDeviceSettings } from "@/lib/device-settings";
 import { speak } from "@/lib/tts";
@@ -20,7 +19,7 @@ import { SettingsSection } from "@/components/account/settings-section";
 export default function AccountPage() {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
-  const { user } = useDeviceAccount();
+  const { user, signOut } = useDeviceAccount();
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [countDraft, setCountDraft] = useState<string | null>(null);
   const [saveError, setSaveError] = useState(false);
@@ -44,8 +43,8 @@ export default function AccountPage() {
     document.body.classList.add(`font-${value}`);
     save({ fontSize: value });
   }
-  async function logout() {
-    await createClient().auth.signOut();
+  function logout() {
+    signOut();
     router.push("/auth/login");
     invalidateDeviceQueries();
     router.refresh();

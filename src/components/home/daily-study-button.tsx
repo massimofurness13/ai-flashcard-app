@@ -1,4 +1,7 @@
 "use client";
+import { listRecords } from "@/lib/device-db";
+import { readOfflineStudy } from "@/lib/offline-study";
+import { useDeviceAccount } from "@/components/layout/device-provider";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -15,7 +18,25 @@ export function DailyStudyButton({ summary }: { summary?: DailyStudySummary | nu
     window.addEventListener("focus", tick);
     return () => { clearInterval(timer); window.removeEventListener("focus", tick); };
   }, []);
-  const progress = dailyStudyStatus(summary, now);
+  const { user } = useDeviceAccount();
+  const owner = user?.id;
+  const [localSummary, setLocalSummary] = useState<DailyStudySummary | null>(null);
+  const [pendingLocalReviews, setPendingLocalReviews] = useState(false);
+  useEffect(() => {
+    if (!owner) return;
+    let active = true;
+    const refresh = () => { void Promise.all([readOfflineStudy(owner, "study:daily"), listRecords(owner, "review:")]).then(([saved, pending]) => {
+      if (!active || !saved?.data.daily) return;
+      setPendingLocalReviews(pending.length > 0);
+      const { daily } = saved.data;
+      setLocalSummary({day: daily.day, timeZone: summary?.timeZone || "UTC",
+        total: daily.total, completed: saved.snapshot?.stats.cardsReviewed ?? daily.completed});
+    }).catch(() => { /* Keep the last confirmed summary if device storage fails. */ }); };
+    refresh(); window.addEventListener("huella:outbox", refresh);
+    return () => { active = false; window.removeEventListener("huella:outbox", refresh); };
+  }, [owner, summary?.timeZone]);
+  const effective = localSummary && (!summary || (localSummary.day === summary.day && (pendingLocalReviews || localSummary.completed > summary.completed))) ? localSummary : summary;
+  const progress = dailyStudyStatus(effective, now);
   const router=useRouter();
   function start() {
     unlockAudio();
@@ -25,7 +46,10 @@ export function DailyStudyButton({ summary }: { summary?: DailyStudySummary | nu
       const settings=JSON.parse(localStorage.getItem("huella-settings") || "{}");
       if (typeof settings.defaultAutoFlip === "number") autoFlip=Math.max(0,Math.min(AUTO_FLIP_MAX,settings.defaultAutoFlip));
     } catch { /* Use manual flips when preferences cannot be read. */ }
-    router.push("/study/session?"+new URLSearchParams({filter:"daily",limit:String(DAILY_STUDY_TARGET),orientation:"auto",autoFlip:String(autoFlip),autoAdvance:"0"}));
+    const target = "/study/session?"+new URLSearchParams({filter:"daily",limit:String(DAILY_STUDY_TARGET),orientation:"auto",autoFlip:String(autoFlip),autoAdvance:"0"});
+    // Offline document navigation is served by the saved shell; RSC needs a server.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    if (navigator.onLine === false) window.location.assign(target); else router.push(target);
   }
   return (
     <Button
