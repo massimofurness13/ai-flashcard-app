@@ -1,6 +1,6 @@
 import {isRetentionCard} from "@/lib/recall-history";
 import {describe,it,expect} from "vitest";
-import {buildDailyPlan,dailyProgress,recallBand} from "@/lib/daily-study";
+import {buildDailyPlan,dailyProgress,recallBand,currentReviewCount} from "@/lib/daily-study";
 import {scheduleDirection,type StudyCandidate,type RecallState} from "@/lib/study-selection";
 const now=new Date("2026-11-11T12:00:00Z"),future=new Date(now.getTime()+86400000);
 function state(direction:string,lastQuality=4):RecallState{return {direction,lastQuality,lastReviewedAt:new Date(0),nextReviewAt:future,easeFactor:2.5,interval:6,repetitions:2};}
@@ -131,4 +131,16 @@ describe("daily 120 with a 70:50 starting allocation",()=>{
    {cardId:picks[2].id,direction:picks[2].studyDirection==="front"?"back":"front",quality:4}]);
   expect(progress.completed).toBe(1);expect(progress.remaining).toHaveLength(2);expect(progress.ratings).toEqual({1:0,2:1,4:0});
  });
+});
+
+describe("dated home progress", () => {
+  it("never presents yesterday’s cached goal as achieved today", () => {
+    expect(currentReviewCount(120, "2026-11-17", "Europe/London", new Date("2026-11-18T08:00:00Z"))).toBeNull();
+  });
+  it("does not invent zero when the snapshot has no date", () => {
+    expect(currentReviewCount(120)).toBeNull();
+  });
+  it("uses the account timezone at a calendar boundary", () => {
+    expect(currentReviewCount(23, "2026-11-17", "America/Bogota", new Date("2026-11-18T02:00:00Z"))).toBe(23);
+  });
 });

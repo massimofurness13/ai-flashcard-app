@@ -151,13 +151,14 @@ describe("saved device identity (not server authentication)", () => {
     await tick();
     expect(f.current().user?.id).toBe("alice");
   });
-  it("clears identity and legacy private resume on a successful online no-session result", async () => {
+  it("retains local study when cookies are absent and the interface falsely reports online", async () => {
     const f = fixture({ online: true });
     f.emit("INITIAL_SESSION", null);
     await tick();
-    expect(f.current()).toEqual({ user: null, ready: true, source: null });
-    expect(readDeviceIdentity(f.storage)).toBeNull();
-    expect(f.resume()).toBeNull();
+    expect(f.current().user?.id).toBe("alice");
+    expect(f.current().source).toBe("local");
+    expect(readDeviceIdentity(f.storage)?.id).toBe("alice");
+    expect(f.resume()).toBe("alice-private-cards");
   });
   it("clears explicit SIGNED_OUT even offline, without touching any account data", () => {
     const f = fixture();

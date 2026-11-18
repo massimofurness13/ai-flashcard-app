@@ -2,12 +2,16 @@
  * Usage: node scripts/validate-offline-browser.mjs /tmp/isolated-production-copy
  * Build that copy WITHOUT .env files using NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:43180,
  * NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key, DATABASE_URL=postgresql://fixture:fixture@127.0.0.1:9/fixture.
+ * Set BROWSER_ENGINE=webkit and use Playwright >=1.62 for persisted WebKit caches.
+ * WebKit disconnects the fixture server (not a mocked browser offline flag).
  * PLAYWRIGHT_MODULE and CHROMIUM_PATH may override the locally discovered installations.
  */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createServer, request } from 'node:http';
-import { spawn } from 'node:child_process';
+import { createServer as createTLSServer } from 'node:https';
+import { createServer as createGateway, connect } from 'node:net';
+import { spawn, execFileSync } from 'node:child_process';
 import { mkdtemp, writeFile, readFile, readdir } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -25,7 +29,8 @@ if (!modulePath) {
     }
   }
 }
-const { chromium } = require(modulePath);
+const { chromium, webkit } = require(modulePath);
+const safari = process.env.BROWSER_ENGINE === "webkit";
 const artifacts = await mkdtemp(join(tmpdir(), 'huella-browser-proof-'));
 const origin = 'http://127.0.0.1:43180';
 const owner = '11111111-1111-4111-8111-111111111111';
@@ -38,7 +43,7 @@ const token = [Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('ba
 const session = {access_token:token,refresh_token:'fixture-refresh',expires_in:86400,expires_at:expires,token_type:'bearer',user};
 const writes = [], requests = [], failures = [], checks = [], blockedExternal = [];
 const accepted = new Map();
-let offline = false, acknowledge = false, context, page;
+let offline = false, acknowledge = false, staleHome = false, failPreparation = false, context, page;
 const daily = () => ({cards:cards.filter(c=>!accepted.has(c.id)),learningLanguage:'es',daily:{day,timingKey:`fixture:${day}`,completed:accepted.size,total:3,ratings:{1:[...accepted.values()].filter(r=>r.quality===1).length,2:[...accepted.values()].filter(r=>r.quality===2).length,4:[...accepted.values()].filter(r=>r.quality===4).length},mix:{practice:3,retention:0,new:0}}});
 const json = (res, data, status=200) => {res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
 const proxy = createServer(async (req,res)=> {
@@ -54,14 +59,14 @@ const proxy = createServer(async (req,res)=> {
   if (url.pathname.startsWith('/api/')) {
     let body='';for await(const piece of req) body+=piece;
     if(url.pathname==='/api/review') {
-      if(req.method==='GET') return json(res,daily());
+      if(req.method==='GET') return failPreparation ? json(res,{error:'Fixture unavailable'},503) : json(res,daily());
       const review=JSON.parse(body); assert(cards.some(c=>c.id===review.cardId),'Only fixture cards may be written');
       writes.push({method:req.method,...review,acknowledged:acknowledge});
       if(!acknowledge) return json(res,{recorded:false});
       if(req.method==='DELETE') accepted.delete(review.cardId);else accepted.set(review.cardId,review);
       return json(res,{recorded:true,eventId:review.eventId});
     }
-    if(url.pathname==='/api/library')return json(res,{dailyStudy:{day,timeZone:'UTC',total:3,completed:accepted.size},folders:[],unfolderedDecks:[{...deck,_count:{cards:3},grade:'New',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),lastStudiedAt:null}],totalCards:3,userName:'Offline fixture',cardsReviewedToday:accepted.size,dailyGoal:3,streak:0,goalHitCelebrationShown:true,onboardingCompleted:true});
+    if(url.pathname==='/api/library')return json(res,{dailyStudy:{day,timeZone:'UTC',total:3,completed:accepted.size},folders:[],unfolderedDecks:[{...deck,_count:{cards:3},grade:'New',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),lastStudiedAt:null}],totalCards:3,userName:'Offline fixture',reviewDay:staleHome?'2000-01-01':day,reviewTimeZone:'UTC',cardsReviewedToday:staleHome?120:accepted.size,dailyGoal:3,streak:0,goalHitCelebrationShown:true,onboardingCompleted:true});
     if(url.pathname==='/api/study-config')return json(res,{decks:[{...deck,_count:{cards:3}}]});
     if(url.pathname==='/api/images/quota')return json(res,{isPro:true,canViewAiImages:true,credits:1000,remaining:1000,totalRemaining:1000});
     if(url.pathname==='/api/user/tags')return json(res,{tags:[]});
@@ -73,7 +78,33 @@ const proxy = createServer(async (req,res)=> {
   const upstream=request({hostname:'127.0.0.1',port:43181,path:req.url,method:req.method,headers:{...req.headers,host:'127.0.0.1:43181'}},r=>{res.writeHead(r.statusCode,r.headers);r.pipe(res);});
   upstream.on('error',()=>{if(!res.headersSent)res.writeHead(502);res.end();});req.pipe(upstream);
 });
-await new Promise(r=>proxy.listen(43180,'127.0.0.1',r));
+// WebKit performs TLS negotiation before Playwright's route fulfillment.
+// Serve genuine fixture TLS for saved media on the same host/port; never
+// weaken certificate handling for a real service or user browser.
+const fixtureKey=join(artifacts,'fixture.key'), fixtureCert=join(artifacts,'fixture.crt');
+execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',fixtureKey,'-out',fixtureCert,'-days','1','-subj','/CN=127.0.0.1'],{stdio:'ignore'});
+const tlsProxy=createTLSServer({key:await readFile(fixtureKey),cert:await readFile(fixtureCert)},(req,res)=>{
+  if(offline){req.socket.destroy();return;}
+  const pathname=new URL(req.url,origin).pathname;
+  if(!pathname.startsWith('/storage/v1/object/public/fixtures/')){res.writeHead(404);res.end();return;}
+  res.writeHead(200,{'Content-Type':pathname.endsWith('.png')?'image/png':'audio/wav','Access-Control-Allow-Origin':'*'});
+  res.end(pathname.endsWith('.png')?png:wav);
+});
+const sockets=new Set();
+const gateway=createGateway(socket=>{
+  sockets.add(socket);socket.once('close',()=>sockets.delete(socket));
+  socket.once('data',data=>{
+    socket.pause();
+    const upstream=connect({host:'127.0.0.1',port:data[0]===22?43182:43183},()=>{
+      upstream.write(data);socket.pipe(upstream);upstream.pipe(socket);socket.resume();
+    });
+    upstream.on('error',()=>socket.destroy());socket.on('error',()=>upstream.destroy());
+    socket.on('close',()=>upstream.destroy());
+  });
+});
+await new Promise(r=>proxy.listen(43183,'127.0.0.1',r));
+await new Promise(r=>tlsProxy.listen(43182,'127.0.0.1',r));
+await new Promise(r=>gateway.listen(43180,'127.0.0.1',r));
 const serverLog = createWriteStream(join(artifacts,'server.log'));
 const server=spawn(process.execPath,[join(build,'node_modules/next/dist/bin/next'),'start','-H','127.0.0.1','-p','43181'],{cwd:build,env:{HOME:homedir(),PATH:process.env.PATH,NODE_ENV:'production',NEXT_TELEMETRY_DISABLED:'1',NEXT_PUBLIC_SUPABASE_URL:origin,NEXT_PUBLIC_SUPABASE_ANON_KEY:'fixture-anon-key',DATABASE_URL:'postgresql://fixture:fixture@127.0.0.1:9/fixture'},stdio:['ignore','pipe','pipe']});
 server.stdout.pipe(serverLog);server.stderr.pipe(serverLog);
@@ -82,14 +113,16 @@ const check=(name,details={})=>{checks.push({name,...details});console.log('PASS
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOioAAAAASUVORK5CYII=','base64');
 const wav=Buffer.alloc(44+1600);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(1600,40);
 async function launch(isOffline=false){
-  context=await chromium.launchPersistentContext(join(artifacts,'profile'),{headless:true,executablePath:process.env.CHROMIUM_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',offline:isOffline,viewport:{width:430,height:900},serviceWorkers:'allow',args:['--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1']});
-  // Only local fixture origins can communicate. Media is synthetic; no TTS service is used.
-  await context.route('**/*',async route=>{
+  context=await (safari ? webkit : chromium).launchPersistentContext(join(artifacts,'profile'),{headless:true,...(safari ? {} : {executablePath:process.env.CHROMIUM_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',args:['--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1']}),ignoreHTTPSErrors:safari,offline:safari ? false : isOffline,viewport:{width:430,height:900},serviceWorkers:'allow'});
+  // Fixture media/auth/API are local and synthetic; no real account or TTS service.
+  // WebKit uses real local TLS: request routing interferes with its SW cache.
+  if (!safari) await context.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.protocol==='data:'||url.protocol==='blob:')return route.continue();
     if(url.hostname!=='127.0.0.1'){blockedExternal.push(url.origin);return route.abort();}
     if(url.protocol==='https:'&&url.pathname.startsWith('/storage/')){
       if(offline)return route.abort();
+      if(safari)return route.continue();
       return route.fulfill({status:200,contentType:url.pathname.endsWith('.png')?'image/png':'audio/wav',body:url.pathname.endsWith('.png')?png:wav,headers:{'Access-Control-Allow-Origin':'*'}});
     }
     return route.continue();
@@ -107,7 +140,8 @@ async function launch(isOffline=false){
   });
   page=context.pages()[0]||await context.newPage();
   page.on('pageerror',e=>{failures.push({type:'pageerror',message:e.message});console.error('BROWSER ERROR',e.message);});
-  page.on('console',m=>{if(m.type()==='error'&&!m.text().includes('Failed to load resource'))console.error('CONSOLE',m.text());});
+  page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text());});
+  page.on('requestfailed',r=>console.error('REQUEST FAILED',r.url(),r.failure()?.errorText));
   page.setDefaultTimeout(20000);
 }
 const records=()=>page.evaluate(async()=>{
@@ -128,15 +162,16 @@ try{
   for(let i=0;i<100;i++){try{const r=await fetch(origin+'/study');if(r.ok)break;}catch{}await delay(100);}
   await launch();
   await context.addCookies([{name:'sb-127-auth-token',value:'base64-'+Buffer.from(JSON.stringify(session)).toString('base64url'),url:origin,sameSite:'Lax',expires}]);
-  await page.goto(origin+'/study',{waitUntil:'networkidle'});
+  await page.goto(origin+'/study',{waitUntil:'domcontentloaded'});
   await page.getByText('Offline fixture only',{exact:true}).waitFor();
   check('fixture authenticated study configuration');
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await page.waitForFunction(async()=>{const c=await caches.open('huella-shell-index-v1');return !!await c.match(location.origin+'/__huella_shell__');},{},{timeout:60000});
+  await page.getByText('Ready offline · daily cards, audio and images saved',{exact:true}).waitFor({timeout:60000});
   const cacheAudit=await page.evaluate(async()=>{const result={};for(const name of await caches.keys()){const c=await caches.open(name);result[name]=(await c.keys()).map(r=>new URL(r.url).pathname);}return result;});
+  assert.equal(Object.values(cacheAudit).filter(paths=>paths.includes('/study/session')).length,1,'One complete public shell must be published');
   assert(!Object.values(cacheAudit).flat().some(p=>p.startsWith('/api/')||p.startsWith('/auth/')));
   check('real service worker published safe shell and static caches',{caches:Object.fromEntries(Object.entries(cacheAudit).map(([k,v])=>[k,v.length]))});
-  await page.getByText('Ready offline · daily cards, audio and images saved',{exact:true}).waitFor({timeout:60000});
   const prepared=await pollRecords(r=>r.some(x=>x.key==='offline:daily-ready'));
   assert.equal(prepared.find(x=>x.key==='study:daily').value.cards.length,3);
   assert.equal(prepared.filter(x=>x.key.startsWith('audio:v1:')).length,6);
@@ -144,7 +179,7 @@ try{
   assert(pack && pack.value.urls.length===2,'Manifest must include audio and artwork');
   assert.equal(prepared.filter(x=>x.key.startsWith('media:')).length,2);
   check('automatic preparation reaches Ready with three cards, six audio mappings and complete media manifest',{cards:3,audioMappings:6,mediaFiles:2});
-  await page.goto(sessionUrl,{waitUntil:'networkidle'});
+  await page.goto(sessionUrl,{waitUntil:'domcontentloaded'});
   await page.locator('.study-flashcard').waitFor();
   await page.screenshot({path:join(artifacts,'01-online.png')});
   check('fixture daily session opened online');
@@ -244,9 +279,29 @@ try{
   await pollRecords(r=>r.filter(x=>x.key.startsWith('review:')).length===0);
   assert.equal(accepted.size,2);
   check('Home pending undo subsequently syncs to fixture API');
+  staleHome=true;
+  await page.goto(origin+'/',{waitUntil:'domcontentloaded'});
+  await page.getByText('Today’s progress awaiting sync',{exact:false}).waitFor();
+  assert.equal(await page.getByText('✓ Goal reached',{exact:true}).count(),0);
+  check('previous day’s cached 120 reviews never claim today’s goal');
+  staleHome=false;
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.getByText('2 / 3',{exact:true}).waitFor();
+  check('current dated Home total restores after successful refresh');
+  failPreparation=true;
+  await page.goto(origin+'/study',{waitUntil:'domcontentloaded'});
+  await page.getByText('Your session couldn’t refresh from the server. Saved reviews are safe · retry shortly.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>navigator.onLine),true);
+  check('online server failure is not mislabelled as a disconnected device');
+  failPreparation=false;
+  await page.getByRole('button',{name:'Retry saving',exact:true}).click();
+  await page.getByText('Ready offline · daily cards, audio and images saved',{exact:true}).waitFor({timeout:60000});
+  check('Retry saving recovers preparation without clearing study data');
+
+
 
 }catch(error){failures.push({type:'test',message:error.stack});console.error(error);try{await page.screenshot({path:join(artifacts,'failure.png'),timeout:3000});await writeFile(join(artifacts,'failure-body.txt'),await page.locator('body').innerText());await writeFile(join(artifacts,'failure-records.json'),JSON.stringify(await records(),null,2));}catch{}process.exitCode=1;}
 finally{
   await writeFile(join(artifacts,'report.json'),JSON.stringify({build,buildId:(await readFile(join(build,'.next/BUILD_ID'),'utf8')).trim(),checks,failures,writes,blockedExternal,requests},null,2));
-  await context?.close().catch(()=>{});server.kill('SIGTERM');proxy.closeAllConnections();await new Promise(r=>proxy.close(r));serverLog.end();console.log('ARTIFACTS',artifacts);
+  await context?.close().catch(()=>{});server.kill('SIGTERM');proxy.closeAllConnections();tlsProxy.closeAllConnections();for(const socket of sockets)socket.destroy();await Promise.all([gateway,proxy,tlsProxy].map(server=>new Promise(r=>server.close(r))));serverLog.end();console.log('ARTIFACTS',artifacts);
 }

@@ -36,11 +36,12 @@ function harness() {
   const handlers: Record<string, (event: unknown) => void> = {};
   const self = {
     location: { origin },
+    navigator: { onLine: true },
     addEventListener: (name: string, handler: (event: unknown) => void) => { handlers[name] = handler; },
     skipWaiting: vi.fn(), clients: { claim: vi.fn() },
   };
   function boot() {
-    runInNewContext(source, { self, caches, fetch: network, URL, Headers, Response, AbortSignal, Set, console });
+    runInNewContext(source, { self, caches, fetch: network, URL, Headers, Response, AbortSignal, AbortController, setTimeout, clearTimeout, Set, console });
   }
   boot();
   async function message(type = "PREPARE_APP_SHELL", urls?: string[]) {
@@ -55,10 +56,34 @@ function harness() {
     handlers.fetch({ request: { url: new URL(path, origin).href, mode, method, headers: new Headers(headers) }, respondWith: (promise: Promise<Response>) => { response = promise; } });
     return response;
   }
-  return { stores, caches, network, message, request, boot, setBuild: (value: string) => { build = value; } };
+  return { stores, caches, network, message, request, boot, setOnline: (online: boolean) => { self.navigator.onLine = online; }, setBuild: (value: string) => { build = value; } };
 }
 
 describe("anonymous offline application shell", () => {
+  it("opens a saved shell without a network request when offline", async () => {
+    const h = harness(); await h.message(); h.network.mockClear(); h.setOnline(false);
+    expect(await (await h.request("/"))?.text()).toContain("build-one.js");
+    expect(h.network).not.toHaveBeenCalled();
+  });
+
+  it("bounds a hanging network request instead of trapping an iOS launch", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness(); await h.message();
+      h.network.mockImplementation(() => new Promise(() => {}));
+      const response = h.request("/study");
+      await vi.advanceTimersByTimeAsync(1201);
+      expect(await (await response)?.text()).toContain("build-one.js");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("renders an honest recovery page when no offline shell exists", async () => {
+    const h = harness(); h.setOnline(false);
+    const response = await h.request("/");
+    expect(response?.status).toBe(503);
+    expect(await response?.text()).toContain("offline view is not ready");
+  });
+
   it("prepares every audited route anonymously plus transitive JS/CSS/font assets", async () => {
     const h = harness();
     expect(await h.message()).toMatchObject({ ready: true, build: "build-one", routes });

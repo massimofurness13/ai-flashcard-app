@@ -133,9 +133,8 @@ export function observeDeviceIdentity({ auth, storage, online, onChange, onAccou
       revision++;
       acceptSession(session);
     }
-    // INITIAL_SESSION(null) also means refresh failed: Supabase drops the error
-    // from this event. Only getSession's error-free online result can establish
-    // an absent session. Never let this ambiguous event erase saved identity.
+    // INITIAL_SESSION(null) is ambiguous: cookies may be absent while this
+    // device still has a saved offline account. Explicit logout clears it.
   });
 
   async function refresh() {
@@ -149,7 +148,11 @@ export function observeDeviceIdentity({ auth, storage, online, onChange, onAccou
         return;
       }
       if (data.session) acceptSession(data.session);
-      else { remember(null); publish(null, null); }
+      // getSession can return null without making a network request. Even
+      // navigator.onLine=true only proves a network interface exists, not that
+      // Supabase is reachable. Keep the local partition; it grants no server
+      // access. Only explicit sign-out or SIGNED_OUT clears this identity.
+      else publish(current, "local");
     } catch {
       if (active && requestRevision === revision) publish(current, "local");
     }
