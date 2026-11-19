@@ -75,13 +75,18 @@ export async function GET(request: NextRequest) {
     const { picks }=progress;
     selected=progress.remaining;
     eligible=selected;
-    daily={day,picks,pool:{retention:candidates.filter(isRetentionCard).length,learning:candidates.filter(c=>!isRetentionCard(c)&&(c.reviews.length>0||c.recallStates.length>0)).length,new:candidates.filter(c=>!c.reviews.length&&!c.recallStates.length).length},timingKey:plan ? createHash("sha256").update(`${auth.userId}:${day}:${plan.createdAt.toISOString()}`).digest("hex").slice(0,32) : undefined,completed:progress.completed,total:progress.total,ratings:progress.ratings,
+    daily={startedAt:plan?.createdAt.toISOString(),day,picks,pool:{retention:candidates.filter(isRetentionCard).length,learning:candidates.filter(c=>!isRetentionCard(c)&&(c.reviews.length>0||c.recallStates.length>0)).length,new:candidates.filter(c=>!c.reviews.length&&!c.recallStates.length).length},timingKey:plan ? createHash("sha256").update(`${auth.userId}:${day}:${plan.createdAt.toISOString()}`).digest("hex").slice(0,32) : undefined,completed:progress.completed,total:progress.total,ratings:progress.ratings,
       mix:{practice:picks.filter(p=>p.group==="practice").length,retention:picks.filter(p=>p.group==="retention").length,new:picks.filter(p=>p.group==="new").length}};
   }
   const cards = selected.length ? await prisma.card.findMany({where:{...where,id:{in:[...new Set(selected.map(c=>c.id))]}},include:{deck:{select:{id:true,name:true,emoji:true,frontVoice:true,backVoice:true,frontLanguageCode:true,backLanguageCode:true}}}}) : [];
   const byId = new Map(cards.map(c=>[c.id,c]));
+  const resultContext=daily?.startedAt?{
+    startedAt:daily.startedAt,
+    before:await prisma.card.findMany({where:{id:{in:daily.picks.map(p=>p.id)},deck:{userId:auth.userId,archivedAt:null}},select:{id:true,reviews:{where:{quality:{gt:0},reviewedAt:{lt:new Date(daily.startedAt)}},orderBy:{reviewedAt:"desc"},take:2,select:{quality:true,reviewedAt:true}}}}),
+    logs:await prisma.reviewLog.findMany({where:{cardId:{in:daily.picks.map(p=>p.id)},card:{deck:{userId:auth.userId}},quality:{gt:0},reviewedAt:{gte:new Date(daily.startedAt)}},select:{id:true,cardId:true,direction:true,quality:true,reviewedAt:true}}),
+  }:undefined;
   return NextResponse.json({cards:selected.flatMap(p=>{const c=byId.get(p.id);return c?[{...c,...p}]:[];}),totalDue:eligible.length,total:eligible.length,
-    daily,nextOffset: filter!=="daily" && offset+limit<eligible.length ? offset+limit : null, learningLanguage:user?.learningLanguage??null},
+    daily:daily?{...daily,resultContext}:null,nextOffset: filter!=="daily" && offset+limit<eligible.length ? offset+limit : null, learningLanguage:user?.learningLanguage??null},
     {headers:{"Cache-Control":"private, no-store"}});
 }
 

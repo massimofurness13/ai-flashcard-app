@@ -22,7 +22,7 @@ export function reviveCandidate(card: StudyCandidate): StudyCandidate {
 }
 
 /** The same pure scheduler as the server, over the account's device library. */
-export async function selectLocalStudy(owner: string, params: URLSearchParams, now = new Date()): Promise<SavedStudy | null> {
+export async function selectLocalStudy(owner: string, params: URLSearchParams, now = new Date(), options?: {all?:boolean}): Promise<SavedStudy | null> {
   const manifest = (await readRecord<LibraryManifest>(owner,"library:manifest"))?.value;
   if (!manifest) return null;
   const filter = params.get("filter") || "due";
@@ -69,7 +69,7 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
   }
   const orientation = (["front","back","mixed","auto"].includes(params.get("orientation") || "") ? params.get("orientation") : "auto") as Orientation;
   const requested = Number(params.get("limit") || 25);
-  const limit = Number.isFinite(requested) ? Math.max(1,Math.min(500,Math.floor(requested))) : 25;
+  const limit = options?.all ? cards.length : Number.isFinite(requested) ? Math.max(1,Math.min(500,Math.floor(requested))) : 25;
   const byId = new Map(cards.map(c=>[c.id,c]));
   if (filter === "daily") {
     const previous = (await readRecord<SavedStudy>(owner,"study:daily"))?.value;
@@ -77,7 +77,7 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
     const picks = buildDailyPlan(cards,now,Math.random,previousPicks,storedDailyAllocation(previousPicks));
     const plan: LocalPlan = {day,createdAt:now.toISOString(),picks};
     const data: SavedStudy = {cards:picks.map(p=>({...byId.get(p.id)!,...p})),learningLanguage:manifest.learningLanguage,
-      daily:{picks,day,timingKey:`local:${owner}:${day}`,completed:0,total:picks.length,ratings:{},mix:{practice:picks.filter(p=>p.group==="practice").length,retention:picks.filter(p=>p.group==="retention").length,new:picks.filter(p=>p.group==="new").length}}};
+      daily:{resultContext:{startedAt:plan.createdAt,before:picks.map(p=>({id:p.id,reviews:(byId.get(p.id)?.reviews??[]).map(r=>({quality:r.quality,reviewedAt:r.reviewedAt.toISOString()}))})),logs:[]},picks,day,timingKey:`local:${owner}:${day}`,completed:0,total:picks.length,ratings:{},mix:{practice:picks.filter(p=>p.group==="practice").length,retention:picks.filter(p=>p.group==="retention").length,new:picks.filter(p=>p.group==="new").length}}};
     // Plan and cards are durable before the first review; completion is never inferred here.
     await writeRecords(owner,[{key:"study:daily",value:data},{key:`plan:${day}`,value:plan}]);
     return data;

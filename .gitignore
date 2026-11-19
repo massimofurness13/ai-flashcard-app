@@ -65,3 +65,6 @@ ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
 **/.DS_Store
 # Generated from the locked PDF.js dependency by predev/prebuild.
 /public/pdf.worker.*.min.mjs
+
+# Installed app web bundle (rebuilt for every archive)
+/mobile/dist/

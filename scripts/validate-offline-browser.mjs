@@ -66,6 +66,7 @@ const proxy = createServer(async (req,res)=> {
       if(req.method==='DELETE') accepted.delete(review.cardId);else accepted.set(review.cardId,review);
       return json(res,{recorded:true,eventId:review.eventId});
     }
+    if(url.pathname==='/api/library/extras')return json(res,{archivedDecks:[],creditUsage:[]});
     if(url.pathname==='/api/library')return json(res,{dailyStudy:{day,timeZone:'UTC',total:3,completed:accepted.size},folders:[],unfolderedDecks:[{...deck,_count:{cards:3},grade:'New',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),lastStudiedAt:null}],totalCards:3,userName:'Offline fixture',reviewDay:staleHome?'2000-01-01':day,reviewTimeZone:'UTC',cardsReviewedToday:staleHome?120:accepted.size,dailyGoal:3,streak:0,goalHitCelebrationShown:true,onboardingCompleted:true});
     if(url.pathname==='/api/decks/fixture-deck/view')return json(res,{deck:{...deck,cards:cards.map((c,i)=>({...c,tags:null,createdAt:'2026-01-01',nextReviewAt:'2026-01-01',easeFactor:2.5,interval:0,repetitions:0,recallStates:[],reviews:[]})),_count:{cards:3},folder:null,description:null},overallGrade:'New',avgMastery:0,gradeDistribution:{A:0,B:0,C:0,D:0,F:0,New:3},isPro:true,canViewAiImages:true,learningLanguage:'es'});
     if(url.pathname==='/api/stats')return json(res,{cardsReviewedToday:accepted.size,dailyGoal:3,totalReviews:accepted.size,dailyCounts:[],heatmapData:[],calendarMonth:[]});

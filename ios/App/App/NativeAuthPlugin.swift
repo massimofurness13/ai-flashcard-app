@@ -7,7 +7,27 @@ import WebKit
 @objc(HuellaBridgeViewController)
 class HuellaBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
+        #if DEBUG
+        // Opt-in, isolated simulator fixture only. Never compiled into TestFlight.
+        if let fixturePath = ProcessInfo.processInfo.environment["HUELLA_OFFLINE_FIXTURE"],
+           let fixtureData = try? Data(contentsOf: URL(fileURLWithPath: fixturePath)),
+           let fixture = (try? JSONSerialization.jsonObject(with: fixtureData)) as? [String: Any],
+           fixture["owner"] as? String == "11111111-1111-4111-8111-111111111111",
+           let records = fixture["records"] as? [[String: Any]], let script = fixture["script"] as? String {
+            do {
+                let directory = try FileManager.default.url(for:.applicationSupportDirectory,in:.userDomainMask,appropriateFor:nil,create:true).appendingPathComponent("Huella")
+                let db = try NativeDatabase(directory: directory)
+                if fixture["migration"] as? Bool != true && !UserDefaults.standard.bool(forKey:"huella-offline-fixture-seeded") {
+                    try db.write(owner:"11111111-1111-4111-8111-111111111111",records:records)
+                    UserDefaults.standard.set(true,forKey:"huella-offline-fixture-seeded")
+                }
+                if fixture["migration"] as? Bool != true {UserDefaults.standard.set(true,forKey:"huella-native-migration-v1")}
+                webView?.configuration.userContentController.addUserScript(WKUserScript(source:script,injectionTime:.atDocumentStart,forMainFrameOnly:true))
+            } catch { fatalError("Isolated offline fixture failed: \(error)") }
+        }
+        #endif
         bridge?.registerPluginInstance(NativeAuthPlugin())
+        bridge?.registerPluginInstance(NativeStorePlugin())
     }
 }
 
@@ -15,7 +35,18 @@ class HuellaBridgeViewController: CAPBridgeViewController {
 class NativeAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPresentationContextProviding {
     let identifier = "NativeAuthPlugin"
     let jsName = "NativeAuth"
-    let pluginMethods: [CAPPluginMethod] = []
+    let pluginMethods: [CAPPluginMethod] = [CAPPluginMethod(name: "authenticate", returnType: CAPPluginReturnPromise)]
+    private var pendingCall: CAPPluginCall?
+
+    @objc func authenticate(_ call: CAPPluginCall) {
+        guard let raw = call.getString("url"), let url = URL(string: raw), url.scheme == "https",
+              url.host == "fghxwycixcawwtctknmp.supabase.co", url.path == "/auth/v1/authorize",
+              url.user == nil, url.password == nil, url.port == nil else {call.reject("Invalid sign-in address");return}
+        DispatchQueue.main.async { [self] in
+            guard session == nil, pendingCall == nil else {call.reject("Sign-in is already open");return}
+            pendingCall = call; start(url)
+        }
+    }
     private var session: ASWebAuthenticationSession?
     private var timeout: DispatchWorkItem?
     private var pendingState: String?
@@ -98,6 +129,11 @@ class NativeAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPresenta
         anchor = nil
         let original = callback
         callback = nil
+        if let call = pendingCall {
+            pendingCall = nil
+            if let code {call.resolve(["code":code])} else {call.reject(error ?? "native_failed")}
+            return
+        }
         var target: URLComponents
         if let code, let original, var success = URLComponents(url: original, resolvingAgainstBaseURL: false) {
             success.queryItems = (success.queryItems ?? []).filter {

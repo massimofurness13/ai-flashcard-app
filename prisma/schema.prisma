@@ -54,6 +54,7 @@ model User {
   pushSubscriptions PushSubscription[]
   creditLedger      CreditLedger[]
   dailyStudyPlans   DailyStudyPlan[]
+  deviceMutations   DeviceMutation[]
 }
 
 model DailyStudyPlan {
@@ -331,4 +332,15 @@ model ReviewUndo {
   undoneAt  DateTime?
   createdAt DateTime @default(now())
   @@index([cardId])
+}
+
+// Idempotency receipts for edits made by installed apps while disconnected.
+model DeviceMutation {
+  id String @id
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  requestHash String
+  result Json
+  createdAt DateTime @default(now())
+  @@index([userId,createdAt])
 }

@@ -15,6 +15,10 @@ export function syncLibrary(owner: string, report: (status: LibrarySyncStatus)=>
     };
     const query = async <T>(url: string): Promise<T> => {
       await active();
+      if ((url === "/api/library" || url.startsWith("/api/stats")) && (await listRecords(owner,"review:")).length) {
+        const baseline=await readRecord<T>(owner,`query:${url}`);
+        if(baseline)return baseline.value;
+      }
       const response = await fetch(url,{cache:"no-store",redirect:"error",signal:AbortSignal.timeout(30000)});
       if (!response.ok) throw new Error(`Sync failed (${response.status})`);
       const data: T = await response.json();
@@ -27,7 +31,8 @@ export function syncLibrary(owner: string, report: (status: LibrarySyncStatus)=>
     await flushReviews(owner);
     const config = await query<{decks:Array<{id:string}>}>("/api/study-config");
     const home = await query<{reviewTimeZone?:string}>("/api/library");
-    const deckIds = config.decks.map(d=>d.id);
+    const extras = await query<{archivedDecks:Array<{id:string}>}>("/api/library/extras");
+    const deckIds = [...new Set([...config.decks,...extras.archivedDecks].map(d=>d.id))];
     let failures = 0;
     let language: string | null = null;
     // Text and scheduling state for EVERY pack before expensive media work.

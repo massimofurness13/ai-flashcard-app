@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { prepareAppShell } from "./media-service-worker";
 import { useDeviceAccount } from "./device-provider";
+import { isNativeDevice } from "@/lib/native-device";
 import { readRecord } from "@/lib/device-db";
 import { syncLibrary, type LibrarySyncStatus } from "@/lib/library-sync";
 
@@ -30,12 +31,12 @@ export function OfflineStudyProvider() {
       if(cancelled||running)return;
       if(navigator.onLine===false){show("Offline · using your saved library");return;}
       if(source!=="session")return;
-      if(path.current.startsWith("/study/session")||(!force && Date.now()-lastSync<300000))return;
+      if((!isNativeDevice()&&path.current.startsWith("/study/session"))||(!force && Date.now()-lastSync<300000))return;
       running=true;
       try {
         // Prepare the launch UI independently; one missing audio file must not block it.
         const shell=prepareAppShell();
-        const result=await syncLibrary(owner,report,()=>!cancelled&&!path.current.startsWith("/study/session"));
+        const result=await syncLibrary(owner,report,()=>!cancelled&&(isNativeDevice()||!path.current.startsWith("/study/session")));
         const app=await shell;
         if(!app.ready)show("Library saved · app update still waiting to download");
         if(result.phase==="ready"&&app.ready)lastSync=Date.now();
