@@ -22,7 +22,7 @@ export function OfflineStudyProvider() {
     const show=(text:string)=>{if(!cancelled)setStatus(text);};
     const report=(s:LibrarySyncStatus)=>{
       if(s.phase==="data")show(`Syncing library${s.total ? ` · ${s.packs}/${s.total} packs` : ""}…`);
-      else if(s.phase==="media")show(`Saving audio and images · ${s.packs}/${s.total} packs ready`);
+      else if(s.phase==="media")show(`Saving audio and images · ${s.packs}/${s.total} packs ready${s.detail ? ` · ${s.detail}` : ""}`);
       else if(s.phase==="ready")show("Library saved on this device");
       else show("Library saved · some files are still waiting to sync");
     };

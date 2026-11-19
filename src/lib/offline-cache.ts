@@ -41,10 +41,17 @@ export async function downloadPack(input: DownloadPackInput, onProgress?: (progr
   ]);
   const urls = new Set(input.cards.map(card => card.imageUrl).filter((url): url is string => !!url));
   let done = 0;
+  let firstFailure: unknown;
+  async function retainFailure(error: unknown) {
+    await checkActive();
+    if (navigator.onLine === false || (error instanceof Error && error.name === "QuotaExceededError") || await deviceOwner() !== owner) throw error;
+    firstFailure ??= error;
+  }
   // Sequential audio lookup keeps large packs below the TTS rate limit.
   for (const clip of clips) {
     await checkActive();
     if (await deviceOwner() !== owner) throw new Error("Account changed.");
+    try {
     let url = await resolveSavedAudio(owner, clip.text, clip.language);
     if (!url) {
       const response = await fetch("/api/tts", {
@@ -60,14 +67,16 @@ export async function downloadPack(input: DownloadPackInput, onProgress?: (progr
     await checkActive();
     await downloadMedia(owner, url, false);
     urls.add(url);
+    } catch (error) { await retainFailure(error); }
     onProgress?.({ phase: "prepare", done: ++done, total: clips.length });
   }
   done = 0;
   for (const url of urls) {
     await checkActive();
-    await downloadMedia(owner, url, false);
+    try { await downloadMedia(owner, url, false); } catch (error) { await retainFailure(error); }
     onProgress?.({ phase: "save", done: ++done, total: urls.size });
   }
+  if (firstFailure) throw firstFailure;
   // Only commit completion once EVERY required file has been saved.
   await writeRecord(owner, `pack:${input.deckId}`, { signature: signature(input), urls: [...urls] });
   return { mediaCount: urls.size };

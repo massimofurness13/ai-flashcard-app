@@ -5,7 +5,7 @@ import { flushReviews } from "./review-outbox";
 import { readOfflineStudy, saveStudy, type SavedStudy } from "./offline-study";
 import type { LibraryManifest, LocalDeckView } from "./local-library";
 
-export interface LibrarySyncStatus { phase: "data" | "media" | "ready" | "paused"; packs: number; total: number; failures: number }
+export interface LibrarySyncStatus { phase: "data" | "media" | "ready" | "paused"; packs: number; total: number; failures: number; detail?: string }
 const running = new Map<string,Promise<LibrarySyncStatus>>();
 export function syncLibrary(owner: string, report: (status: LibrarySyncStatus)=>void, keepGoing:()=>boolean = ()=>true) {
   const existing = running.get(owner); if (existing) return existing;
@@ -57,7 +57,7 @@ export function syncLibrary(owner: string, report: (status: LibrarySyncStatus)=>
       if (!view) continue;
       const input = {deckId:id,cards:view.deck.cards,frontLanguageCode:view.deck.frontLanguageCode ?? null,backLanguageCode:view.deck.backLanguageCode ?? null,learningLanguage:view.learningLanguage};
       try {
-        if (!(await isPackDownloaded(input))) await downloadPack(input,()=>report({phase:"media",packs,total:deckIds.length,failures}),active);
+        if (!(await isPackDownloaded(input))) await downloadPack(input,p=>report({phase:"media",packs,total:deckIds.length,failures,detail:`${p.phase === "prepare" ? "Audio" : "Files"} ${p.done}/${p.total}`}),active);
         packs++;
       } catch { await active(); failures++; }
       report({phase:"media",packs,total:deckIds.length,failures});
