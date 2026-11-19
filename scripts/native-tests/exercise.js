@@ -19,7 +19,7 @@
    const content='BT /F1 12 Tf 10 100 Td (Uno dos) Tj ET';objects.push('<< /Length '+content.length+' >>\nstream\n'+content+'\nendstream');
    let pdf='%PDF-1.4\n';const offsets=[0];objects.forEach((object,i)=>{offsets.push(pdf.length);pdf+=(i+1)+' 0 obj\n'+object+'\nendobj\n';});
    const xref=pdf.length;pdf+='xref\n0 6\n0000000000 65535 f \n'+offsets.slice(1).map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF';
-   const module=await import(window.__pdfFixtureModule);const extract=Object.values(module).find(v=>typeof v==='function');const result=await extract(new File([pdf],'fixture.pdf',{type:'application/pdf'}));
+   const module=await import(new URL(window.__pdfFixtureModule,document.baseURI).href);const extract=Object.values(module).find(v=>typeof v==='function');const result=await extract(new File([pdf],'fixture.pdf',{type:'application/pdf'}));
    if(!result.text.includes('Uno dos'))throw Error('Offline PDF extraction failed');checks.push('Bundled PDF worker extracted a local document offline');
   }
   if((await records('qa:result')).length){
@@ -44,5 +44,5 @@
   const checkpoints=await records('checkpoint:');if(!checkpoints.length)throw Error('Session checkpoint missing');checks.push('Session cursor saved alongside review');
   go('/');await until(()=>document.body.innerText.includes('Offline fixture only'),'return home');checks.push('Navigated home locally');
   await call('write',{owner,records:[{key:'qa:result',value:{checks,passed:true}}]});
- }catch(error){console.error('NATIVE_OFFLINE_QA',String(error));await call('write',{owner,records:[{key:'qa:failure',value:{checks,error:String(error),body:document.body?.innerText}}]});}
+ }catch(error){console.error('NATIVE_OFFLINE_QA',String(error));await call('write',{owner,records:[{key:'qa:failure',value:{checks,error:String(error),stack:error?.stack,body:document.body?.innerText}}]});}
 })();

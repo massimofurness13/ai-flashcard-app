@@ -33,14 +33,18 @@ export async function extractPdfText(file: File): Promise<PdfExtractResult> {
 
     for (let i = 1; i <= pages; i++) {
       const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const pageText = content.items
-        // TextItem has `.str`; TextMarkedContent doesn't — filter those out
-        .map((item) => ("str" in item ? item.str : ""))
-        .filter(Boolean)
-        .join(" ");
-      texts.push(pageText);
-      page.cleanup();
+      // PDF.js 6 uses ReadableStream's async iterator in getTextContent.
+      // iOS WebKit supports getReader but may not implement that iterator.
+      const reader = page.streamTextContent().getReader();
+      const words: string[] = [];
+      try {
+        while (true) {
+          const {value, done} = await reader.read();
+          if (done) break;
+          for (const item of value.items) if ("str" in item && item.str) words.push(item.str);
+        }
+      } finally { reader.releaseLock(); page.cleanup(); }
+      texts.push(words.join(" "));
     }
 
     return { text: texts.join("\n\n").trim(), pages, truncated: doc.numPages > MAX_PAGES };
