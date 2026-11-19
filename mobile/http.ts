@@ -18,7 +18,7 @@ export async function nativeFetch(input:RequestInfo|URL,init?:RequestInit):Promi
   for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
   data=btoa(binary);
  }
- const result=await CapacitorHttp.request({url:url.href,method:request.method,headers,data,dataType:"file",responseType:"arraybuffer",connectTimeout:15000,readTimeout:30000,disableRedirects:true});
+ const result=await CapacitorHttp.request({url:url.href,method:request.method,headers,data,dataType:"file",responseType:"arraybuffer",connectTimeout:15000,readTimeout:url.pathname==="/api/generate"?180000:30000,disableRedirects:true});
  if(request.signal.aborted)throw new DOMException("Cancelled","AbortError");
  const responseHeaders=new Headers(result.headers);
  const body=responseHeaders.get("content-type")?.includes("application/json")?JSON.stringify(result.data):Uint8Array.from(atob(result.data||""),c=>c.charCodeAt(0));

@@ -1,5 +1,7 @@
 import { defineConfig, loadEnv } from "vite";
-import { resolve } from "node:path";
+import { resolve,dirname } from "node:path";
+import {createRequire} from "node:module";
+import {readFileSync} from "node:fs";
 const root = resolve(import.meta.dirname,"..");
 export default defineConfig(({mode})=>{
  const env=loadEnv(mode,root,"");
@@ -8,6 +10,11 @@ export default defineConfig(({mode})=>{
  if(!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) throw Error("Native build requires the public Supabase URL and anon key.");
  return {
   root:resolve(root,"mobile"),base:"/",publicDir:false,
+  plugins:[{name:"bundled-pdf-worker",generateBundle(){
+   const require=createRequire(import.meta.url),packagePath=require.resolve("pdfjs-dist/package.json");
+   const {version}=require(packagePath);
+   this.emitFile({type:"asset",fileName:`pdf.worker.${version}.min.mjs`,source:readFileSync(resolve(dirname(packagePath),"build/pdf.worker.min.mjs"))});
+  }}],
   define:{...definitions,"process.env.NODE_ENV":JSON.stringify(mode==="production"?"production":"development")},
   resolve:{alias:[
    {find:"@/lib/supabase/client",replacement:resolve(root,"mobile/auth.ts")},
