@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     const { picks }=progress;
     selected=progress.remaining;
     eligible=selected;
-    daily={day,pool:{retention:candidates.filter(isRetentionCard).length,learning:candidates.filter(c=>!isRetentionCard(c)&&(c.reviews.length>0||c.recallStates.length>0)).length,new:candidates.filter(c=>!c.reviews.length&&!c.recallStates.length).length},timingKey:plan ? createHash("sha256").update(`${auth.userId}:${day}:${plan.createdAt.toISOString()}`).digest("hex").slice(0,32) : undefined,completed:progress.completed,total:progress.total,ratings:progress.ratings,
+    daily={day,picks,pool:{retention:candidates.filter(isRetentionCard).length,learning:candidates.filter(c=>!isRetentionCard(c)&&(c.reviews.length>0||c.recallStates.length>0)).length,new:candidates.filter(c=>!c.reviews.length&&!c.recallStates.length).length},timingKey:plan ? createHash("sha256").update(`${auth.userId}:${day}:${plan.createdAt.toISOString()}`).digest("hex").slice(0,32) : undefined,completed:progress.completed,total:progress.total,ratings:progress.ratings,
       mix:{practice:picks.filter(p=>p.group==="practice").length,retention:picks.filter(p=>p.group==="retention").length,new:picks.filter(p=>p.group==="new").length}};
   }
   const cards = selected.length ? await prisma.card.findMany({where:{...where,id:{in:[...new Set(selected.map(c=>c.id))]}},include:{deck:{select:{id:true,name:true,emoji:true,frontVoice:true,backVoice:true,frontLanguageCode:true,backLanguageCode:true}}}}) : [];

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useCallback } from "react";
+import { useDeviceQuery } from "@/hooks/use-device-query";
+import { useDeviceAccount } from "@/components/layout/device-provider";
+import { writeRecord } from "@/lib/device-db";
 import type { QuotaState } from "@/lib/image-quota";
 import { formatRelativeDate, cn } from "@/lib/utils";
 
@@ -36,46 +39,27 @@ export function useCreditBalance(): {
   quota: QuotaState | null;
   refresh: () => Promise<QuotaState | null>;
 } {
-  const [quota, setQuota] = useState<QuotaState | null>(null);
-
-  async function refresh() {
+  const {user}=useDeviceAccount();
+  const owner=user?.id;
+  const {data}=useDeviceQuery<QuotaState>("/api/images/quota");
+  const refresh=useCallback(async()=>{
+    if(!owner||navigator.onLine===false)return null;
     try {
-      const res = await fetch("/api/images/quota");
-      if (res.ok) {
-        const data = (await res.json()) as QuotaState;
-        setQuota(data);
-        return data;
-      }
-    } catch {
-      // Non-fatal — UI just won't update this cycle
-    }
-    return null;
-  }
-
-  useEffect(() => {
-    // Initial fetch on mount + event-driven refetches. Lint complains
-    // about setState-via-async-fetch in an effect, but this IS the
-    // recommended fetch-on-mount pattern — refresh awaits the API
-    // before calling setQuota, so the state update doesn't happen
-    // synchronously during the effect body.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refresh();
-    const handler = () => {
-      refresh();
-    };
-    window.addEventListener(CREDITS_CHANGED_EVENT, handler);
-    // Re-fetch when the tab regains focus — covers the Stripe checkout
-    // tab → original tab handoff. The webhook updates the user's
-    // credit balance server-side; we just need any focused tab to
-    // notice the new value without a manual refresh.
-    window.addEventListener("focus", handler);
-    return () => {
-      window.removeEventListener(CREDITS_CHANGED_EVENT, handler);
-      window.removeEventListener("focus", handler);
-    };
-  }, []);
-
-  return { quota, refresh };
+      const response=await fetch("/api/images/quota",{signal:AbortSignal.timeout(15000)});
+      if(!response.ok)return null;
+      const quota:QuotaState=await response.json();
+      await writeRecord(owner,"query:/api/images/quota",quota);
+      window.dispatchEvent(new CustomEvent("huella:device-saved",{detail:{owner,url:"/api/images/quota"}}));
+      return quota;
+    }catch{return null;}
+  },[owner]);
+  useEffect(()=>{
+    const changed=()=>{void refresh();};
+    window.addEventListener(CREDITS_CHANGED_EVENT,changed);
+    window.addEventListener("focus",changed);
+    return()=>{window.removeEventListener(CREDITS_CHANGED_EVENT,changed);window.removeEventListener("focus",changed);};
+  },[refresh]);
+  return {quota:data ?? null,refresh};
 }
 
 interface CreditBalanceProps {

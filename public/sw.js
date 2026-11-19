@@ -24,8 +24,13 @@ const SHELL_PREFIX = "huella-shell-v1-";
 const SHELL_POINTER = new URL("/__huella_shell__", self.location.origin).href;
 // These pages and their shared layout render NO account data on the server.
 // Re-audit before adding a route or moving personal data into server props.
-const SHELL_ROUTES = ["/", "/study", "/study/session", "/account", "/account/downloads", "/stats"];
+const SHELL_ROUTES = ["/", "/study", "/study/session", "/account", "/account/downloads", "/stats", "/decks/offline"];
 let preparingShell = null;
+function shellRoute(path) {
+  if (SHELL_ROUTES.includes(path)) return path;
+  if (/^\/decks\/[a-zA-Z0-9_-]+$/.test(path) && path !== "/decks/new") return "/decks/offline";
+  return null;
+}
 
 function isFlight(request, url) {
   return url.searchParams.has("_rsc") || request.headers.has("rsc") ||
@@ -171,7 +176,10 @@ async function navigateShell(request, path) {
   // iOS may leave an offline navigation pending instead of rejecting fetch.
   // Never hold the home-screen launch indefinitely behind that request.
   const saved = await cachedShell(path).catch(() => undefined);
-  if (self.navigator?.onLine === false) return saved || offlineDocument();
+  // Opening the app is a local read. Preparation publishes newer builds in
+  // the background; a slow connection must not add latency to every launch.
+  if (saved) return saved;
+  if (self.navigator?.onLine === false) return offlineDocument();
   const controller = new AbortController();
   let timer;
   try {
@@ -290,8 +298,8 @@ self.addEventListener("fetch", (event) => {
   // RSC/Flight and prefetch responses must NEVER share an HTML cache key.
   // Next itself falls back to document navigation if an RSC fetch fails.
   if (isFlight(req, url)) return;
-  if (url.origin === self.location.origin && req.mode === "navigate" && SHELL_ROUTES.includes(url.pathname)) {
-    event.respondWith(navigateShell(req, url.pathname));
+  if (url.origin === self.location.origin && req.mode === "navigate" && shellRoute(url.pathname)) {
+    event.respondWith(navigateShell(req, shellRoute(url.pathname)));
     return;
   }
   if (isStaticAsset(url) && !req.headers.has("range")) {

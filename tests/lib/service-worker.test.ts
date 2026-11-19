@@ -3,7 +3,7 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
 const origin = "https://huella.test";
-const routes = ["/", "/study", "/study/session", "/account", "/account/downloads", "/stats"];
+const routes = ["/", "/study", "/study/session", "/account", "/account/downloads", "/stats", "/decks/offline"];
 const source = readFileSync(new URL("../../public/sw.js", import.meta.url), "utf8");
 type Key = string | { url: string };
 const key = (value: Key) => typeof value === "string" ? value : value.url;
@@ -77,6 +77,14 @@ describe("anonymous offline application shell", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it("opens immediately from local storage even while online and serves unopened pack routes", async () => {
+    const h = harness(); await h.message(); h.network.mockClear();
+    expect(await (await h.request("/"))?.text()).toContain("build-one.js");
+    expect(await (await h.request("/decks/not-previously-opened"))?.text()).toContain("build-one.js");
+    expect(h.network).not.toHaveBeenCalled();
+    expect(h.request("/decks/new")).toBeUndefined();
+  });
+
   it("renders an honest recovery page when no offline shell exists", async () => {
     const h = harness(); h.setOnline(false);
     const response = await h.request("/");
@@ -111,7 +119,7 @@ describe("anonymous offline application shell", () => {
     const h = harness();
     await h.message();
     h.network.mockResolvedValueOnce(new Response("private Alice HTML", { headers: { "Content-Type": "text/html" } }));
-    expect(await (await h.request("/account"))?.text()).toBe("private Alice HTML");
+    expect(await (await h.request("/account"))?.text()).not.toContain("Alice");
     h.network.mockRejectedValue(new TypeError("offline"));
     expect(await (await h.request("/account"))?.text()).not.toContain("Alice");
   });

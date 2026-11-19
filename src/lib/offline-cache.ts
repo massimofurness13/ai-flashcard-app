@@ -14,7 +14,7 @@ export interface DownloadPackInput {
 export type DownloadProgress = { phase: "prepare" | "save"; done: number; total: number };
 interface Manifest { signature: string; urls: string[] }
 function signature(input: DownloadPackInput) {
-  return JSON.stringify([input.cards, input.frontLanguageCode, input.backLanguageCode, input.learningLanguage]);
+  return JSON.stringify([input.cards.map(c=>({front:c.front,back:c.back,imageUrl:c.imageUrl})), input.frontLanguageCode, input.backLanguageCode, input.learningLanguage]);
 }
 export async function isPackDownloaded(input: DownloadPackInput): Promise<boolean> {
   const owner = await deviceOwner();
@@ -28,7 +28,7 @@ export async function isPackDownloaded(input: DownloadPackInput): Promise<boolea
     return true;
   } catch { return false; }
 }
-export async function downloadPack(input: DownloadPackInput, onProgress?: (progress: DownloadProgress) => void): Promise<{ mediaCount: number }> {
+export async function downloadPack(input: DownloadPackInput, onProgress?: (progress: DownloadProgress) => void, checkActive: () => Promise<void> = async () => {}): Promise<{ mediaCount: number }> {
   const owner = await deviceOwner();
   if (!owner) throw new Error("Sign in before downloading.");
   await navigator.storage?.persist?.().catch(() => false);
@@ -43,6 +43,8 @@ export async function downloadPack(input: DownloadPackInput, onProgress?: (progr
   let done = 0;
   // Sequential audio lookup keeps large packs below the TTS rate limit.
   for (const clip of clips) {
+    await checkActive();
+    if (await deviceOwner() !== owner) throw new Error("Account changed.");
     let url = await resolveSavedAudio(owner, clip.text, clip.language);
     if (!url) {
       const response = await fetch("/api/tts", {
@@ -55,12 +57,15 @@ export async function downloadPack(input: DownloadPackInput, onProgress?: (progr
       if (!url) throw new Error("Missing audio file.");
       await writeRecord(owner, audioKey(clip.text, clip.language), url);
     }
+    await checkActive();
+    await downloadMedia(owner, url, false);
     urls.add(url);
     onProgress?.({ phase: "prepare", done: ++done, total: clips.length });
   }
   done = 0;
   for (const url of urls) {
-    await downloadMedia(owner, url);
+    await checkActive();
+    await downloadMedia(owner, url, false);
     onProgress?.({ phase: "save", done: ++done, total: urls.size });
   }
   // Only commit completion once EVERY required file has been saved.

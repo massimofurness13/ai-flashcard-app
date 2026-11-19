@@ -10,7 +10,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dec
   const deck = await prisma.deck.findUnique({
     where: { id: deckId, userId },
     include: {
-      cards: { orderBy: { position: "asc" } },
+      cards: { orderBy: { position: "asc" }, include: { recallStates: true, reviews: { where: { quality: { gt: 0 } }, orderBy: { reviewedAt: "desc" }, take: 3, select: { id: true, quality: true, reviewedAt: true } } } },
       folder: true,
       _count: { select: { cards: true } },
     },

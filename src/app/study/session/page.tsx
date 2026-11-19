@@ -9,6 +9,10 @@ import { StudyCountdown } from "@/components/study/study-countdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { peekStudyResume, clearStudyResume } from "@/lib/study-resume";
+import { selectLocalStudy } from "@/lib/local-library";
+import { toLocalDateKey } from "@/lib/timezone";
+import { readRecord } from "@/lib/device-db";
+import type { LibraryManifest } from "@/lib/local-library";
 import { deviceOwner } from "@/lib/device-media";
 import { readStudyTime, formatStudyTime } from "@/lib/study-time";
 import { readOfflineStudy, saveStudy, studyKey, type SavedStudy } from "@/lib/offline-study";
@@ -125,11 +129,22 @@ function StudySessionContent() {
       const owner = await deviceOwner();
       if (!owner) throw new Error("Sign in while connected before studying offline.");
       const saved = await readOfflineStudy(owner, offlineKey);
-      // While offline, use the entire saved sequence, not a new selection.
-      if (navigator.onLine === false) {
-        if (!saved) throw new Error("Connect once to prepare this session for offline study.");
-        applySaved(saved.data, saved.snapshot); return;
+      // The local library is the normal data source, even with slow/no internet.
+      // Never switch a running sequence after a background response arrives.
+      const manifest = (await readRecord<LibraryManifest>(owner,"library:manifest"))?.value;
+      let today: string; try {today=toLocalDateKey(new Date(),manifest?.timeZone || "UTC");}catch{today=toLocalDateKey(new Date(),"UTC");}
+      if (saved?.snapshot && (filter === "daily" ? saved.data.daily?.day === today : saved.snapshot.currentIndex < saved.snapshot.cards.length)) {
+        applySaved(saved.data,saved.snapshot); return;
       }
+      const local = await selectLocalStudy(owner,params);
+      if (local) {
+        await saveStudy(owner,offlineKey,local);
+        applySaved(local); return;
+      }
+      if (saved && (filter !== "daily" || saved.data.daily?.day === today)) {
+        applySaved(saved.data,saved.snapshot); return;
+      }
+      if (navigator.onLine === false) throw new Error("This device hasn’t saved your library yet. Connect once to sync it.");
       try {
         if (filter === "daily") await flushReviews(owner);
         const response = await fetch(`/api/review?${params}`, {signal: AbortSignal.timeout(8000)});
@@ -143,7 +158,7 @@ function StudySessionContent() {
         applySaved(data);
       } catch (error) {
         if (error instanceof Error && error.message === "Sign in again to continue.") throw error;
-        if (!saved) throw error;
+        if (!saved || (filter === "daily" && saved.data.daily?.day !== today)) throw error;
         applySaved(saved.data, saved.snapshot);
       }
     }

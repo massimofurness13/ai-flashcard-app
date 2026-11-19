@@ -67,6 +67,10 @@ const proxy = createServer(async (req,res)=> {
       return json(res,{recorded:true,eventId:review.eventId});
     }
     if(url.pathname==='/api/library')return json(res,{dailyStudy:{day,timeZone:'UTC',total:3,completed:accepted.size},folders:[],unfolderedDecks:[{...deck,_count:{cards:3},grade:'New',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),lastStudiedAt:null}],totalCards:3,userName:'Offline fixture',reviewDay:staleHome?'2000-01-01':day,reviewTimeZone:'UTC',cardsReviewedToday:staleHome?120:accepted.size,dailyGoal:3,streak:0,goalHitCelebrationShown:true,onboardingCompleted:true});
+    if(url.pathname==='/api/decks/fixture-deck/view')return json(res,{deck:{...deck,cards:cards.map((c,i)=>({...c,tags:null,createdAt:'2026-01-01',nextReviewAt:'2026-01-01',easeFactor:2.5,interval:0,repetitions:0,recallStates:[],reviews:[]})),_count:{cards:3},folder:null,description:null},overallGrade:'New',avgMastery:0,gradeDistribution:{A:0,B:0,C:0,D:0,F:0,New:3},isPro:true,canViewAiImages:true,learningLanguage:'es'});
+    if(url.pathname==='/api/stats')return json(res,{cardsReviewedToday:accepted.size,dailyGoal:3,totalReviews:accepted.size,dailyCounts:[],heatmapData:[],calendarMonth:[]});
+    if(url.pathname==='/api/subscription/status')return json(res,{isPro:true});
+    if(url.pathname==='/api/offline/plans')return json(res,{recorded:true});
     if(url.pathname==='/api/study-config')return json(res,{decks:[{...deck,_count:{cards:3}}]});
     if(url.pathname==='/api/images/quota')return json(res,{isPro:true,canViewAiImages:true,credits:1000,remaining:1000,totalRemaining:1000});
     if(url.pathname==='/api/user/tags')return json(res,{tags:[]});
@@ -167,15 +171,15 @@ try{
   check('fixture authenticated study configuration');
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await page.waitForFunction(async()=>{const c=await caches.open('huella-shell-index-v1');return !!await c.match(location.origin+'/__huella_shell__');},{},{timeout:60000});
-  await page.getByText('Ready offline · daily cards, audio and images saved',{exact:true}).waitFor({timeout:60000});
+  await pollRecords(r=>r.some(x=>x.key==='library:sync-status'&&x.value.phase==='ready'),60000);
   const cacheAudit=await page.evaluate(async()=>{const result={};for(const name of await caches.keys()){const c=await caches.open(name);result[name]=(await c.keys()).map(r=>new URL(r.url).pathname);}return result;});
   assert.equal(Object.values(cacheAudit).filter(paths=>paths.includes('/study/session')).length,1,'One complete public shell must be published');
   assert(!Object.values(cacheAudit).flat().some(p=>p.startsWith('/api/')||p.startsWith('/auth/')));
   check('real service worker published safe shell and static caches',{caches:Object.fromEntries(Object.entries(cacheAudit).map(([k,v])=>[k,v.length]))});
-  const prepared=await pollRecords(r=>r.some(x=>x.key==='offline:daily-ready'));
+  const prepared=await pollRecords(r=>r.some(x=>x.key==='library:sync-status'&&x.value.phase==='ready'));
   assert.equal(prepared.find(x=>x.key==='study:daily').value.cards.length,3);
   assert.equal(prepared.filter(x=>x.key.startsWith('audio:v1:')).length,6);
-  const pack=prepared.find(x=>x.key==='pack:daily-offline:fixture-deck');
+  const pack=prepared.find(x=>x.key==='pack:fixture-deck');
   assert(pack && pack.value.urls.length===2,'Manifest must include audio and artwork');
   assert.equal(prepared.filter(x=>x.key.startsWith('media:')).length,2);
   check('automatic preparation reaches Ready with three cards, six audio mappings and complete media manifest',{cards:3,audioMappings:6,mediaFiles:2});
@@ -185,6 +189,16 @@ try{
   check('fixture daily session opened online');
   await context.close();offline=true;
   await launch(true);
+  const libraryCold=await page.goto(origin+'/decks/fixture-deck',{waitUntil:'domcontentloaded'});
+  assert(libraryCold.fromServiceWorker());
+  await page.getByRole('heading',{name:/Offline fixture only/}).waitFor();
+  check('never-opened pack opens after offline process restart from full-library sync');
+  await page.goto(origin+'/study/session?filter=random&deckIds=fixture-deck&limit=5&autoFlip=0&autoAdvance=0',{waitUntil:'domcontentloaded'});
+  await page.locator('.study-flashcard').waitFor();
+  const custom=await pollRecords(r=>r.some(x=>x.key.startsWith('study:')&&x.key.includes('random')&&x.value.cards.length===5));
+  const selection=custom.find(x=>x.key.startsWith('study:')&&x.key.includes('random')).value.cards;
+  assert.equal(new Set(selection.slice(0,3).map(c=>c.id)).size,3);
+  check('unprepared custom study works offline with unique cards before repeats');
   const cold=await page.goto(sessionUrl,{waitUntil:'domcontentloaded'});
   assert(cold.fromServiceWorker(),'Cold document must come from the real SW');
   await page.locator('.study-flashcard').waitFor();
@@ -289,14 +303,15 @@ try{
   await page.getByText('2 / 3',{exact:true}).waitFor();
   check('current dated Home total restores after successful refresh');
   failPreparation=true;
-  await page.goto(origin+'/study',{waitUntil:'domcontentloaded'});
-  await page.getByText('Your session couldn’t refresh from the server. Saved reviews are safe · retry shortly.',{exact:true}).waitFor();
+  await page.goto(origin+'/account/downloads',{waitUntil:'domcontentloaded'});
+  await page.getByRole('button',{name:'Sync now',exact:true}).click();
+  await page.getByText('Library saved · some files are still waiting to sync',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>navigator.onLine),true);
-  check('online server failure is not mislabelled as a disconnected device');
+  check('online server failure preserves available library and reports partial sync');
   failPreparation=false;
-  await page.getByRole('button',{name:'Retry saving',exact:true}).click();
-  await page.getByText('Ready offline · daily cards, audio and images saved',{exact:true}).waitFor({timeout:60000});
-  check('Retry saving recovers preparation without clearing study data');
+  await page.getByRole('button',{name:'Sync now',exact:true}).click();
+  await page.getByText('Library saved on this device',{exact:true}).waitFor({timeout:60000});
+  check('sync retry recovers without clearing study data');
 
 
 

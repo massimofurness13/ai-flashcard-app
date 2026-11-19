@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { projectLocalProgress } from "@/lib/local-progress";
 import { useDeviceAccount } from "@/components/layout/device-provider";
 import { readRecord, writeRecord, type DeviceRecord } from "@/lib/device-db";
 
@@ -20,14 +21,16 @@ export function useDeviceQuery<T>(url: string, enabled = true) {
     let active = true;
     let networkDone = false;
     const cached = memory.get(key) as DeviceRecord<T> | undefined;
-    if (cached) setResult({ key, data: cached.value, savedAt: cached.savedAt });
-    else void readRecord<T>(owner, `query:${url}`).then(record => {
+    if (cached) void projectLocalProgress(owner,url,cached.value,cached.savedAt).then(data=>{if(active)setResult({key,data,savedAt:cached.savedAt});});
+    else void readRecord<T>(owner, `query:${url}`).then(async record => {
       if (record && active && !networkDone) {
         memory.set(key, record);
-        setResult(previous => ({ ...previous, key, data: record.value, savedAt: record.savedAt }));
+        const data = await projectLocalProgress(owner,url,record.value,record.savedAt);
+        if(active&&!networkDone)setResult(previous => ({ ...previous, key, data, savedAt: record.savedAt }));
       }
     }).catch(() => {});
     async function update() {
+      if (navigator.onLine === false) return;
       try {
         let pending = requests.get(key) as Promise<T> | undefined;
         if (!pending) {
@@ -42,12 +45,22 @@ export function useDeviceQuery<T>(url: string, enabled = true) {
         if (!active) return;
         const record = { owner: owner!, key: `query:${url}`, value: data, savedAt: Date.now() };
         memory.set(key, record);
-        setResult({ key, data, savedAt: record.savedAt });
+        const projected = await projectLocalProgress(owner!,url,data,record.savedAt);
+        if(active)setResult({ key, data:projected, savedAt: record.savedAt });
         await writeRecord(owner!, record.key, data).catch(() => {});
       } catch (error) {
         if (active) setResult(previous => ({ ...(previous.key === key ? previous : { key }), error: error instanceof Error ? error.message : "Waiting for connection." }));
       }
     }
+    const saved = async (event: Event) => {
+      const detail = (event as CustomEvent<{owner:string;url:string}>).detail;
+      if (detail?.owner !== owner || detail.url !== url) return;
+      const record = await readRecord<T>(owner!, `query:${url}`);
+      if (record && active) { memory.set(key,record); const data=await projectLocalProgress(owner!,url,record.value,record.savedAt); if(active)setResult({key,data,savedAt:record.savedAt}); }
+    };
+    const local=()=>{void saved(new CustomEvent("huella:device-saved",{detail:{owner,url}}));};
+    window.addEventListener("huella:outbox",local);
+    window.addEventListener("huella:device-saved",saved);
     void update();
     const visible = () => { if (document.visibilityState === "visible") void update(); };
     window.addEventListener("online", update);
@@ -55,6 +68,8 @@ export function useDeviceQuery<T>(url: string, enabled = true) {
     document.addEventListener("visibilitychange", visible);
     return () => {
       active = false;
+      window.removeEventListener("huella:device-saved",saved);
+      window.removeEventListener("huella:outbox",local);
       window.removeEventListener("online", update);
       window.removeEventListener("huella:data-changed", update);
       document.removeEventListener("visibilitychange", visible);
