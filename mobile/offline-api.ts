@@ -51,7 +51,24 @@ export function projectMutation(url:string,input:any,pending:PendingMutation[]):
  return data;
 }
 export async function pendingMutations(owner:string){return (await listRecords(owner,"mutation:")).map(r=>r.value as PendingMutation).sort((a,b)=>a.sequence-b.sequence);}
-export async function projectPending(url:string,data:unknown){const owner=currentOwner();return owner?projectMutation(url,data,await pendingMutations(owner)):data;}
+function includeRestoredPack(url:string,input:any,deck:any){
+ const data=structuredClone(input),metadata={...deck,_count:{cards:deck.cards?.length??deck._count?.cards??0}};
+ if(url==="/api/study-config"&&!data.decks?.some((d:any)=>d.id===deck.id))data.decks=[...(data.decks||[]),metadata];
+ if(url==="/api/library"){
+  const all=[...(data.unfolderedDecks||[]),...(data.folders||[]).flatMap((f:any)=>f.decks||[])];
+  if(!all.some((d:any)=>d.id===deck.id))data.unfolderedDecks=[...(data.unfolderedDecks||[]),metadata];
+ }
+ return data;
+}
+export async function projectPending(url:string,data:unknown){
+ const owner=currentOwner();if(!owner)return data;
+ const pending=await pendingMutations(owner);
+ for(const item of pending)if(item.operation.kind==="deck:update"&&item.operation.fields.archive===false){
+  const deck=object((await readRecord(owner,`query:/api/decks/${item.operation.id}/view`))?.value).deck;
+  if(deck)data=includeRestoredPack(url,data,deck);
+ }
+ return projectMutation(url,data,pending);
+}
 export async function cachedApi(url:string){
  const owner=currentOwner();if(!owner)return undefined;
  const record=await readRecord(owner,`query:${url}`);if(record)return record.value;
@@ -90,7 +107,8 @@ async function save(url:string,method:string,input:unknown){
  if(!parsed.success)return Response.json({error:parsed.error.issues[0]?.message||"Invalid edit"},{status:400});
  const previous=await pendingMutations(owner);
  const item:PendingMutation={...parsed.data,sequence:Math.max(Date.now(),...previous.map(p=>p.sequence+1))};
- const updates:Array<{key:string;value:unknown;savedAt?:number}>=records.map(r=>({key:r.key,value:projectMutation(r.key.slice(6),r.value,[item]),savedAt:r.savedAt}));
+ const restored=operation.kind==="deck:update"&&operation.fields.archive===false?views.find(v=>v.deck.id===operation.id)?.deck:null;
+ const updates:Array<{key:string;value:unknown;savedAt?:number}>=records.map(r=>({key:r.key,value:projectMutation(r.key.slice(6),restored?includeRestoredPack(r.key.slice(6),r.value,restored):r.value,[item]),savedAt:r.savedAt}));
  if(operation.kind==="deck:create"){
   updates.push({key:`query:/api/decks/${operation.id}/view`,value:{deck:result,isPro:false,canViewAiImages:true,learningLanguage:"es",overallGrade:"New",avgMastery:0,gradeDistribution:{A:0,B:0,C:0,D:0,F:0,New:0}}});
   const manifest=object((await readRecord(owner,"library:manifest"))?.value);updates.push({key:"library:manifest",value:{...manifest,deckIds:[...(manifest.deckIds||[]),operation.id]}});
