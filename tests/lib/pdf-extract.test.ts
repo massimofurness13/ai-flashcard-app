@@ -5,7 +5,7 @@ import { extractPdfText } from "@/lib/pdf-extract";
 const file = new File(["fixture"], "lesson.pdf", { type: "application/pdf" });
 beforeEach(() => {
   vi.clearAllMocks();
-  mock.getPage.mockResolvedValue({ getTextContent: async () => ({ items: [{ str: "Hola" }, { type: "mark" }, { str: "Hello" }] }), cleanup: mock.cleanup });
+  mock.getPage.mockResolvedValue({ streamTextContent: () => new ReadableStream({start(controller){controller.enqueue({items:[{str:"Hola"},{type:"mark"},{str:"Hello"}]});controller.close();}}), cleanup: mock.cleanup });
   mock.getDocument.mockReturnValue({ promise: Promise.resolve({ numPages: 1, getPage: mock.getPage }), destroy: mock.destroy });
 });
 describe("PDF text import", () => {
