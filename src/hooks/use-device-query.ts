@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { projectLocalProgress } from "@/lib/local-progress";
 import { useDeviceAccount } from "@/components/layout/device-provider";
-import { readRecord, writeRecord, type DeviceRecord } from "@/lib/device-db";
+import { readRecord, writeRecord, listRecords, type DeviceRecord } from "@/lib/device-db";
 
 const memory = new Map<string, DeviceRecord<unknown>>();
 const requests = new Map<string, Promise<unknown>>();
@@ -32,6 +32,10 @@ export function useDeviceQuery<T>(url: string, enabled = true) {
     async function update() {
       if (navigator.onLine === false) return;
       try {
+      // Keep the server baseline stable while local reviews are unacknowledged.
+      // Otherwise a fresh timestamp would hide those locally saved ratings.
+      if ((url === "/api/library" || url.startsWith("/api/stats")) &&
+          (await listRecords(owner!, "review:")).length && await readRecord(owner!,`query:${url}`)) return;
         let pending = requests.get(key) as Promise<T> | undefined;
         if (!pending) {
           pending = fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15000) }).then(async response => {

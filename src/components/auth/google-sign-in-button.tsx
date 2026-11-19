@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { isNativeDevice } from "@/lib/native-device";
+import { registerPlugin } from "@capacitor/core";
+import { useRouter } from "next/navigation";
 
 /**
  * Generic OAuth sign-in button. Works for both sign-up and sign-in
@@ -41,6 +44,7 @@ export function OAuthSignInButton({
   redirectTo = "/",
   label,
 }: OAuthSignInButtonProps) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -49,6 +53,21 @@ export function OAuthSignInButton({
     setError("");
 
     const supabase = createClient();
+    if (isNativeDevice()) {
+      try {
+        const callback = new URL("/auth/callback", process.env.NEXT_PUBLIC_APP_URL).href;
+        const result = await supabase.auth.signInWithOAuth({provider,options:{redirectTo:callback,skipBrowserRedirect:true,queryParams:provider === "apple" ? undefined : {prompt:"select_account"}}});
+        if (result.error || !result.data.url) throw result.error || new Error("Couldn’t open sign-in.");
+        const NativeAuth = registerPlugin<{authenticate(options:{url:string}):Promise<{code:string}>}>("NativeAuth");
+        const {code} = await NativeAuth.authenticate({url:result.data.url});
+        const exchanged = await supabase.auth.exchangeCodeForSession(code);
+        if(exchanged.error)throw exchanged.error;
+        router.replace(redirectTo.startsWith("/") && !redirectTo.startsWith("//") ? redirectTo : "/");
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Sign-in couldn’t finish. Please try again.");
+      } finally { setLoading(false); }
+      return;
+    }
     const origin = window.location.origin;
     const callbackUrl = `${origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`;
 

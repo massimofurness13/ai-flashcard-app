@@ -62,3 +62,18 @@ describe("local-first library",()=>{
   expect((await projectLocalProgress(owner,"/api/library",home,baseline,today)).cardsReviewedToday).toBe(0);
  });
 });
+
+describe('offline progress after reconnect and calendar changes',()=>{
+ it('extends the calendar to the current month without needing the server',async()=>{
+  const review=await queueReview('a1',4,'front');const day=review.reviewedAt.slice(0,10);
+  const data={calendarMonth:[{date:'2026-10-01',count:7}],dailyCounts:[{date:'2026-10-31',count:0}],heatmapData:[],cardsReviewedToday:0,totalReviews:0,dailyGoal:10};
+  const result=await projectLocalProgress(owner,'/api/stats?period=7',data,Date.now()-1000,new Date(review.reviewedAt));
+  expect(result.calendarMonth.find(r=>r.date===day)?.count).toBe(1);expect(result.dailyCounts).toHaveLength(7);
+ });
+ it('does not count a deleted reviewed card toward unfinished daily cards',async()=>{
+  await writeRecord(owner,'study:daily',{cards:[],daily:{day:'2026-11-19',total:3,timingKey:'k',completed:0}});
+  await writeRecord(owner,'checkpoint:study:daily',{cards:[],dailyDay:'2026-11-19',timingKey:'k',currentIndex:2,progressOffset:0,stats:{cardsReviewed:3}});
+  const result=await projectLocalProgress(owner,'/api/library',{dailyStudy:{completed:0}},Date.now(),now);
+  expect(result.dailyStudy.completed).toBe(2);
+ });
+});

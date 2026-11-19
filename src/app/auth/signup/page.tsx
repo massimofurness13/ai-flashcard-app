@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {isNativeDevice} from "@/lib/native-device";
 import { APP_NAME } from "@/lib/constants";
 import {
   OAuthSignInButton,
@@ -38,7 +39,7 @@ export default function SignUpPage() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${isNativeDevice()?process.env.NEXT_PUBLIC_APP_URL:window.location.origin}/auth/callback`,
       },
     });
 

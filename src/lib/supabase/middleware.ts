@@ -1,10 +1,21 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { bearerToken } from "./bearer";
 
 export async function updateSession(request: NextRequest) {
   // Public UI shells only. Account data still requires authenticated APIs.
   // Server-rendered edit pages and API routes must not bypass authentication.
   const path = request.nextUrl.pathname;
+  if (path.startsWith("/api/") && request.headers.has("authorization") && !path.startsWith("/api/cron/")) {
+    const token = bearerToken(request.headers.get("authorization"));
+    if (!token) return NextResponse.json({error:"Unauthorized"},{status:401});
+    const client = createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
+    const {data,error} = await client.auth.getUser(token);
+    if (error || !data.user) return NextResponse.json({error:"Unauthorized"},{status:401});
+    // Handlers also verify the token and their resource's ownership.
+    return NextResponse.next({request});
+  }
   if (/^\/pdf\.worker\.\d+\.\d+\.\d+\.min\.mjs$/.test(path)
       || ["/", "/study/session", "/study", "/stats", "/account", "/account/billing", "/account/downloads"].includes(path)
       || (path !== "/decks/new" && /^\/decks\/[^/]+$/.test(path))) return NextResponse.next({ request });
@@ -64,6 +75,7 @@ export async function updateSession(request: NextRequest) {
   // `/manifest.webmanifest` and `/icon`, `/apple-icon` are served by Next
   // 16's app/manifest.ts + app/icon.tsx + app/apple-icon.tsx respectively.
   const publicStaticPaths = [
+    "/native-upgrade.html",
     "/manifest.webmanifest",
     "/sw.js",
     "/icon",

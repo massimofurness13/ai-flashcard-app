@@ -24,8 +24,7 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<!-- Keep in sync with capacitor.config.ts server.url. This enables the
-	     same-origin service worker; it does not bundle or prefill offline data. -->
+	<!-- Local app origin plus the old origin for upgrade migration only. -->
 	<key>WKAppBoundDomains</key>
 	<array>
 		<string>flashmind-35q4.onrender.com</string>
@@ -74,10 +73,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<!-- Dark-themed app: force a light (white) status bar app-wide so
-	     the clock/battery stay legible on Huella's near-black UI. -->
+	<!-- The bundled app follows its light/dark theme through StatusBar. -->
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
+	<true/>
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleLightContent</string>
 </dict>

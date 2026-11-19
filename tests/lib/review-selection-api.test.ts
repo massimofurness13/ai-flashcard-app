@@ -5,7 +5,7 @@ vi.mock("@/lib/auth",()=>({requireAuth:mocks.auth}));
 vi.mock("@/lib/db",()=>({prisma:{card:{findMany:mocks.cards},user:{findUnique:mocks.user},dailyStudyPlan:{findUnique:mocks.plan,findFirst:mocks.previous,findMany:mocks.history,upsert:mocks.upsert},reviewLog:{findMany:mocks.logs}}}));
 import { GET } from "@/app/api/review/route";
 const card=(id:string,tags="spanish")=>({id,front:id,tags,createdAt:new Date(0),nextReviewAt:new Date(0),easeFactor:2.5,interval:0,repetitions:0,recallStates:[],reviews:[]});
-beforeEach(()=>{vi.resetAllMocks();mocks.auth.mockResolvedValue({userId:"owner"});mocks.user.mockResolvedValue({learningLanguage:"Spanish"});});
+beforeEach(()=>{vi.resetAllMocks();mocks.cards.mockResolvedValue([]);mocks.logs.mockResolvedValue([]);mocks.auth.mockResolvedValue({userId:"owner"});mocks.user.mockResolvedValue({learningLanguage:"Spanish"});});
 describe("study selection API",()=>{
   it("keeps one daily plan and resumes only the remaining directions",async()=>{
     const picks=[{id:"a",studyDirection:"front",studyReason:"Needs practice",group:"practice"},{id:"b",studyDirection:"back",studyReason:"Retention",group:"retention"},{id:"archived",studyDirection:"front",studyReason:"New",group:"new"}];

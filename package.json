@@ -2,7 +2,9 @@
   "name": "friendly-hopper",
   "version": "0.1.0",
   "private": true,
-  "engines": { "node": ">=22.13.0 <23 || >=24" },
+  "engines": {
+    "node": ">=22.13.0 <23 || >=24"
+  },
   "scripts": {
     "predev": "node scripts/prepare-pdf-worker.mjs",
     "dev": "next dev",
@@ -13,8 +15,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "ios:icons": "node scripts/gen-app-icons.mjs && npx @capacitor/assets generate --ios",
-    "ios:sync": "npx cap sync ios",
-    "ios:open": "npx cap open ios"
+    "ios:sync": "npm run ios:build:web && npx cap sync ios",
+    "ios:open": "npx cap open ios",
+    "ios:build:web": "vite build --config mobile/vite.config.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
@@ -66,6 +69,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "vite": "8.3.3"
   }
 }

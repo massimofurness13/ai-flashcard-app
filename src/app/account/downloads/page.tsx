@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import {isNativeDevice,NativeStore} from "@/lib/native-device";
 import { useEffect, useState, useCallback } from "react";
 import { useDeviceAccount } from "@/components/layout/device-provider";
 import { listRecords, deleteRecord } from "@/lib/device-db";
@@ -14,6 +15,7 @@ export default function DownloadsPage() {
   const refresh = useCallback(async () => {
     if (!user) return;
     try {
+      if(isNativeDevice()){setUsage(await NativeStore.summary({owner:user.id}));return;}
       const records = await listRecords(user.id);
       const media = records.filter(r => r.key.startsWith("media:"));
       const reviews = records.filter(r => r.key.startsWith("review:"));
@@ -31,7 +33,8 @@ export default function DownloadsPage() {
     if (!user || !window.confirm("Remove downloaded audio and images from this device? Your cloud packs and pending reviews will stay safe.")) return;
     try {
       clearAudioMemory(); releaseMediaMemory();
-      for (const record of await listRecords(user.id)) if (/^(media:|pack:)/.test(record.key)) await deleteRecord(user.id, record.key);
+      const keys=isNativeDevice()?(await NativeStore.summary({owner:user.id})).mediaKeys:(await listRecords(user.id)).filter(r=>/^(media:|pack:)/.test(r.key)).map(r=>r.key);
+      for (const key of keys) await deleteRecord(user.id,key);
       setMessage("Downloads removed from this device. Cloud originals are unchanged.");
       await refresh();
     } catch { setMessage("Some files couldn't be removed. Try again."); }

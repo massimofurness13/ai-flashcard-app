@@ -10,7 +10,7 @@ let owner:string;
 beforeEach(()=>{
  vi.clearAllMocks();owner=crypto.randomUUID();m.owner.mockResolvedValue(owner);m.ready.mockResolvedValue(false);m.download.mockResolvedValue({mediaCount:1});m.flush.mockResolvedValue(undefined);
  vi.stubGlobal("navigator",{onLine:true});vi.stubGlobal("window",{dispatchEvent:vi.fn()});
- vi.stubGlobal("fetch",vi.fn(async(url:string)=>({ok:true,json:async()=>url==="/api/study-config"?{decks:[{id:"one"},{id:"two"}]}:url==="/api/library"?{reviewTimeZone:"America/Bogota"}:url.includes("/view")?{deck:{id:url.split("/")[3],cards:[{front:"hola",back:"hello",imageUrl:null}],frontLanguageCode:"es-MX",backLanguageCode:"en-GB"},learningLanguage:"es"}:url.startsWith("/api/review")?{cards:[],learningLanguage:"es",daily:{day:"2026-11-19",total:0,completed:0}}:{}})));
+ vi.stubGlobal("fetch",vi.fn(async(url:string)=>({ok:true,json:async()=>url==="/api/study-config"?{decks:[{id:"one"},{id:"two"}]}:url==="/api/library/extras"?{archivedDecks:[],creditUsage:[]}:url==="/api/library"?{reviewTimeZone:"America/Bogota"}:url.includes("/view")?{deck:{id:url.split("/")[3],cards:[{front:"hola",back:"hello",imageUrl:null}],frontLanguageCode:"es-MX",backLanguageCode:"en-GB"},learningLanguage:"es"}:url.startsWith("/api/review")?{cards:[],learningLanguage:"es",daily:{day:"2026-11-19",total:0,completed:0}}:{}})));
 });
 describe("automatic whole-library sync",()=>{
  it("saves every pack and statistics before downloading media, not just daily cards",async()=>{
