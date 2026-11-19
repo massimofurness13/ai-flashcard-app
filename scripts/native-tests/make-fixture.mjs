@@ -1,5 +1,5 @@
 // Synthetic simulator data only. No customer credentials or records.
-import {writeFileSync,readFileSync} from 'node:fs';
+import {writeFileSync,readFileSync,readdirSync} from 'node:fs';
 const owner='11111111-1111-4111-8111-111111111111';
 const today=new Date(Date.now()-6*3600000).toISOString().slice(0,10);
 const deck={id:'fixture-deck',name:'Offline fixture only',emoji:'🧪',frontLanguageCode:'es-ES',backLanguageCode:'en-US',description:null,folderId:null,folder:null,frontVoice:null,backVoice:null};
@@ -19,7 +19,9 @@ const wav=Buffer.alloc(44+1600);wav.write('RIFF');wav.writeUInt32LE(wav.length-8
 for(let i=0;i<800;i++)wav.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*440/8000)*1000),44+i*2);
 entries['media:fixture-audio']={__huellaBlob:true,type:'audio/wav',data:wav.toString('base64')};
 entries['media:fixture-image']={__huellaBlob:true,type:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1sAAAAASUVORK5CYII='};
-const script=`Object.defineProperty(navigator,'onLine',{get:()=>false});
+const pdfModule=readdirSync(new URL('../../mobile/dist/assets/',import.meta.url)).find(name=>name.startsWith('pdf-extract-')&&name.endsWith('.js'));
+const script=`window.__pdfFixtureModule=${JSON.stringify('/assets/'+pdfModule)};
+Object.defineProperty(navigator,'onLine',{get:()=>false});
 localStorage.setItem('huella:device-identity:v1',${JSON.stringify(JSON.stringify(identity))});
 localStorage.setItem('huella-settings',JSON.stringify({defaultAutoFlip:0,defaultAutoAdvance:0,defaultCards:3}));
 window.fetch=async()=>{throw new TypeError('Network disabled by isolated simulator test')};

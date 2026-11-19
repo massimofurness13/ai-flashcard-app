@@ -14,6 +14,14 @@
   await audio.play();await until(()=>audio.ended,'local audio playback');URL.revokeObjectURL(audio.src);checks.push('Saved audio file played without a network');
   const imageRecord=(await call('read',{owner,key:'media:fixture-image'})).record;
   const img=new Image();img.src=URL.createObjectURL(new Blob([Uint8Array.from(atob(imageRecord.value.data),c=>c.charCodeAt(0))],{type:'image/png'}));await img.decode();URL.revokeObjectURL(img.src);checks.push('Saved artwork decoded without a network');
+  if(window.__pdfFixtureModule){
+   const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+   const content='BT /F1 12 Tf 10 100 Td (Uno dos) Tj ET';objects.push('<< /Length '+content.length+' >>\nstream\n'+content+'\nendstream');
+   let pdf='%PDF-1.4\n';const offsets=[0];objects.forEach((object,i)=>{offsets.push(pdf.length);pdf+=(i+1)+' 0 obj\n'+object+'\nendobj\n';});
+   const xref=pdf.length;pdf+='xref\n0 6\n0000000000 65535 f \n'+offsets.slice(1).map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF';
+   const module=await import(window.__pdfFixtureModule);const extract=Object.values(module).find(v=>typeof v==='function');const result=await extract(new File([pdf],'fixture.pdf',{type:'application/pdf'}));
+   if(!result.text.includes('Uno dos'))throw Error('Offline PDF extraction failed');checks.push('Bundled PDF worker extracted a local document offline');
+  }
   if((await records('qa:result')).length){
    const pending=await records('review:');if(pending.length!==1)throw Error('Review was lost or duplicated across restart');
    const edits=await records('mutation:');if(edits.length!==1)throw Error('Edit was lost or duplicated across restart');
