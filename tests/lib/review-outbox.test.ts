@@ -13,12 +13,12 @@ beforeEach(() => {
 describe("durable reviews", () => {
   it("survives failed requests and retries the exact same identifier", async () => {
     await queueReview("card", 4, "back"); await flushReviews(owner);
-    const first = (await listRecords(owner))[0];
+    const first = (await listRecords(owner, "review:"))[0];
     expect(first.value).toMatchObject({ cardId: "card", quality: 4, direction: "back" });
     const sent = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ recorded: true }) }); vi.stubGlobal("fetch", sent);
     await flushReviews(owner);
     expect(JSON.parse(sent.mock.calls[0][1].body)).toEqual(first.value);
-    expect(await listRecords(owner)).toEqual([]);
+    expect(await listRecords(owner, "review:")).toEqual([]);
   });
   it("does not send account A's reviews after switching to B", async () => {
     await queueReview("card", 1); await flushReviews(owner);
@@ -26,13 +26,13 @@ describe("durable reviews", () => {
     const sent = vi.fn(); vi.stubGlobal("fetch", sent);
     await flushReviews(owner);
     expect(sent).not.toHaveBeenCalled();
-    expect(await listRecords(owner)).toHaveLength(1);
+    expect(await listRecords(owner, "review:")).toHaveLength(1);
   });
   it("retains a deleted-card review with an actionable error", async () => {
     await queueReview("deleted", 4); await flushReviews(owner);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({ error: "Card not found" }) }));
     await flushReviews(owner);
-    expect((await listRecords(owner))[0].value).toMatchObject({ error: "Card not found" });
+    expect((await listRecords(owner, "review:"))[0].value).toMatchObject({ error: "Card not found" });
   });
   it("deduplicates overlapping flush attempts", async () => {
     await queueReview("card", 4); await flushReviews(owner);

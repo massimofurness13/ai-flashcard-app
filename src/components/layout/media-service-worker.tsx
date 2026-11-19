@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 // Keep aligned with the audited public documents in public/sw.js.
-const SHELL_ROUTES = new Set(["/", "/study", "/study/session", "/account", "/account/downloads", "/stats"]);
+const SHELL_ROUTES = new Set(["/", "/study", "/study/session", "/account", "/account/downloads", "/stats", "/decks/offline"]);
 
 export interface AppShellResult {
   type: "APP_SHELL_RESULT";
@@ -80,7 +80,7 @@ export function MediaServiceWorker() {
       if (!(target instanceof HTMLAnchorElement) || target.hasAttribute("download") ||
           (target.target && target.target !== "_self")) return;
       const url = new URL(target.href);
-      if (url.origin !== window.location.origin || !SHELL_ROUTES.has(url.pathname) ||
+      if (url.origin !== window.location.origin || !(SHELL_ROUTES.has(url.pathname) || (url.pathname !== "/decks/new" && /^\/decks\/[a-zA-Z0-9_-]+$/.test(url.pathname))) ||
           (url.pathname === window.location.pathname && url.search === window.location.search && url.hash)) return;
       // Capture before Next Link's handler. A document navigation reaches the
       // prepared shell while retaining session options in location.search.

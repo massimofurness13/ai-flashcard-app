@@ -1,4 +1,5 @@
 import { deleteRecord, listRecords, writeRecord, writeRecords } from "@/lib/device-db";
+import { flushLocalPlans } from "./offline-plans";
 import { deviceOwner } from "@/lib/device-media";
 
 export interface PendingReview { eventId: string; cardId: string; quality: number; direction?: "front" | "back"; reviewedAt: string; error?: string; operation?: "undo"; sequence?: number }
@@ -8,7 +9,7 @@ function enqueue(owner: string, key: string, review: PendingReview, checkpoint?:
   const task = enqueueChain.then(async () => {
     const pending = await listRecords(owner, "review:");
     const sequence = Math.max(Date.now(), ...pending.map(r => (r.value as PendingReview).sequence ?? r.savedAt)) + 1;
-    await writeRecords(owner, [{key, value: {...review,sequence}}, ...(checkpoint ? [checkpoint(review)] : [])]);
+    await writeRecords(owner, [{key, value: {...review,sequence}}, {key:`local-${key}`,value:{...review,sequence}}, ...(checkpoint ? [checkpoint(review)] : [])]);
   });
   enqueueChain = task.catch(() => {});
   return task;
@@ -38,6 +39,7 @@ export async function flushReviews(owner: string): Promise<void> {
   if (existing) return existing;
   const task = (async () => {
     try {
+      await flushLocalPlans(owner);
       while (await deviceOwner() === owner) {
         const pending = await listRecords(owner, "review:");
         const blockedCards = new Set(pending.filter(r => (r.value as PendingReview).operation === "undo" && (r.value as PendingReview).error).map(r => (r.value as PendingReview).cardId));

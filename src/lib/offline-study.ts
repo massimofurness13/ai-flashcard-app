@@ -6,7 +6,7 @@ import type { StudyResumeSnapshot, StudyResumeCard } from "./study-resume";
 export interface SavedStudy {
   cards: StudyResumeCard[];
   learningLanguage: string | null;
-  daily?: { day: string; timingKey?: string; completed: number; total: number; ratings: Record<number, number>; mix: { practice: number; retention: number; new: number } } | null;
+  daily?: { picks?: import("./daily-study").DailyPick[]; day: string; timingKey?: string; completed: number; total: number; ratings: Record<number, number>; mix: { practice: number; retention: number; new: number } } | null;
 }
 export function studyKey(params: URLSearchParams): string {
   // A daily plan is server-selected, independent of flip timers and pack filters.

@@ -28,6 +28,12 @@ describe("verified pack download", () => {
     await expect(downloadPack(pack)).rejects.toThrow("audio");
     expect(await isPackDownloaded(pack)).toBe(false);
   });
+  it("keeps saving other files when one voice clip is unavailable", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({ok:false} as Response);
+    await expect(downloadPack(pack)).rejects.toThrow("audio");
+    expect(mock.download).toHaveBeenCalledWith(await mock.owner(),"https://image",false);
+    expect(await isPackDownloaded(pack)).toBe(false);
+  });
   it("detects an evicted file", async () => {
     await downloadPack(pack);
     await deleteRecord(await mock.owner(), "media:https://image");
