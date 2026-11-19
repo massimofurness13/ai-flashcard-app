@@ -50,6 +50,11 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
       const pending = events.filter(e=>e.cardId === card.id && e.operation !== "undo" && !undone.has(e.eventId) && e.quality > 0 && (unacknowledged.has(e.eventId) || e.savedAt >= record.savedAt) && !known.has(e.eventId))
         .sort((a,b)=>(a.sequence ?? a.savedAt)-(b.sequence ?? b.savedAt));
       for (const review of pending) {
+        // Server review IDs are SHA-256(owner:eventId), not the client UUID.
+        // A lost acknowledgement must not apply an already-saved rating twice.
+        const digest = await crypto.subtle.digest("SHA-256",new TextEncoder().encode(`${owner}:${review.eventId}`));
+        const serverId = [...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,"0")).join("");
+        if (known.has(serverId)) continue;
         const when = new Date(review.reviewedAt);
         const next = sm2(review.quality,card);
         card = {...card,...next,nextReviewAt:new Date(when.getTime()+next.interval*86400000),reviews:[{quality:review.quality,reviewedAt:when},...card.reviews].slice(0,3)};

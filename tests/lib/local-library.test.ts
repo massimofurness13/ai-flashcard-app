@@ -36,6 +36,17 @@ describe("local-first library",()=>{
   const next=await selectLocalStudy(owner,new URLSearchParams("filter=due&deckIds=a&orientation=front"),new Date());
   expect(next?.cards.some(c=>c.id==="a1")).toBe(true);
  });
+ it("does not apply an acknowledged server rating twice when the acknowledgement was lost",async()=>{
+  const event=await queueReview("a0",4,"front");
+  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(`${owner}:${event.eventId}`));
+  const id=[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,"0")).join("");
+  const record=(await readRecord<LocalDeckView>(owner,"query:/api/decks/a/view"))!;
+  record.value.deck.cards[0].reviews=[{id,quality:4,reviewedAt:new Date(event.reviewedAt)} as never];
+  await writeRecord(owner,record.key,record.value);
+  const data=await selectLocalStudy(owner,new URLSearchParams("filter=created&deckIds=a"),now);
+  const first=data?.cards[0] as unknown as {reviews:unknown[]};
+  expect(first.reviews).toHaveLength(1);
+ });
  it("honours archived packs and tags",async()=>{
   const view=(await readRecord<LocalDeckView>(owner,"query:/api/decks/a/view"))!.value;
   view.deck.archivedAt=new Date().toISOString();await writeRecord(owner,"query:/api/decks/a/view",view);
