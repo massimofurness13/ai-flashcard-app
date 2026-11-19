@@ -64,3 +64,10 @@ describe('local pack mutations',()=>{
   expect((await pendingMutations(owner))[0].operation.kind).toBe('card:delete');
  });
 });
+it('restores an archived pack into the offline home and study chooser',async()=>{
+ await saveLocalWrite('/api/decks/d','PATCH',{archive:true});
+ await writeRecords(owner,[{key:'query:/api/study-config',value:{decks:[]}}]);
+ await saveLocalWrite('/api/decks/d','PATCH',{archive:false});
+ expect((await readRecord<{unfolderedDecks:{id:string}[]}>(owner,'query:/api/library'))?.value.unfolderedDecks.map(d=>d.id)).toEqual(['d']);
+ expect((await readRecord<{decks:{id:string}[]}>(owner,'query:/api/study-config'))?.value.decks.map(d=>d.id)).toEqual(['d']);
+});
