@@ -37,7 +37,8 @@ import {DeckForm} from "@/components/deck/deck-form";
 import {useDeviceQuery} from "@/hooks/use-device-query";
 import {usePathname} from "./navigation";
 import Link from "./link";
-import {isNativeDevice,NativeStore} from "@/lib/native-device";
+import {isNativeDevice} from "@/lib/native-device";
+import {NativeStartup} from "./startup";
 import {createClient} from "./auth";
 import {installApiTransport} from "./http";
 import "@/app/globals.css";
@@ -93,16 +94,5 @@ class Boundary extends Component<{children:ReactNode},{failed:boolean}>{
 }
 const root=createRoot(document.getElementById("root")!);
 function renderApp(){root.render(<Boundary><ThemeProvider attribute="class" defaultTheme="system" enableSystem><DeviceProvider><NativeAppearance/><FontSizeInit/><Navbar/><OfflineStudyProvider/><SyncState/><main className="app-content flex-1"><div className="mx-auto max-w-7xl px-4 py-6"><Suspense fallback={<p>Opening…</p>}><Routes/></Suspense></div></main><MobileNav/></DeviceProvider></ThemeProvider></Boundary>);}
-async function boot(){
- if(isNativeDevice()){
-  root.render(<div className="p-6" role="status">Opening Huella and keeping your saved work…</div>);
-  try {
-   const result=await NativeStore.migrateLegacy();
-   if(!result.complete){root.render(<div className="p-6"><h1>Finish this app upgrade</h1><p>Connect once so Huella can move your previous saved library into the installed app. Your existing work has not been deleted.</p><button onClick={()=>void boot()}>Try again</button></div>);return;}
-   const storage=result.storage??(await NativeStore.read({owner:"__device__",key:"legacy-storage"})).record?.value as Record<string,string>|undefined;
-   if(storage)for(const [key,value] of Object.entries(storage))if(localStorage.getItem(key)===null)localStorage.setItem(key,value);
-  }catch{root.render(<div className="p-6"><p>Your saved library could not be opened. It has not been cleared.</p><button onClick={()=>void boot()}>Try again</button></div>);return;}
- }
- renderApp();
-}
-void boot();
+if(isNativeDevice())root.render(<NativeStartup onReady={renderApp}/>);
+else renderApp();

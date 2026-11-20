@@ -9,49 +9,82 @@ final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
     let jsName = "NativeStore"
     let pluginMethods: [CAPPluginMethod] = ["read","mediaStatus","list","write","remove","secretGet","secretSet","migrateLegacy","summary"].map { CAPPluginMethod(name:$0, returnType:CAPPluginReturnPromise) }
     private var migration: LegacyMigration?
+    private var migrationAttempt: UUID?
+    private var migrationWatchdog: DispatchWorkItem?
+    private var migrationCall: CAPPluginCall?
+    private let libraryMigratedKey = "huella-native-library-migrated-v1"
+
     @objc func migrateLegacy(_ call:CAPPluginCall) {
         DispatchQueue.main.async { [self] in
-            guard migration == nil else {call.reject("Upgrade is already running");return}
-            if UserDefaults.standard.bool(forKey:"huella-native-migration-v1") {call.resolve(["complete":true]);return}
+            let full = UserDefaults.standard.bool(forKey:"huella-native-migration-v1")
+            let libraryReady = full || UserDefaults.standard.bool(forKey:libraryMigratedKey)
+            if libraryReady {call.resolve(["complete":true])}
+            if full {return}
+            guard migrationAttempt == nil else {
+                if !libraryReady {call.reject("Upgrade is already running")};return
+            }
+            let attempt=UUID();migrationAttempt=attempt
+            if !libraryReady {migrationCall=call}
+            // Includes website-data enumeration and cookie transfer, not just navigation.
+            let watchdog=DispatchWorkItem { [weak self] in
+                guard let self,self.migrationAttempt==attempt else{return}
+                self.finishMigration(attempt:attempt,complete:false)
+            }
+            migrationWatchdog=watchdog
+            DispatchQueue.main.asyncAfter(deadline:.now()+40,execute:watchdog)
             WKWebsiteDataStore.default().fetchDataRecords(ofTypes:[WKWebsiteDataTypeIndexedDBDatabases,WKWebsiteDataTypeLocalStorage]) { [self] records in
+                guard migrationAttempt==attempt else{return}
                 var migrationFixture=false
                 #if DEBUG
                 if let path=ProcessInfo.processInfo.environment["HUELLA_OFFLINE_FIXTURE"],let data=try? Data(contentsOf:URL(fileURLWithPath:path)),let fixture=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],fixture["owner"] as? String == "11111111-1111-4111-8111-111111111111" {migrationFixture=fixture["migration"] as? Bool == true}
                 #endif
                 guard migrationFixture || records.contains(where:{$0.displayName.contains("onrender.com")}) else {
-                    UserDefaults.standard.set(true,forKey:"huella-native-migration-v1");call.resolve(["complete":true]);return
+                    UserDefaults.standard.set(true,forKey:"huella-native-migration-v1")
+                    finishMigration(attempt:attempt,complete:true);return
                 }
-                let task=LegacyMigration{ [self] record,reply in
+                let task=LegacyMigration(save:{ [self] record,reply in
                     queue.async { [self] in
                         do {
                             guard let owner=record["owner"] as? String,let key=record["key"] as? String else {throw NativeDatabase.Failure.invalidRecord}
                             let db=try database()
-                            if try db.read(owner:owner,key:key)==nil {try db.write(owner:owner,records:[record])}
+                            // Retry never overwrites edits made in the new app; no media decoding.
+                            if try db.read(owner:owner,key:key,metadataOnly:true)==nil {try db.write(owner:owner,records:[record])}
                             DispatchQueue.main.async {reply(true)}
                         } catch {DispatchQueue.main.async {reply(false)}}
                     }
-                }
-                migration=task
-                task.start{ [self] result in
-                    migration=nil
-                    switch result {
-                    case .success(let storage):
-                        // Do not clear the original web-origin data. It remains a recovery copy.
-                        queue.async { [self] in
-                            do {try database().write(owner:"__device__",records:[["key":"legacy-storage","value":storage]])
-                                DispatchQueue.main.async { [self] in
-                                    preserveLegacySession(signedOut:storage["huella:device-sign-out:v1"] != nil) {
-                                        UserDefaults.standard.set(true,forKey:"huella-native-migration-v1")
-                                        call.resolve(["complete":true,"storage":storage])
-                                    }
+                },ready:{ [self] storage,reply in
+                    queue.async { [self] in
+                        do {
+                            try database().write(owner:"__device__",records:[["key":"legacy-storage","value":storage]])
+                            DispatchQueue.main.async { [self] in
+                                guard migrationAttempt==attempt else {reply(false);return}
+                                preserveLegacySession(signedOut:storage["huella:device-sign-out:v1"] != nil) { [self] in
+                                    guard migrationAttempt==attempt else {reply(false);return}
+                                    UserDefaults.standard.set(true,forKey:libraryMigratedKey)
+                                    migrationWatchdog?.cancel();migrationWatchdog=nil
+                                    migrationCall?.resolve(["complete":true,"storage":storage]);migrationCall=nil
+                                    reply(true)
                                 }
-                            } catch {call.reject("Could not finish preserving your previous library")}
-                        }
-                    case .failure: call.resolve(["complete":false])
+                            }
+                        } catch {DispatchQueue.main.async {reply(false)}}
                     }
+                },progress:{ [self] completed,total in
+                    notifyListeners("migrationProgress",data:["completed":completed,"total":total])
+                })
+                migration=task
+                task.start { [self] result in
+                    guard migrationAttempt==attempt else{return}
+                    if case .success = result {UserDefaults.standard.set(true,forKey:"huella-native-migration-v1")}
+                    finishMigration(attempt:attempt,complete:UserDefaults.standard.bool(forKey:libraryMigratedKey))
                 }
             }
         }
+    }
+    @MainActor private func finishMigration(attempt:UUID,complete:Bool) {
+        guard migrationAttempt==attempt else{return}
+        migrationAttempt=nil;migrationWatchdog?.cancel();migrationWatchdog=nil
+        let task=migration;migration=nil;task?.cancel()
+        migrationCall?.resolve(["complete":complete]);migrationCall=nil
     }
     private let queue = DispatchQueue(label:"app.huella.storage")
     private var store: NativeDatabase?

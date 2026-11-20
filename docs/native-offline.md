@@ -36,3 +36,11 @@ Use the **Huella Automatic Updates** internal group for subsequent Xcode uploads
 Before upload, inspect the **archived app's** Info.plist, not only the source: the declaration must be present as a Boolean false. After upload, confirm processing completes and the build appears as **Testing** in the automatic group with the intended tester. An upload-success message alone is not evidence of availability. Apple agreements, processing failures or changed compliance requirements can still block a release.
 
 References: [automatic internal distribution](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers/) and [Apple encryption declaration](https://developer.apple.com/documentation/security/complying-with-encryption-export-regulations).
+
+## Build 7 startup migration
+
+The first upgrade imports essential records (cards, reviews, edits, plans and settings) before opening the UI. Saved media copies continue in the background; originals stay in WebKit and existing native records are never overwritten on retries. A separate durable library-ready marker lets subsequent launches open even if media copying was interrupted. Complete migrations still use the original marker. Native existence checks use metadata rather than decoding existing files.
+
+Initial startup has a 40-second native deadline including website-data enumeration and cookie transfer, plus a 45-second JS fallback for a stalled bridge. Failed navigation, WebKit termination and idle exports resolve to a retry screen. Progress replaces the previous bare text page. Only this first legacy-origin upgrade needs a connection; normal bundled launches use saved data.
+
+`make-startup-fixture.mjs` verifies essential records and restored identity, usable navigation before intentionally slow media transfers, eventual media completion and restart. Use only the isolated `app.huella.startupqa` simulator bundle.

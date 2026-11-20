@@ -1,9 +1,10 @@
-import { Capacitor, registerPlugin } from "@capacitor/core";
+import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 
 /** Native storage is available only in the installed, bundled app. */
 export const isNativeDevice = () => Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("NativeStore");
 export interface NativeRecord { owner: string; key: string; value: unknown; savedAt: number }
 export const NativeStore = registerPlugin<{
+  addListener(event:"migrationProgress",listener:(progress:{completed:number;total:number})=>void):Promise<PluginListenerHandle>;
   summary(options:{owner:string}):Promise<{files:number;bytes:number;reviews:number;errors:number;planErrors:number;mediaKeys:string[]}>;
   migrateLegacy(): Promise<{complete:boolean;storage?:Record<string,string>}>;
   mediaStatus(options: {owner: string; keys: string[]}): Promise<{keys: string[]}>;
