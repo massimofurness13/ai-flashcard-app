@@ -13,6 +13,7 @@ export interface DeviceIdentity {
   user: DeviceUser | null;
   ready: boolean;
   source: "local" | "session" | null;
+  reconnectRequired?: true;
 }
 export const DEVICE_IDENTITY_KEY = "huella:device-identity:v1";
 export const DEVICE_SIGN_OUT_KEY = "huella:device-sign-out:v1";
@@ -81,10 +82,10 @@ export function observeDeviceIdentity({ auth, storage, online, onChange, onAccou
   let signedOut = readSignOutFence(storage);
   let currentSessionId = savedSessionId(storage);
   let current = readDeviceIdentity(storage);
-  const publish = (user: DeviceUser | null, source: DeviceIdentity["source"]) => {
+  const publish = (user: DeviceUser | null, source: DeviceIdentity["source"], reconnectRequired=false) => {
     if (current?.id !== user?.id) onAccountBoundary?.();
     current = user;
-    onChange({ user, source: user ? source : null, ready: true });
+    onChange({ user, source: user ? source : null, ready: true, ...(user&&reconnectRequired?{reconnectRequired:true as const}:{}) });
   };
   const remember = (user: DeviceUser | null) => {
     try {
@@ -152,7 +153,7 @@ export function observeDeviceIdentity({ auth, storage, online, onChange, onAccou
       // navigator.onLine=true only proves a network interface exists, not that
       // Supabase is reachable. Keep the local partition; it grants no server
       // access. Only explicit sign-out or SIGNED_OUT clears this identity.
-      else publish(current, "local");
+      else publish(current, "local",true);
     } catch {
       if (active && requestRevision === revision) publish(current, "local");
     }

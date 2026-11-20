@@ -7,7 +7,7 @@ import WebKit
 final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
     let identifier = "NativeStorePlugin"
     let jsName = "NativeStore"
-    let pluginMethods: [CAPPluginMethod] = ["read","mediaStatus","list","write","remove","secretGet","secretSet","migrateLegacy","summary"].map { CAPPluginMethod(name:$0, returnType:CAPPluginReturnPromise) }
+    let pluginMethods: [CAPPluginMethod] = ["read","mediaStatus","list","write","remove","secretGet","secretSet","recoverLegacySession","migrateLegacy","summary"].map { CAPPluginMethod(name:$0, returnType:CAPPluginReturnPromise) }
     private var migration: LegacyMigration?
     private var migrationAttempt: UUID?
     private var migrationWatchdog: DispatchWorkItem?
@@ -88,6 +88,8 @@ final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     private let queue = DispatchQueue(label:"app.huella.storage")
     private var store: NativeDatabase?
+    // Accessed only on the storage queue; prevents late cookie recovery after logout.
+    private var credentialGeneration = 0
     private func database() throws -> NativeDatabase {
         if let store {return store}
         let directory = try FileManager.default.url(for:.applicationSupportDirectory,in:.userDomainMask,appropriateFor:nil,create:true).appendingPathComponent("Huella",isDirectory:true)
@@ -130,11 +132,14 @@ final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     // Transfer only our Supabase session from this app's old cookie store.
     // Credentials never enter the migration document, device database or logs.
-    private func preserveLegacySession(signedOut:Bool,done:@escaping()->Void) {
+    private func preserveLegacySession(signedOut:Bool,expectedOwner:String?=nil,expectedGeneration:Int?=nil,done:@escaping()->Void) {
         guard !signedOut else {done();return}
         let key="sb-fghxwycixcawwtctknmp-auth-token"
-        WKWebsiteDataStore.default().httpCookieStore.getAllCookies { [self] cookies in
-            let relevant=cookies.filter { $0.domain=="flashmind-35q4.onrender.com" && ($0.name==key || $0.name.hasPrefix(key+".")) }
+        queue.async { [self] in
+         let generation=expectedGeneration ?? credentialGeneration
+         DispatchQueue.main.async { [self] in
+          WKWebsiteDataStore.default().httpCookieStore.getAllCookies { [self] cookies in
+            let relevant=cookies.filter { $0.domain.trimmingCharacters(in:CharacterSet(charactersIn:"."))=="flashmind-35q4.onrender.com" && ($0.name==key || $0.name.hasPrefix(key+".")) }
             let direct=relevant.first(where:{$0.name==key})?.value
             let chunks=relevant.filter{$0.name.hasPrefix(key+".")}.sorted{(Int($0.name.dropFirst(key.count+1)) ?? 0)<(Int($1.name.dropFirst(key.count+1)) ?? 0)}.map(\.value).joined()
             var encoded=(direct ?? chunks).removingPercentEncoding ?? (direct ?? chunks)
@@ -145,7 +150,9 @@ final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
             } else {data=encoded.data(using:.utf8)}
             guard let data,let object=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
                   object["access_token"] is String,object["refresh_token"] is String else {done();return}
+            if let expectedOwner,(object["user"] as? [String:Any])?["id"] as? String != expectedOwner {done();return}
             queue.async { [self] in
+                guard credentialGeneration==generation else {DispatchQueue.main.async {done()};return}
                 var query=secretQuery(key);query[kSecReturnData as String]=true
                 var existing:CFTypeRef?
                 if SecItemCopyMatching(query as CFDictionary,&existing)==errSecItemNotFound {
@@ -154,6 +161,17 @@ final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
                     _ = SecItemAdd(added as CFDictionary,nil)
                 }
                 DispatchQueue.main.async {done()}
+            }
+        }
+            }
+        }
+    }
+    @objc func recoverLegacySession(_ call:CAPPluginCall) {
+        guard let owner=call.getString("owner"),!owner.isEmpty,owner.count<=256 else {call.reject("Missing account");return}
+        queue.async { [self] in
+            let generation=credentialGeneration
+            DispatchQueue.main.async { [self] in
+                preserveLegacySession(signedOut:call.getBool("signedOut") ?? true,expectedOwner:owner,expectedGeneration:generation) {call.resolve([:])}
             }
         }
     }
@@ -176,7 +194,7 @@ final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
         queue.async { [self] in
             var query=secretQuery(key); query[kSecReturnData as String]=true; query[kSecMatchLimit as String]=kSecMatchLimitOne
             var result:CFTypeRef?; let status=SecItemCopyMatching(query as CFDictionary,&result)
-            if status==errSecItemNotFound {call.resolve();return}
+            if status==errSecItemNotFound {call.resolve([:]);return}
             guard status==errSecSuccess, let data=result as? Data else {call.reject("Secure storage is unavailable");return}
             call.resolve(["value":String(decoding:data,as:UTF8.self)])
         }
@@ -184,6 +202,7 @@ final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func secretSet(_ call: CAPPluginCall) {
         guard let key=call.getString("key"), key.hasPrefix("sb-") else {call.reject("Invalid credential key");return}
         queue.async { [self] in
+            if key=="sb-fghxwycixcawwtctknmp-auth-token" {credentialGeneration += 1}
             let query=secretQuery(key)
             guard let value=call.getString("value") else {
                 let status=SecItemDelete(query as CFDictionary)

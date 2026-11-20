@@ -252,3 +252,13 @@ describe("saved device identity (not server authentication)", () => {
     expect(f.unsubscribe).toHaveBeenCalledOnce();
   });
 });
+
+describe('reconnect signalling',()=>{
+ it('does not ask for sign-in while restoration is pending or storage/network fails',async()=>{
+  const pending=fixture({online:true,pending:new Promise(()=>{})});expect(pending.current().reconnectRequired).toBeUndefined();pending.observer.dispose();
+  const failed=fixture({online:true,pending:Promise.resolve(result(null,new Error('storage unavailable')))});await failed.observer.refresh();expect(failed.current().reconnectRequired).toBeUndefined();expect(failed.current().user?.id).toBe('alice');failed.observer.dispose();
+ });
+ it('asks for reconnection only after a successful session read confirms absence',async()=>{
+  const f=fixture({online:true});await f.observer.refresh();expect(f.current().reconnectRequired).toBe(true);f.emit('SIGNED_IN','alice');expect(f.current().reconnectRequired).toBeUndefined();f.observer.dispose();
+ });
+});

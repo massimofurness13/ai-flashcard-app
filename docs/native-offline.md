@@ -44,3 +44,9 @@ The first upgrade imports essential records (cards, reviews, edits, plans and se
 Initial startup has a 40-second native deadline including website-data enumeration and cookie transfer, plus a 45-second JS fallback for a stalled bridge. Failed navigation, WebKit termination and idle exports resolve to a retry screen. Progress replaces the previous bare text page. Only this first legacy-origin upgrade needs a connection; normal bundled launches use saved data.
 
 `make-startup-fixture.mjs` verifies essential records and restored identity, usable navigation before intentionally slow media transfers, eventual media completion and restart. Use only the isolated `app.huella.startupqa` simulator bundle.
+
+## Build 8 saved-session repair
+
+Missing Keychain entries resolve to an empty object; the JS auth adapter also tolerates older undefined replies and returns null for optional keys. A missing primary session can retry the old app cookie once per client lifetime, only for the matching saved account and never behind an explicit logout fence. Credentials remain in Keychain; recovery does not overwrite a newer session, and credential writes/removals invalidate in-flight recovery.
+
+Reconnection is only requested after a successful session check confirms no session, and the native prompt is confined to Account. Statistics remain readable from the saved account. Query refreshes restart when the session becomes available, and unexpected technical errors are replaced with a short saved-data message. `make-auth-fixture.mjs` tests the real bridge and Keychain in the signed, isolated `app.huella.authqa` simulator using synthetic cookies only.

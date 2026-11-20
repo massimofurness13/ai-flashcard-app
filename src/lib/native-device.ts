@@ -12,7 +12,8 @@ export const NativeStore = registerPlugin<{
   list(options: {owner: string; prefix: string}): Promise<{records: NativeRecord[]}>;
   write(options: {owner: string; records: {key: string; value: unknown; savedAt?: number}[]}): Promise<void>;
   remove(options: {owner: string; key: string}): Promise<void>;
-  secretGet(options: {key: string}): Promise<{value?: string}>;
+  secretGet(options: {key: string}): Promise<{value?: string}|undefined>;
+  recoverLegacySession(options:{owner:string;signedOut:boolean}):Promise<void>;
   secretSet(options: {key: string; value: string | null}): Promise<void>;
 }>("NativeStore");
 
