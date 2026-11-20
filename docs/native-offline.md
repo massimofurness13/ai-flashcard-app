@@ -26,3 +26,13 @@ Home keeps the daily action, streak, library and sorting; routine sync status is
 Media availability uses batched file metadata checks, with account isolation and missing-file detection, instead of reading/base64-encoding every saved file. Native request and token-refresh waits honour the caller’s abort deadline (the underlying iOS request may finish separately). Goal celebration dismissal is immediate even when its acknowledgement is slow.
 
 `make-responsiveness-fixture.mjs` plus `responsiveness.js` exercise a synthetic 1,466-card library, 1,500 historical journal entries, repeated native checks of 200 saved files, navigation, the daily120/50retention allocation and a never-resolving goal acknowledgement. Use the separate `app.huella.responsivenessqa` simulator bundle; never seed a real account. Timings include the normal three-second countdown.
+
+## TestFlight distribution
+
+Use the **Huella Automatic Updates** internal group for subsequent Xcode uploads. It was created with automatic distribution enabled on 20 November 2026 because Apple does not allow changing that option on an existing group. The original Huella Internal Testing group remains for continuity. Automatic distribution happens after Apple processes an eligible upload; it does not build/upload source commits or install updates on a tester's phone. Xcode Cloud builds require a separate distribution action.
+
+`ios/App/App/Info.plist` declares `ITSAppUsesNonExemptEncryption=false`, matching the current internal beta's export-compliance answers. This means exempt encryption, not an absence of encryption: HTTPS/Keychain and platform cryptography protect connections and credentials, SHA-256 identifies media, and bundled PDF.js includes standard document decryption. The build 6 questionnaire was answered as standard algorithms, with no distribution in France for this private beta. Reassess the declaration before adding encryption features or expanding distribution, especially to France; do not copy this answer blindly into a public launch.
+
+Before upload, inspect the **archived app's** Info.plist, not only the source: the declaration must be present as a Boolean false. After upload, confirm processing completes and the build appears as **Testing** in the automatic group with the intended tester. An upload-success message alone is not evidence of availability. Apple agreements, processing failures or changed compliance requirements can still block a release.
+
+References: [automatic internal distribution](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers/) and [Apple encryption declaration](https://developer.apple.com/documentation/security/complying-with-encryption-export-regulations).

@@ -24,6 +24,9 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Exempt encryption for the current internal beta; see docs/native-offline.md. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<!-- Local app origin plus the old origin for upgrade migration only. -->
 	<key>WKAppBoundDomains</key>
 	<array>
