@@ -131,7 +131,6 @@ export function HomePage({
   dailyStudy,
   folders,
   unfolderedDecks,
-  totalCards,
   userName,
   cardsReviewedToday,
   dailyGoal,
@@ -159,6 +158,7 @@ export function HomePage({
     try {
       const saved = localStorage.getItem(SORT_STORAGE_KEY);
       if (saved && saved in SORT_LABELS) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate the saved preference after SSR.
         setSortKey(saved as SortKey);
       }
     } catch {
@@ -249,25 +249,12 @@ export function HomePage({
   }
 
   const goalHit = todayCount !== null && todayCount >= dailyGoal;
-  const progressPct = Math.min(((todayCount ?? 0) / dailyGoal) * 100, 100);
   return (
-    <div className="space-y-7 sm:space-y-9">
+    <div className="space-y-5 sm:space-y-7">
       <section aria-label="Daily study" className="space-y-4">
         <h1 className="sr-only">Your daily study</h1>
         <DailyStudyButton summary={dailyStudy} />
-        <div className="space-y-2 px-1">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
-            <p className="text-muted-foreground">
-              <span className="font-semibold tabular-nums text-foreground">{todayCount === null ? "—" : `${todayCount} / ${dailyGoal}`}</span> {todayCount === null ? "Today’s progress awaiting sync" : "reviewed today"}
-              {goalHit && <span className="ml-2 text-foreground">✓ Goal reached</span>}
-            </p>
-            {streak > 0 && <p className="text-muted-foreground">{streak}-day streak</p>}
-          </div>
-          <div role="progressbar" aria-label="Daily review goal" aria-valuemin={0} aria-valuemax={dailyGoal} aria-valuenow={Math.min(todayCount ?? 0,dailyGoal)} className="h-1 overflow-hidden rounded-full bg-border">
-            <div className="h-full rounded-full bg-primary" style={{width: `${progressPct}%`}} />
-          </div>
-          <Link href="/study" className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground">Choose packs &amp; study settings</Link>
-        </div>
+        {streak > 0 && <p className="px-1 text-right text-sm text-muted-foreground">{streak}-day streak</p>}
       </section>
 
         {/* ── Library ─────────────────────────────────────────────── */}
@@ -278,11 +265,9 @@ export function HomePage({
             <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border pb-3">
               <div className="flex items-center gap-3">
                 <h2 className="font-editorial text-2xl font-medium text-foreground">Library</h2>
-                <span className="text-xs text-muted-foreground">{totalCards.toLocaleString()} cards</span>
                 <CreateMenu />
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <Link href="/archive" className="text-sm text-muted-foreground underline hover:text-foreground">Archived packs</Link>
                 {/* Sort dropdown — applies to both the unfoldered
                  *  list and each folder's contents. Choice persists
                  *  to localStorage via updateSort(). */}
@@ -301,15 +286,6 @@ export function HomePage({
                     ))}
                   </select>
                 </label>
-                <p className="label-caps shrink-0">
-                  {sortedFolders.filter((f) => f.decks.length > 0).length +
-                    (sortedUnfoldered.length > 0 ? 1 : 0)}{" "}
-                  {sortedFolders.filter((f) => f.decks.length > 0).length +
-                    (sortedUnfoldered.length > 0 ? 1 : 0) ===
-                  1
-                    ? "section"
-                    : "sections"}
-                </p>
               </div>
             </div>
 
@@ -365,6 +341,7 @@ export function HomePage({
                 </div>
               )}
             </div>
+            <Link href="/archive" className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground">Archived packs</Link>
           </section>
         )}
       {/* First-time celebration when user hits their daily goal */}

@@ -1,4 +1,5 @@
 "use client";
+import { isNativeDevice } from "@/lib/native-device";
 import { listRecords } from "@/lib/device-db";
 import { readOfflineStudy } from "@/lib/offline-study";
 import { useDeviceAccount } from "@/components/layout/device-provider";
@@ -49,7 +50,7 @@ export function DailyStudyButton({ summary }: { summary?: DailyStudySummary | nu
     const target = "/study/session?"+new URLSearchParams({filter:"daily",limit:String(DAILY_STUDY_TARGET),orientation:"auto",autoFlip:String(autoFlip),autoAdvance:"0"});
     // Offline document navigation is served by the saved shell; RSC needs a server.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    if (navigator.onLine === false) window.location.assign(target); else router.push(target);
+    if (navigator.onLine === false && !isNativeDevice()) window.location.assign(target); else router.push(target);
   }
   return (
     <Button

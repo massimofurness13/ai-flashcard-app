@@ -72,3 +72,17 @@ export async function writeRecords(owner: string, records: { key: string; value:
     tx.onabort = tx.onerror = () => reject(tx.error || new Error("Device storage failed."));
   });
 }
+
+/** Inspect file metadata, never transfer thousands of saved audio/image bytes to JS. */
+export async function savedMediaUrls(owner: string, urls: string[]): Promise<Set<string>> {
+  const present = new Set<string>();
+  if (isNativeDevice()) {
+    for (let i = 0; i < urls.length; i += 500) {
+      const result = await NativeStore.mediaStatus({owner, keys: urls.slice(i, i + 500).map(url => `media:${url}`)});
+      for (const key of result.keys) present.add(key.slice(6));
+    }
+  } else {
+    for (const url of urls) if ((await readRecord<Blob>(owner, `media:${url}`))?.value?.size) present.add(url);
+  }
+  return present;
+}
