@@ -1,4 +1,4 @@
-import { readRecord, writeRecord } from "@/lib/device-db";
+import { readRecord, writeRecord, savedMediaUrls } from "@/lib/device-db";
 import { createClient } from "@/lib/supabase/client";
 
 const blobs = new Map<string, string>();
@@ -50,7 +50,7 @@ export async function downloadMedia(owner: string, url: string, keepInMemory = t
   if (existing) return existing;
   const job = (async () => {
     // Bulk sync stores bytes without retaining thousands of blob URLs in RAM.
-    const saved = keepInMemory ? await savedMedia(owner, url) : (await readRecord<Blob>(owner, `media:${url}`))?.value?.size ? url : null;
+    const saved = keepInMemory ? await savedMedia(owner, url) : (await savedMediaUrls(owner, [url])).has(url) ? url : null;
     if (saved) return saved;
     // Two transfers at a time; don't flood the audio connection pool.
     if (downloads >= 2) await new Promise<void>(resolve => waiting.push(resolve));

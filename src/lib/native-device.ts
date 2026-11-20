@@ -6,6 +6,7 @@ export interface NativeRecord { owner: string; key: string; value: unknown; save
 export const NativeStore = registerPlugin<{
   summary(options:{owner:string}):Promise<{files:number;bytes:number;reviews:number;errors:number;planErrors:number;mediaKeys:string[]}>;
   migrateLegacy(): Promise<{complete:boolean;storage?:Record<string,string>}>;
+  mediaStatus(options: {owner: string; keys: string[]}): Promise<{keys: string[]}>;
   read(options: {owner: string; key: string}): Promise<{record?: NativeRecord}>;
   list(options: {owner: string; prefix: string}): Promise<{records: NativeRecord[]}>;
   write(options: {owner: string; records: {key: string; value: unknown; savedAt?: number}[]}): Promise<void>;

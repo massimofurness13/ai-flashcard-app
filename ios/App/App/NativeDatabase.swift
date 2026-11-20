@@ -38,12 +38,12 @@ final class NativeDatabase {
         let bytes = (try? Data(contentsOf: files.appendingPathComponent(name))) ?? Data()
         return ["__huellaBlob": true, "type": object["type"] as? String ?? "application/octet-stream", "data": bytes.base64EncodedString()]
     }
-    func read(owner: String, key: String) throws -> [String: Any]? {
+    func read(owner: String, key: String, metadataOnly: Bool = false) throws -> [String: Any]? {
         let s = try statement("SELECT key,value,savedAt FROM records WHERE owner=? AND key=?", [owner,key]); defer { sqlite3_finalize(s) }
         let result = sqlite3_step(s)
         if result == SQLITE_DONE { return nil }
         guard result == SQLITE_ROW else { throw Failure.storage }
-        return try record(s, owner: owner)
+        return try record(s, owner: owner, metadataOnly: metadataOnly)
     }
     private func record(_ s: OpaquePointer, owner: String, metadataOnly: Bool = false) throws -> [String: Any] {
         let key = String(cString: sqlite3_column_text(s,0))

@@ -24,12 +24,12 @@ export function GoalCelebrationDialog({ show, dailyGoal }: GoalCelebrationDialog
   async function handleDismiss() {
     if (dismissing) return;
     setDismissing(true);
+    setOpen(false); // Dismissing an overlay must never wait for an upload.
     try {
       await fetch("/api/user/goal-celebration", { method: "POST" });
     } catch {
       // non-fatal — user can see it again if they refresh, not the end of the world
     }
-    setOpen(false);
   }
 
   if (!open) return null;

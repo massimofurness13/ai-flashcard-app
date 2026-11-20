@@ -1,4 +1,5 @@
 "use client";
+import { isNativeDevice } from "@/lib/native-device";
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -349,7 +350,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
     }
     const target = `/study/session?${params.toString()}`;
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    if (navigator.onLine === false) window.location.assign(target); else router.push(target);
+    if (navigator.onLine === false && !isNativeDevice()) window.location.assign(target); else router.push(target);
   }
 
   const activeFilter = FILTER_OPTIONS.find((f) => f.value === filter);

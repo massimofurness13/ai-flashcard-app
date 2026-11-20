@@ -1,0 +1,20 @@
+// Isolated simulator account only. Never uses learner data or a real session.
+import {execFileSync} from 'node:child_process';
+import {readFileSync,writeFileSync} from 'node:fs';
+const output=process.argv[2] || '/tmp/huella-responsive-fixture.json';
+execFileSync(process.execPath,[new URL('./make-fixture.mjs',import.meta.url).pathname,output]);
+const f=JSON.parse(readFileSync(output));
+const view=f.records.find(r=>r.key==='query:/api/decks/fixture-deck/view').value;
+const template=view.deck.cards[0];
+const yesterday=new Date(Date.now()-86400000).toISOString();
+view.deck.cards=Array.from({length:1466},(_,i)=>({...template,id:`fixture-card-${i+1}`,front:`Palabra ${i+1}`,back:`Word ${i+1}`,reviews:i<100?[{quality:4,reviewedAt:yesterday}]:[]}));
+view.deck._count.cards=1466;
+const home=f.records.find(r=>r.key==='query:/api/library').value;
+home.unfolderedDecks[0]._count.cards=1466;home.totalCards=1466;home.dailyStudy={...home.dailyStudy,total:120,completed:0};home.cardsReviewedToday=120;home.dailyGoal=120;home.goalHitCelebrationShown=false;
+const media=Buffer.alloc(65536,1).toString('base64');
+for(let i=0;i<200;i++)f.records.push({key:`media:fixture-bulk-${i}`,value:{__huellaBlob:true,type:'audio/wav',data:media}});
+for(let i=0;i<1500;i++)f.records.push({key:`local-review:old-${i}`,value:{eventId:`old-${i}`,cardId:'removed-fixture-card',quality:4,reviewedAt:yesterday}});
+const original=f.script.slice(0,f.script.indexOf('(async()=>{'));
+f.script=original+readFileSync(new URL('./responsiveness.js',import.meta.url),'utf8');
+writeFileSync(output,JSON.stringify(f));
+console.log('Synthetic responsiveness fixture:',1466,'cards,',200,'media files,',1500,'old review events');

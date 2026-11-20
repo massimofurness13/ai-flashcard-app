@@ -1,6 +1,6 @@
 import { fallbackVoiceCodes } from "@/lib/language-codes";
 import { audioKey, deviceOwner, downloadMedia, resolveSavedAudio } from "@/lib/device-media";
-import { readRecord, writeRecord } from "@/lib/device-db";
+import { readRecord, writeRecord, savedMediaUrls } from "@/lib/device-db";
 
 export async function registerMediaServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
@@ -22,10 +22,8 @@ export async function isPackDownloaded(input: DownloadPackInput): Promise<boolea
   try {
     const record = await readRecord<Manifest>(owner, `pack:${input.deckId}`);
     if (!record || record.value.signature !== signature(input)) return false;
-    for (const url of record.value.urls) {
-      if (!(await readRecord<Blob>(owner, `media:${url}`))?.value?.size) return false;
-    }
-    return true;
+    const present = await savedMediaUrls(owner, record.value.urls);
+    return record.value.urls.every(url => present.has(url));
   } catch { return false; }
 }
 export async function downloadPack(input: DownloadPackInput, onProgress?: (progress: DownloadProgress) => void, checkActive: () => Promise<void> = async () => {}): Promise<{ mediaCount: number }> {

@@ -38,6 +38,12 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
   const unacknowledged = new Set((await listRecords(owner,"review:")).map(r=>(r.value as PendingReview).eventId));
   const events = journal.map(r => ({...r.value as PendingReview, savedAt:r.savedAt}));
   const undone = new Set(events.filter(e=>e.operation === "undo").map(e=>e.eventId));
+  // Index once instead of scanning the complete review journal for every card.
+  const eventsByCard = new Map<string, typeof events>();
+  for (const event of events) {
+    const group = eventsByCard.get(event.cardId) ?? [];
+    group.push(event); eventsByCard.set(event.cardId, group);
+  }
   const cards: Array<StudyResumeCard & StudyCandidate> = [];
   for (const id of manifest.deckIds) {
     if (filter !== "daily" && selectedIds?.length && !selectedIds.includes(id)) continue;
@@ -47,7 +53,7 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
     for (const raw of deck.cards) {
       let card = reviveCandidate(raw);
       const known = new Set((raw.reviews ?? []).map(r=>(r as typeof r & {id?:string}).id));
-      const pending = events.filter(e=>e.cardId === card.id && e.operation !== "undo" && !undone.has(e.eventId) && e.quality > 0 && (unacknowledged.has(e.eventId) || e.savedAt >= record.savedAt) && !known.has(e.eventId))
+      const pending = (eventsByCard.get(card.id) ?? []).filter(e=> e.operation !== "undo" && !undone.has(e.eventId) && e.quality > 0 && (unacknowledged.has(e.eventId) || e.savedAt >= record.savedAt) && !known.has(e.eventId))
         .sort((a,b)=>(a.sequence ?? a.savedAt)-(b.sequence ?? b.savedAt));
       for (const review of pending) {
         // Server review IDs are SHA-256(owner:eventId), not the client UUID.

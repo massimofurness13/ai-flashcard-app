@@ -4,6 +4,16 @@ import {Capacitor,CapacitorHttp} from "@capacitor/core";
 import {supportsLocalWrite,saveLocalWrite,cachedApi,projectPending,flushMutations,pendingMutations} from "./offline-api";
 export const API_ORIGIN=process.env.NEXT_PUBLIC_APP_URL || "https://flashmind-35q4.onrender.com";
 const originalFetch=globalThis.fetch.bind(globalThis);
+/** Let the screen leave a slow native request at its deadline, even if iOS is still finishing it. */
+export function withAbort<T>(task: Promise<T>, signal?: AbortSignal | null): Promise<T> {
+ if(!signal)return task;
+ return new Promise((resolve,reject)=>{
+  const abort=()=>reject(new DOMException("Cancelled","AbortError"));
+  if(signal.aborted)abort();else signal.addEventListener("abort",abort,{once:true});
+  task.then(resolve,reject).finally(()=>signal.removeEventListener("abort",abort));
+ });
+}
+
 export async function nativeFetch(input:RequestInfo|URL,init?:RequestInit):Promise<Response>{
  if(!Capacitor.isNativePlatform())return originalFetch(input,init);
  const request=new Request(input,init);
@@ -18,7 +28,7 @@ export async function nativeFetch(input:RequestInfo|URL,init?:RequestInit):Promi
   for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
   data=btoa(binary);
  }
- const result=await CapacitorHttp.request({url:url.href,method:request.method,headers,data,dataType:"file",responseType:"arraybuffer",connectTimeout:15000,readTimeout:url.pathname==="/api/generate"?180000:30000,disableRedirects:true});
+ const result=await withAbort(CapacitorHttp.request({url:url.href,method:request.method,headers,data,dataType:"file",responseType:"arraybuffer",connectTimeout:15000,readTimeout:url.pathname==="/api/generate"?180000:30000,disableRedirects:true}),request.signal);
  if(request.signal.aborted)throw new DOMException("Cancelled","AbortError");
  const responseHeaders=new Headers(result.headers);
  const body=responseHeaders.get("content-type")?.includes("application/json")?JSON.stringify(result.data):Uint8Array.from(atob(result.data||""),c=>c.charCodeAt(0));
@@ -28,7 +38,7 @@ export function installApiTransport(token:()=>Promise<{accessToken:string;userId
  async function remote(path:string,options?:RequestInit){
   const headers=new Headers(options?.headers);
   const expected=readDeviceIdentity(localStorage)?.id;
-  const session=await token();
+  const session=await withAbort(token(),options?.signal);
   if(!session||!expected||session.userId!==expected||readDeviceIdentity(localStorage)?.id!==expected)return Response.json({error:"Sign in to sync your account. Your saved data is still available."},{status:401});
   headers.set("Authorization",`Bearer ${session.accessToken}`);
   return nativeFetch(API_ORIGIN+path,{...options,headers});

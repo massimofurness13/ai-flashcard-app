@@ -14,6 +14,15 @@ import Foundation
   let reopened=try NativeDatabase(directory:path)
   let media=try reopened.read(owner:"a",key:"media:1")!["value"] as! [String:Any]
   assert(media["data"] as! String=="AQID")
+  let metadata=try reopened.read(owner:"a",key:"media:1",metadataOnly:true)!["value"] as! [String:Any]
+  assert(metadata["size"] as! Int == 3)
+  assert(metadata["data"] == nil) // Availability never serializes audio/image bytes.
+  let otherMetadata=try reopened.read(owner:"b",key:"media:1",metadataOnly:true)
+  assert(otherMetadata == nil)
+  let mediaDirectory=path.appendingPathComponent("media")
+  for file in try FileManager.default.contentsOfDirectory(at:mediaDirectory,includingPropertiesForKeys:nil) {try FileManager.default.removeItem(at:file)}
+  let missing=try reopened.read(owner:"a",key:"media:1",metadataOnly:true)!["value"] as! [String:Any]
+  assert(missing["size"] as! Int == 0) // Do not trust a stale record when its file is missing.
   let reviews=try reopened.list(owner:"a",prefix:"review:");assert(reviews.count==1)
   try reopened.remove(owner:"b",key:"review:1")
   let original=try reopened.read(owner:"a",key:"review:1");assert(original != nil)

@@ -18,3 +18,11 @@ Huella iOS build 4 bundles the interface built by `npm run ios:build:web`. `capa
 Use the dedicated **Huella Offline QA** simulator, never the learner's device/data. `scripts/native-tests/make-fixture.mjs` writes a synthetic fixture. A Debug-only `HUELLA_OFFLINE_FIXTURE` launch environment seeds that account; Release builds do not contain the hook. `--migration` exercises the old-origin export/import instead of seeding SQLite directly.
 
 `exercise.js` disables fetch and reports proof into `qa:result` and `qa:restart` in the fixture database: launch, actual local WAV playback and PNG decoding, card editing, rating/checkpoint, navigation, and survival across full termination/relaunch. NativeDatabase's standalone Swift test covers rollback and account isolation. Vitest covers authentication, mutation receipts, conflicts, queue ordering, local results and scheduling.
+
+## Build 6 responsiveness
+
+Home keeps the daily action, streak, library and sorting; routine sync status is on Account → Downloads and Archived packs sits beneath the library. Bulk library sync pauses during a study session. Reviews still use the durable outbox, and session loading never waits for the outbox to drain. Native offline navigation remains within the bundled app.
+
+Media availability uses batched file metadata checks, with account isolation and missing-file detection, instead of reading/base64-encoding every saved file. Native request and token-refresh waits honour the caller’s abort deadline (the underlying iOS request may finish separately). Goal celebration dismissal is immediate even when its acknowledgement is slow.
+
+`make-responsiveness-fixture.mjs` plus `responsiveness.js` exercise a synthetic 1,466-card library, 1,500 historical journal entries, repeated native checks of 200 saved files, navigation, the daily120/50retention allocation and a never-resolving goal acknowledgement. Use the separate `app.huella.responsivenessqa` simulator bundle; never seed a real account. Timings include the normal three-second countdown.

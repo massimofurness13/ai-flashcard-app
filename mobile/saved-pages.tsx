@@ -33,6 +33,6 @@ export function SyncState(){
   void refresh();const events=["huella:edits","huella:edits-synced","huella:outbox"];for(const e of events)window.addEventListener(e,refresh);
   return()=>{active=false;for(const e of events)window.removeEventListener(e,refresh);};
  },[user]);
- if(!user||path.startsWith("/study/session"))return null;
+ if(!user||path==="/"||path.startsWith("/study/session"))return null;
  return <div role="status" className="px-4 pt-2 text-xs text-center text-muted-foreground">{state.pending>0&&<span>Saved on this iPhone · {state.pending} change{state.pending===1?"":"s"} waiting to sync. </span>}{source==="local"&&navigator.onLine&&<Link href="/auth/login" className="underline">Sign in to reconnect your saved account</Link>}{state.errors.length>0&&<p className="text-destructive">{state.errors[0]}</p>}</div>;
 }

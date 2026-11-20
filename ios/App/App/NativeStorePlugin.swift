@@ -7,7 +7,7 @@ import WebKit
 final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
     let identifier = "NativeStorePlugin"
     let jsName = "NativeStore"
-    let pluginMethods: [CAPPluginMethod] = ["read","list","write","remove","secretGet","secretSet","migrateLegacy","summary"].map { CAPPluginMethod(name:$0, returnType:CAPPluginReturnPromise) }
+    let pluginMethods: [CAPPluginMethod] = ["read","mediaStatus","list","write","remove","secretGet","secretSet","migrateLegacy","summary"].map { CAPPluginMethod(name:$0, returnType:CAPPluginReturnPromise) }
     private var migration: LegacyMigration?
     @objc func migrateLegacy(_ call:CAPPluginCall) {
         DispatchQueue.main.async { [self] in
@@ -69,6 +69,19 @@ final class NativeStorePlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func read(_ call: CAPPluginCall) {
         guard let owner=call.getString("owner"), let key=call.getString("key") else {call.reject("Missing record address");return}
         perform(call) {db in if let record=try db.read(owner:owner,key:key) {return ["record":record]};return [:]}
+    }
+    // Availability checks never load/base64-encode the media file into the WebView.
+    @objc func mediaStatus(_ call: CAPPluginCall) {
+        guard let owner=call.getString("owner"), let keys=call.getArray("keys",String.self),
+              keys.count <= 2000, keys.allSatisfy({$0.hasPrefix("media:")}) else {call.reject("Invalid media keys");return}
+        perform(call) { db in
+            var present: [String] = []
+            for key in keys {
+                if let record=try db.read(owner:owner,key:key,metadataOnly:true),
+                   let value=record["value"] as? [String:Any], (value["size"] as? Int ?? 0)>0 {present.append(key)}
+            }
+            return ["keys":present]
+        }
     }
     @objc func list(_ call: CAPPluginCall) {
         guard let owner=call.getString("owner") else {call.reject("Missing account");return}

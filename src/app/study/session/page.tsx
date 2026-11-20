@@ -1,4 +1,5 @@
 "use client";
+import { isNativeDevice } from "@/lib/native-device";
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, Suspense } from "react";
@@ -40,7 +41,7 @@ function StudySessionContent() {
   const router = useRouter();
   const navigate = (path: string) => {
     // Offline navigation needs the cached document, not a server RSC response.
-    if (navigator.onLine === false) window.location.assign(path);
+    if (navigator.onLine === false && !isNativeDevice()) window.location.assign(path);
     else router.push(path);
   };
   // Resume snapshot, captured once on mount (declared first so the
@@ -146,7 +147,9 @@ function StudySessionContent() {
       }
       if (navigator.onLine === false) throw new Error("This device hasn’t saved your library yet. Connect once to sync it.");
       try {
-        if (filter === "daily") await flushReviews(owner);
+        // Uploads have their own durable queue. A slow/offline upload must never
+        // hold the card-loading screen hostage; saved sessions were preferred above.
+        if (filter === "daily") void flushReviews(owner);
         const response = await fetch(`/api/review?${params}`, {signal: AbortSignal.timeout(8000)});
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) throw new Error("Sign in again to continue.");
@@ -176,8 +179,9 @@ function StudySessionContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <p className="text-muted-foreground">Loading cards...</p>
+      <div className="flex flex-col items-center justify-center gap-4 py-16">
+        <p role="status" className="text-muted-foreground">Opening your cards…</p>
+        <Button variant="ghost" onClick={() => navigate("/")}>Back home</Button>
       </div>
     );
   }
