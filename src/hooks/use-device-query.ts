@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { projectLocalProgress } from "@/lib/local-progress";
 import { useDeviceAccount } from "@/components/layout/device-provider";
 import { readRecord, writeRecord, listRecords, type DeviceRecord } from "@/lib/device-db";
+import {deviceQueryError,QueryRefreshError} from "@/lib/device-query-error";
 
 const memory = new Map<string, DeviceRecord<unknown>>();
 const requests = new Map<string, Promise<unknown>>();
@@ -10,7 +11,7 @@ export function invalidateDeviceQueries() {
   window.dispatchEvent(new Event("huella:data-changed"));
 }
 export function useDeviceQuery<T>(url: string, enabled = true) {
-  const { user, ready } = useDeviceAccount();
+  const { user, ready, source } = useDeviceAccount();
   const owner = user?.id;
   const key = `${owner}:${url}`;
   const [result, setResult] = useState<{ key: string; data?: T; savedAt?: number; error?: string }>({ key });
@@ -39,7 +40,7 @@ export function useDeviceQuery<T>(url: string, enabled = true) {
         let pending = requests.get(key) as Promise<T> | undefined;
         if (!pending) {
           pending = fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15000) }).then(async response => {
-            if (!response.ok) throw new Error(response.status === 401 ? "Sign in again to sync." : "Couldn’t refresh. Showing saved data when available.");
+            if (!response.ok) throw new QueryRefreshError(response.status === 401 ? "Showing saved data. Reconnect in Account to sync updates." : "Couldn’t refresh. Showing saved data when available.");
             return response.json() as Promise<T>;
           }).finally(() => requests.delete(key));
           requests.set(key, pending);
@@ -53,7 +54,7 @@ export function useDeviceQuery<T>(url: string, enabled = true) {
         if(active)setResult({ key, data:projected, savedAt: record.savedAt });
         await writeRecord(owner!, record.key, data).catch(() => {});
       } catch (error) {
-        if (active) setResult(previous => ({ ...(previous.key === key ? previous : { key }), error: error instanceof Error ? error.message : "Waiting for connection." }));
+        if (active) setResult(previous => ({ ...(previous.key === key ? previous : { key }), error: deviceQueryError(error) }));
       }
     }
     const saved = async (event: Event) => {
@@ -78,7 +79,7 @@ export function useDeviceQuery<T>(url: string, enabled = true) {
       window.removeEventListener("huella:data-changed", update);
       document.removeEventListener("visibilitychange", visible);
     };
-  }, [owner, url, enabled, key, revision]);
+  }, [owner, url, enabled, key, revision, source]);
   const current = result.key === key ? result : { key };
   const cached = memory.get(key) as DeviceRecord<T> | undefined;
   return { data: enabled && owner ? current.data ?? cached?.value : undefined, error: current.error, savedAt: current.savedAt ?? cached?.savedAt, ready, refresh };
