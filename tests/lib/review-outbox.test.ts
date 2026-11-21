@@ -84,3 +84,16 @@ describe("offline undo ordering",()=>{
   expect(sent).toHaveBeenCalledTimes(2);expect(await listRecords(owner,"review:")).toHaveLength(2);
  });
 });
+
+
+it("refreshes remote pages once after an entire offline upload, not once per card", async () => {
+  await queueReview("first", 4, "front"); await flushReviews(owner);
+  await queueReview("second", 2, "back"); await flushReviews(owner);
+  vi.mocked(window.dispatchEvent).mockClear();
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok:true,json:async()=>({recorded:true})}));
+  await flushReviews(owner);
+  expect(await listRecords(owner,"review:")).toHaveLength(0);
+  const events=vi.mocked(window.dispatchEvent).mock.calls.map(([event])=>event.type);
+  expect(events.filter(type=>type==="huella:data-changed")).toHaveLength(1);
+  expect(events.filter(type=>type==="huella:outbox").length).toBeGreaterThanOrEqual(2);
+});

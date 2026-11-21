@@ -106,3 +106,25 @@ If credentials really are absent/revoked, cloud access remains blocked and a
 single normal sign-in is offered on Settings while local work remains available.
 Regression tests cover offline/online SDK events, reopening, automatic recovery,
 pending review preservation, stale refresh responses and cross-tab logout.
+
+### Build 11 — statistics refresh and upload pressure
+
+The live read-only audit on 21 November reached 120 distinct rated cards matching
+all 120 picks; the gate verified completion at 14:25:37.354 UTC. The earlier 83
+was a partial upload (exactly the first 83 picks), not missing study evidence or
+a changed daily target. No learner record or completion flag was edited.
+
+A local route reproduction using 5,464 actual review timestamps/qualities reached
+593 MB process RSS and 761 ms. Reusing bounded Intl date formatters and reading
+history once instead of four overlapping queries returned the same totals at
+84 MB and 92 ms in a fresh process. These are local measurements, not claimed
+Render production telemetry. Regression coverage uses synthetic 6,000-review
+history and verifies one history read and bounded formatter allocation.
+
+Query deadlines now cover storage, authentication and projection as well as
+fetch. Offline missing-cache screens provide an explicit state and retry. A
+period change keeps the previous chart (and its correct period label) visible
+until the new data arrives; controls remain available even without initial data.
+Review uploads invalidate remote pages once per batch, while local progress
+continues updating per acknowledgement. Pending status is simply “Syncing · N
+pending” or “Offline · N pending”. No ratings, account IDs or queued work change.

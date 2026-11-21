@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { withQueryDeadline } from "@/lib/query-deadline";
 import { projectLocalProgress } from "@/lib/local-progress";
 import { useDeviceAccount } from "@/components/layout/device-provider";
 import { readRecord, writeRecord, listRecords, type DeviceRecord } from "@/lib/device-db";
@@ -30,32 +31,42 @@ export function useDeviceQuery<T>(url: string, enabled = true) {
         if(active&&!networkDone)setResult(previous => ({ ...previous, key, data, savedAt: record.savedAt }));
       }
     }).catch(() => {});
+    let updating = false;
     async function update() {
-      if (navigator.onLine === false) return;
+      if (updating) return;
+      if (navigator.onLine === false) {
+        if (active) setResult(previous => ({ ...(previous.key === key ? previous : { key }), error: "Offline. Connect to refresh." }));
+        return;
+      }
+      updating = true;
       try {
+      await withQueryDeadline(async signal => {
       // Keep the server baseline stable while local reviews are unacknowledged.
       // Otherwise a fresh timestamp would hide those locally saved ratings.
       if ((url === "/api/library" || url.startsWith("/api/stats")) &&
           (await listRecords(owner!, "review:")).length && await readRecord(owner!,`query:${url}`)) return;
         let pending = requests.get(key) as Promise<T> | undefined;
         if (!pending) {
-          pending = fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15000) }).then(async response => {
+          pending = fetch(url, { cache: "no-store", signal }).then(async response => {
             if (!response.ok) throw new QueryRefreshError(response.status === 401 ? "Showing saved data. Reconnect in Account to sync updates." : "Couldn’t refresh. Showing saved data when available.");
             return response.json() as Promise<T>;
           }).finally(() => requests.delete(key));
           requests.set(key, pending);
         }
         const data = await pending;
+        if (signal.aborted) return;
         networkDone = true;
         if (!active) return;
         const record = { owner: owner!, key: `query:${url}`, value: data, savedAt: Date.now() };
         memory.set(key, record);
         const projected = await projectLocalProgress(owner!,url,data,record.savedAt);
+        if (signal.aborted) return;
         if(active)setResult({ key, data:projected, savedAt: record.savedAt });
         await writeRecord(owner!, record.key, data).catch(() => {});
+      });
       } catch (error) {
         if (active) setResult(previous => ({ ...(previous.key === key ? previous : { key }), error: deviceQueryError(error) }));
-      }
+      } finally { updating = false; }
     }
     const saved = async (event: Event) => {
       const detail = (event as CustomEvent<{owner:string;url:string}>).detail;

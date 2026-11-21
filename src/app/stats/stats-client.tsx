@@ -10,6 +10,7 @@ import { TodayRing } from "@/components/stats/today-ring";
 import { StreakHero } from "@/components/stats/streak-hero";
 import type { LetterGrade } from "@/lib/sm2";
 import { useDeviceQuery } from "@/hooks/use-device-query";
+import { useDeviceAccount } from "@/components/layout/device-provider";
 import { SavedDataState } from "@/components/layout/saved-data-state";
 
 interface DeckStat {
@@ -67,7 +68,33 @@ export function StatsClient() {
   });
 
   const saved = useDeviceQuery<Stats>(`/api/stats?period=${period}`, !demo);
-  const stats = demo ? demoStats : saved.data;
+  const { user } = useDeviceAccount();
+  const [previous, setPrevious] = useState<{ owner: string; period: number; data: Stats } | null>(null);
+  const fallback = previous?.owner === user?.id ? previous : null;
+  const stats = demo ? demoStats : saved.data ?? fallback?.data;
+  const displayedPeriod = demo || saved.data ? period : fallback?.period ?? period;
+
+  const periodControls = (
+        <div className="flex gap-1">
+          {[
+            { label: "7 days", value: 7 },
+            { label: "30 days", value: 30 },
+            { label: "365 days", value: 365 },
+          ].map((opt) => (
+            <Button
+              key={opt.value}
+              variant={displayedPeriod === opt.value ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (stats && user) setPrevious({ owner: user.id, period: displayedPeriod, data: stats });
+                setPeriod(opt.value);
+              }}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
+  );
 
   useEffect(() => {
     if (!demo) return;
@@ -84,6 +111,7 @@ export function StatsClient() {
         <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
           Statistics
         </h1>
+        {periodControls}
         <SavedDataState error={saved.error} retry={saved.refresh} />
       </div>
     );
@@ -101,28 +129,14 @@ export function StatsClient() {
 
   return (
     <div className="space-y-3">
-      {saved.error && !demo && <p role="status" className="text-xs text-muted-foreground">{saved.error}</p>}
+      {!demo && saved.error && <p role="status" className="text-xs text-muted-foreground">{saved.error} <button className="underline" onClick={saved.refresh}>Try again</button></p>}
+      {!demo && !saved.error && displayedPeriod !== period && <p role="status" className="text-xs text-muted-foreground">Updating…</p>}
       {/* ── Header + period filter ─────────────────────────────── */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <h1 className="font-editorial text-3xl font-medium sm:text-4xl">
           Statistics
         </h1>
-        <div className="flex gap-1">
-          {[
-            { label: "7 days", value: 7 },
-            { label: "30 days", value: 30 },
-            { label: "365 days", value: 365 },
-          ].map((opt) => (
-            <Button
-              key={opt.value}
-              variant={period === opt.value ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPeriod(opt.value)}
-            >
-              {opt.label}
-            </Button>
-          ))}
-        </div>
+        {periodControls}
       </div>
 
       {/* ── Hero row: streak + today ring ──────────────────────── */}
@@ -175,7 +189,7 @@ export function StatsClient() {
           tone={stats.cardsDueToday > 0 ? "primary" : "default"}
         />
         <MetricTile
-          label={`Reviews · ${period}d`}
+          label={`Reviews · ${displayedPeriod}d`}
           value={stats.cardsReviewedInPeriod}
           hint={`${stats.totalCards.toLocaleString()} total cards`}
         />
@@ -193,7 +207,7 @@ export function StatsClient() {
         <div className="rounded-2xl border border-border bg-card p-5">
           <div className="flex items-baseline justify-between mb-3">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Recent activity · {period} days
+              Recent activity · {displayedPeriod} days
             </p>
             <p className="text-[10px] text-muted-foreground/70">
               {stats.cardsReviewedInPeriod.toLocaleString()} reviews
