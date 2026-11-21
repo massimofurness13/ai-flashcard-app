@@ -10,6 +10,7 @@ import { GET } from "@/app/api/stats/route";
 let reviews: { reviewedAt: Date; quality: number }[];
 const get = (query = "period=7") => GET(new NextRequest(`https://huella.test/api/stats?${query}`));
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-06T18:00:00Z"));
   reviews = ["2026-09-29T12:00:00Z", "2026-09-30T12:00:00Z", "2026-10-05T12:00:00Z"].map(date => ({ reviewedAt: new Date(date), quality: 4 }));
   mock.user.mockResolvedValue({ reminderTimezone: "America/El_Salvador", dailyGoal: 100 });
@@ -43,6 +44,18 @@ describe("statistics calendar boundaries", () => {
     expect(result.calendarMonth).toHaveLength(31);
     expect(result.calendarMonth[0].date).toBe("2026-10-01");
     expect(result.calendarMonth.at(-1).date).toBe("2026-10-31");
+  });
+  it("handles a large review history without allocating a formatter per review or re-querying history", async () => {
+    reviews = Array.from({length: 6000}, (_, i) => ({reviewedAt: new Date(Date.parse("2026-10-06T12:00:00Z") - i * 3600000), quality: 4}));
+    const formatter = vi.spyOn(Intl, "DateTimeFormat");
+    try {
+      const result = await (await get()).json();
+      expect(result.totalReviews).toBe(6000);
+      expect(result.successRate).toBe(100);
+      expect(result.cardsReviewedToday).toBe(7);
+      expect(mock.reviews).toHaveBeenCalledTimes(1);
+      expect(formatter.mock.calls.length).toBeLessThan(10);
+    } finally { formatter.mockRestore(); }
   });
   it.each(["period=0", "period=366", "period=NaN", "period=-1", "period=7.5", "period=7&tz=invalid"])("rejects invalid calendar query %s", async query => {
     expect((await get(query)).status).toBe(400);

@@ -17,13 +17,19 @@
  * Uses en-CA because that locale already formats as YYYY-MM-DD,
  * which is what we want for sortable date keys.
  */
+// Intl formatters retain substantial native memory. Reuse a bounded set rather
+// than allocating one for every review in statistics and offline projections.
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
 export function toLocalDateKey(date: Date, tz: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+  let formatter = dayFormatters.get(tz);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    });
+    if (dayFormatters.size >= 32) dayFormatters.delete(dayFormatters.keys().next().value!);
+    dayFormatters.set(tz, formatter);
+  }
+  return formatter.format(date);
 }
 
 /**

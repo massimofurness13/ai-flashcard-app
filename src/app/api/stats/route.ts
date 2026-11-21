@@ -118,10 +118,7 @@ export async function GET(request: NextRequest) {
   const [
     totalCards,
     cardsDueToday,
-    reviewsInPeriod,
     allDecks,
-    dailyReviews,
-    yearlyReviews,
     // Lifetime review logs — two tiny fields per row, used for Active Days,
     // Best Day, Success Rate, Total Reviews. 20k rows at ~20 bytes = tolerable.
     lifetimeReviews,
@@ -133,13 +130,6 @@ export async function GET(request: NextRequest) {
     prisma.card.count({
       where: { deck: { userId: auth.userId, archivedAt: null }, ...directionalDueWhere(now) },
     }),
-    prisma.reviewLog.findMany({
-      where: {
-        reviewedAt: { gte: since },
-        card: { deck: { userId: auth.userId } },
-      },
-      select: { quality: true, reviewedAt: true },
-    }),
     prisma.deck.findMany({
       where: { userId: auth.userId, archivedAt: null },
       include: {
@@ -150,22 +140,6 @@ export async function GET(request: NextRequest) {
       },
     }),
     prisma.reviewLog.findMany({
-      where: {
-        reviewedAt: { gte: since },
-        card: { deck: { userId: auth.userId } },
-      },
-      select: { reviewedAt: true },
-      orderBy: { reviewedAt: "asc" },
-    }),
-    // 365-day window for the heatmap
-    prisma.reviewLog.findMany({
-      where: {
-        reviewedAt: { gte: yearAgo },
-        card: { deck: { userId: auth.userId } },
-      },
-      select: { reviewedAt: true },
-    }),
-    prisma.reviewLog.findMany({
       where: { card: { deck: { userId: auth.userId } } },
       select: { reviewedAt: true, quality: true },
     }),
@@ -174,6 +148,11 @@ export async function GET(request: NextRequest) {
       select: { dailyGoal: true, goalHitCelebrationShown: true },
     }),
   ]);
+
+  // Fetch history once; the period and year views share the same rows.
+  const reviewsInPeriod = lifetimeReviews.filter(r => r.reviewedAt >= since);
+  const dailyReviews = reviewsInPeriod;
+  const yearlyReviews = lifetimeReviews.filter(r => r.reviewedAt >= yearAgo);
 
   // Calculate average quality
   const avgQuality =

@@ -38,6 +38,7 @@ export async function flushReviews(owner: string): Promise<void> {
   const existing = flushing.get(owner);
   if (existing) return existing;
   const task = (async () => {
+    let acknowledged = false;
     try {
       await flushLocalPlans(owner);
       while (await deviceOwner() === owner) {
@@ -63,11 +64,16 @@ export async function flushReviews(owner: string): Promise<void> {
         const acknowledgement = await response.json();
         if (acknowledgement?.recorded !== true) break;
         await deleteRecord(owner, item.key);
+        acknowledged = true;
         notify();
-        window.dispatchEvent(new Event("huella:data-changed"));
       }
     } catch { /* Keep every unacknowledged event for a later retry. */ }
-    finally { notify(); }
+    finally {
+      notify();
+      // Refresh remote pages once after the batch, not once per uploaded card.
+      // The outbox event already updates local progress during the upload.
+      if (acknowledged) window.dispatchEvent(new Event("huella:data-changed"));
+    }
   })().finally(() => flushing.delete(owner));
   flushing.set(owner, task);
   return task;
