@@ -71,3 +71,29 @@ advancing; retry played the English recording and normal advancement resumed.
 The reusable simulator exercise is `scripts/native-tests/audio-playback.js`.
 Only the synthetic fixture account was reviewed. These tests verify the repaired
 failure paths; they do not establish which path occurred on the user's phone.
+
+### Build 10 — production configuration and incomplete history
+
+Archive inspection found builds 4–9 had bundled `placeholder.supabase.co` from
+local web-development settings. This prevented native authentication, token
+refresh and uploads while saved library pages still worked. Native builds now
+read the ignored `.env.native.local` public configuration and validate the exact
+production project, callback origin, and non-expired public anon-key claims.
+Service-role keys and placeholders are rejected. Vite writes a manifest of
+final JavaScript hashes; an Xcode build phase verifies the actual copied bundle
+before compiling/signing. The public URL/key were recovered from the live site's
+public JavaScript, and `/auth/v1/settings` confirmed the key and enabled Google
+provider. No account credential or service-role key is bundled.
+
+An isolated signed simulator clicked the actual bundled Google button and
+verified its production authorization URL, PKCE challenge and callback before
+stopping the interactive handoff. The real iOS HTTP bridge then reached the
+production auth settings successfully. This checks the release configuration,
+not merely a mock transport. It does not sign in as a learner or upload reviews.
+
+Older cached pack documents lacking review arrays are unknown-history records,
+not new vocabulary. A new daily/due/practice selection refreshes those records
+when connected or asks for the one-time history refresh when offline. Existing
+sets, pending ratings and edits remain intact. New local result snapshots carry
+verified history; uncertain old local promotion summaries wait for server
+reconciliation. Secure recall snapshots are included in the before/after count.

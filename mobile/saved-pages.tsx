@@ -33,6 +33,6 @@ export function SyncState(){
   void refresh();const events=["huella:edits","huella:edits-synced","huella:outbox"];for(const e of events)window.addEventListener(e,refresh);
   return()=>{active=false;for(const e of events)window.removeEventListener(e,refresh);};
  },[user]);
- if(!user||path==="/"||path.startsWith("/study/session"))return null;
- return <div role="status" className="px-4 pt-2 text-xs text-center text-muted-foreground">{state.pending>0&&<span>Saved on this iPhone · {state.pending} change{state.pending===1?"":"s"} waiting to sync. </span>}{reconnectRequired&&path.startsWith("/account")&&navigator.onLine&&<Link href="/auth/login" className="underline">Reconnect to sync. Your saved data is still available.</Link>}{state.errors.length>0&&<Link href="/account/downloads" className="underline">Some changes haven’t synced yet. View sync status.</Link>}</div>;
+ if(!user||path==="/"||path.startsWith("/study/session")||path.startsWith("/auth/"))return null;
+ return <div role="status" className="px-4 pt-2 text-xs text-center text-muted-foreground">{state.pending>0&&<span>Saved on this iPhone · {state.pending} change{state.pending===1?"":"s"} waiting to sync. </span>}{reconnectRequired&&path.startsWith("/account")&&navigator.onLine&&<Link href="/auth/login" className="underline">Sign in to sync your saved changes.</Link>}{state.errors.length>0&&<Link href="/account/downloads" className="underline">Some changes haven’t synced yet. View sync status.</Link>}</div>;
 }

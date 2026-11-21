@@ -17,20 +17,22 @@ export interface DailyResults {
  * Each card contributes once, even when a sync/retry supplies several logs. */
 export function dailyResults(
   picks: DailyPick[],
-  before: { id: string; reviews: Grade[] }[],
+  before: { id: string; reviews: Grade[]; recallStates?: {lastQuality:number;lastReviewedAt:Date}[] }[],
   logs: ResultLog[],
 ): DailyResults {
   const ordered = logs.slice().sort((a,b) => b.reviewedAt.getTime()-a.reviewedAt.getTime() || a.quality-b.quality);
   const progress = dailyProgress(picks, ordered);
   const unreviewed = new Set(progress.remaining.map(p => p.id));
-  const byId = new Map(before.map(c => [c.id, c.reviews]));
+  const byId = new Map(before.map(c => [c.id, c]));
   const result: DailyResults = { completed: progress.completed, total: progress.total, promoted: 0, returnedToLearning: 0, retentionSecure: 0, retentionReviewed: 0 };
   for (const pick of picks) {
     if (unreviewed.has(pick.id)) continue;
-    const prior = byId.get(pick.id) ?? [];
+    const baseline = byId.get(pick.id);
+    const recallStates = baseline?.recallStates ?? [];
+    const prior = baseline?.reviews.length ? baseline.reviews : recallStates.map(r=>({quality:r.lastQuality,reviewedAt:r.lastReviewedAt}));
     const attempts = ordered.filter(l => l.cardId === pick.id && l.quality > 0);
-    const wasRetained = isRetentionCard({ reviews: prior, recallStates: [] });
-    const nowRetained = isRetentionCard({ reviews: [...attempts, ...prior], recallStates: [] });
+    const wasRetained = isRetentionCard({ reviews: prior, recallStates });
+    const nowRetained = isRetentionCard({ reviews: [...attempts, ...prior], recallStates });
     if (!wasRetained && nowRetained) result.promoted++;
     if (wasRetained && !nowRetained) result.returnedToLearning++;
     if (wasRetained) {
