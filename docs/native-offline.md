@@ -97,3 +97,12 @@ when connected or asks for the one-time history refresh when offline. Existing
 sets, pending ratings and edits remain intact. New local result snapshots carry
 verified history; uncertain old local promotion summaries wait for server
 reconciliation. Secure recall snapshots are included in the before/after count.
+
+SDK credential-loss events no longer clear the saved local account selection or
+interrupt study. Only explicit app sign-out (including after account deletion)
+sets the sign-out fence and hides that account. Offline errors retain the account
+without requesting login; valid session restoration resumes sync automatically.
+If credentials really are absent/revoked, cloud access remains blocked and a
+single normal sign-in is offered on Settings while local work remains available.
+Regression tests cover offline/online SDK events, reopening, automatic recovery,
+pending review preservation, stale refresh responses and cross-tab logout.

@@ -160,9 +160,10 @@ describe("saved device identity (not server authentication)", () => {
     expect(readDeviceIdentity(f.storage)?.id).toBe("alice");
     expect(f.resume()).toBe("alice-private-cards");
   });
-  it("clears explicit SIGNED_OUT even offline, without touching any account data", () => {
+  it("clears explicit app sign-out even offline, without touching any account data", () => {
     const f = fixture();
     f.records.set("account:alice:reviews", "pending-review");
+    f.observer.signOut();
     f.emit("SIGNED_OUT", null);
     f.emit("INITIAL_SESSION", null);
     expect(f.current().user).toBeNull();
@@ -188,6 +189,7 @@ describe("saved device identity (not server authentication)", () => {
   it.each(["SIGNED_OUT", "SIGNED_IN"] as const)("ignores stale getSession after %s", async event => {
     let resolve!: (value: ReturnType<typeof result>) => void;
     const f = fixture({ online: true, pending: new Promise(done => { resolve = done; }) });
+    if (event === "SIGNED_OUT") f.observer.signOut();
     f.emit(event, event === "SIGNED_IN" ? "bob" : null);
     resolve(result("alice"));
     await tick();
@@ -237,6 +239,7 @@ describe("saved device identity (not server authentication)", () => {
   it("still clears in-memory identity when storage access is denied", () => {
     const f = fixture();
     f.storage.removeItem.mockImplementation(() => { throw new Error("denied"); });
+    f.observer.signOut();
     f.emit("SIGNED_OUT", null);
     expect(f.current().user).toBeNull();
     expect(f.resume()).toBeNull();
@@ -261,4 +264,44 @@ describe('reconnect signalling',()=>{
  it('asks for reconnection only after a successful session read confirms absence',async()=>{
   const f=fixture({online:true});await f.observer.refresh();expect(f.current().reconnectRequired).toBe(true);f.emit('SIGNED_IN','alice');expect(f.current().reconnectRequired).toBeUndefined();f.observer.dispose();
  });
+});
+
+
+describe("credential loss does not discard the offline account", () => {
+  it.each([false, true])("retains library, resume and pending reviews on SDK SIGNED_OUT (online=%s)", async online => {
+    const f = fixture({ online, pending: new Promise(() => {}) });
+    f.records.set("account:alice:reviews", "pending-review");
+    f.emit("SIGNED_OUT", null);
+    expect(f.current()).toMatchObject({ user: { id: "alice" }, source: "local" });
+    expect(f.current().reconnectRequired).toBe(online ? true : undefined);
+    expect(f.resume()).toBe("alice-private-cards");
+    expect(f.records.get("account:alice:reviews")).toBe("pending-review");
+    expect(readDeviceIdentity(f.storage)?.id).toBe("alice");
+    expect(f.boundary).not.toHaveBeenCalled();
+    f.observer.dispose();
+    const reopened = fixture({ saved: null, records: f.records });
+    expect(reopened.current().user?.id).toBe("alice");
+    reopened.network.online = true;
+    reopened.getSession.mockResolvedValue(result("alice"));
+    await reopened.observer.refresh();
+    expect(reopened.current()).toMatchObject({ user: { id: "alice" }, source: "session" });
+    expect(reopened.current().reconnectRequired).toBeUndefined();
+    expect(reopened.records.get("account:alice:reviews")).toBe("pending-review");
+    reopened.observer.dispose();
+  });
+  it("ignores a stale session response after an SDK sign-out without losing local identity", async () => {
+    let resolve!: (value: ReturnType<typeof result>) => void;
+    const f = fixture({ online: true, pending: new Promise(done => { resolve = done; }) });
+    f.emit("SIGNED_OUT", null);
+    resolve(result("alice"));
+    await tick();
+    expect(f.current()).toMatchObject({ user: { id: "alice" }, source: "local", reconnectRequired: true });
+  });
+  it("respects another tab's explicit logout fence on SDK sign-out", () => {
+    const f = fixture();
+    f.records.set(DEVICE_SIGN_OUT_KEY, JSON.stringify({ at: Date.now() }));
+    f.emit("SIGNED_OUT", null);
+    expect(f.current().user).toBeNull();
+    expect(f.resume()).toBeNull();
+  });
 });
