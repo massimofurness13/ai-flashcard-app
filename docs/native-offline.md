@@ -128,3 +128,8 @@ until the new data arrives; controls remain available even without initial data.
 Review uploads invalidate remote pages once per batch, while local progress
 continues updating per acknowledgement. Pending status is simply “Syncing · N
 pending” or “Offline · N pending”. No ratings, account IDs or queued work change.
+
+The signed, isolated iOS simulator passed the actual UI exercise: an empty-cache
+seven-day request hit its deadline and exposed retry; a cached 30-day chart
+opened; switching back to seven days preserved the chart during a failed refresh;
+and retry loaded seven days successfully. Only synthetic records were used.

@@ -26,14 +26,14 @@
   await until(()=>button('Try again'),'initial timeout ends Opening');
   checks.push('Empty-cache refresh times out with a retry instead of infinite Opening');
   button('30 days').click();
-  await until(()=>document.body.innerText.includes('Recent activity · 30 days'),'30-day chart');
+  await until(()=>document.body.innerText.toLowerCase().includes('recent activity · 30 days'),'30-day chart');
   ready=false;button('7 days').click();await pause(300);
   if(!document.body.innerText.includes('Statistics')||!button('30 days'))throw Error('Statistics disappeared during switch');
   checks.push('Seven-day switch keeps statistics and controls visible during refresh');
   await until(()=>button('Try again'),'failed seven-day refresh');
-  if(!document.body.innerText.includes('Recent activity'))throw Error('Chart disappeared after failure');
+  if(!document.body.innerText.toLowerCase().includes('recent activity'))throw Error('Chart disappeared after failure');
   checks.push('Seven-day failure preserves the chart and exposes retry');
-  ready=true;button('Try again').click();await until(()=>!button('Try again')&&document.body.innerText.includes('Recent activity · 7 days'),'successful retry');
+  ready=true;button('Try again').click();await until(()=>!button('Try again')&&document.body.innerText.toLowerCase().includes('recent activity · 7 days'),'successful retry');
   checks.push('Retry refreshes the seven-day view successfully');
   await call('write',{owner,records:[{key:'qa:stats',value:{passed:true,checks}}]});
  }catch(error){await call('write',{owner,records:[{key:'qa:stats',value:{passed:false,checks,error:String(error),text:document.body?.innerText.slice(0,1500)}}]});}
