@@ -50,3 +50,24 @@ Initial startup has a 40-second native deadline including website-data enumerati
 Missing Keychain entries resolve to an empty object; the JS auth adapter also tolerates older undefined replies and returns null for optional keys. A missing primary session can retry the old app cookie once per client lifetime, only for the matching saved account and never behind an explicit logout fence. Credentials remain in Keychain; recovery does not overwrite a newer session, and credential writes/removals invalidate in-flight recovery.
 
 Reconnection is only requested after a successful session check confirms no session, and the native prompt is confined to Account. Statistics remain readable from the saved account. Query refreshes restart when the session becomes available, and unexpected technical errors are replaced with a short saved-data message. `make-auth-fixture.mjs` tests the real bridge and Keychain in the signed, isolated `app.huella.authqa` simulator using synthetic cookies only.
+
+### Build 9 — owned audio playback and retry (21 November 2026)
+
+Each spoken phrase now owns its playback callbacks and cancellation. A late
+lookup, old component cleanup, or delayed silent-unlock completion cannot stop
+or replace the next phrase. Transient media errors receive one retry; a stalled
+load has an eight-second deadline per attempt. Autoplay-policy failures expose
+the existing speaker button as “Retry audio.” Failures and cancellations no
+longer signal successful completion to the study timer. A successful manual
+retry releases the timer normally. Playback speed, review results, and saved
+media remain unchanged.
+
+Validation: nine playback regression tests, including three races reproduced
+against the old player, plus the existing full suite. An isolated signed iOS
+simulator played all four recordings for the two reported cards from SQLite
+media blobs with networking disabled. Both manual and one-second timed study
+were exercised. A deliberately rejected play showed Retry audio without
+advancing; retry played the English recording and normal advancement resumed.
+The reusable simulator exercise is `scripts/native-tests/audio-playback.js`.
+Only the synthetic fixture account was reviewed. These tests verify the repaired
+failure paths; they do not establish which path occurred on the user's phone.
