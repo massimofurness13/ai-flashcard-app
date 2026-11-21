@@ -26,14 +26,14 @@ interface FlashcardProps {
   /** When true, the visible side's text auto-plays via TTS each time
    * the card appears or flips. Study/Review use this; the edit form does not. */
   autoPlayVoice?: boolean;
-  /** Fires when the auto-played TTS clip finishes (or fails / is
-   *  cancelled mid-play). Study session uses this to start the
+  /** Fires only when the TTS clip finishes successfully. Study session
+   *  uses this to start the
    *  auto-advance countdown — so the timer never overlaps with the
    *  audio. Only meaningful when `autoPlayVoice` is true. */
   onAudioEnd?: () => void;
   /** When true, suppresses auto-play. If a clip is currently playing
-   *  it gets cancelled. Going from paused → unpaused does NOT replay
-   *  audio for the same side — the user has already heard it. */
+   *  it gets cancelled. Resuming replays the current side. Failed or
+   *  cancelled audio never counts as a completed recording. */
   paused?: boolean;
   /** Legacy prop, kept for callers that thread it through but no
    *  longer used for visibility gating here. Pricing/affordance hints
@@ -90,43 +90,23 @@ export function Flashcard({
     onAudioEndRef.current = onAudioEnd;
   }, [onAudioEnd]);
 
-  // Auto-play TTS when the visible side changes. Mobile browsers
-  // require a user gesture before the first utterance, so a silent
-  // fail here is fine — the first click of Show Answer or the card
-  // itself unlocks it. We notify the parent (via the ref) when audio
-  // ends, errors, or is cancelled so the study session can start its
-  // auto-advance/auto-flip countdown only after speech completes.
-  //
-  // When `paused` is true we skip starting playback entirely — and
-  // any in-flight handle from a previous render is cancelled by the
-  // cleanup. We deliberately fire the audio-end signal in that case
-  // so a paused → resumed cycle doesn't leave the parent's
-  // audioFinished gate stuck closed; the user has effectively
-  // "heard" the audio enough that the countdown should be allowed
-  // to continue from where it was paused.
+  const [failedAudio, setFailedAudio] = useState<string | null>(null);
+  const audioKey = JSON.stringify([isFlipped, front, back, frontLanguageCode, backLanguageCode]);
+
+  // Capture this side's completion callback. Cleanup is cancellation, not a
+  // completed recording: it must never start the next side's countdown.
   useEffect(() => {
     if (!autoPlayVoice) return;
-    if (paused) {
-      onAudioEndRef.current?.();
-      return;
-    }
+    if (paused) return;
     const text = isFlipped ? back : front;
     const voice = isFlipped ? backVoice : frontVoice;
     const lang = isFlipped ? backLanguageCode : frontLanguageCode;
+    const onEnd = onAudioEndRef.current;
     const handle = speakText(text, { languageCode: lang, voiceName: voice });
-    let fired = false;
-    const fire = () => {
-      if (fired) return;
-      fired = true;
-      onAudioEndRef.current?.();
-    };
-    handle.onEnded?.(fire);
-    handle.onError?.(fire);
-    return () => {
-      handle.cancel();
-      fire();
-    };
-  }, [autoPlayVoice, paused, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode]);
+    handle.onEnded?.(() => { setFailedAudio(null); onEnd?.(); });
+    handle.onError?.(() => setFailedAudio(audioKey));
+    return () => handle.cancel();
+  }, [autoPlayVoice, paused, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode, audioKey]);
 
   return (
     // Study sessions supply a viewport-sized height; other surfaces keep 520px.
@@ -195,7 +175,10 @@ export function Flashcard({
        *  side is currently visible — keyed on isFlipped so VoiceButton
        *  remounts and grabs the right text/voice. */}
       <VoiceButton
-        key={isFlipped ? "back" : "front"}
+        key={audioKey}
+        failed={failedAudio === audioKey}
+        onPlaybackEnd={() => { setFailedAudio(null); onAudioEndRef.current?.(); }}
+        onPlaybackError={() => setFailedAudio(audioKey)}
         text={isFlipped ? back : front}
         languageCode={isFlipped ? backLanguageCode : frontLanguageCode}
         voiceName={isFlipped ? backVoice : frontVoice}

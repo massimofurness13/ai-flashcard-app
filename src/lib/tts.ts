@@ -7,8 +7,8 @@
  * fallback anymore. Product decision (user feedback): the robotic
  * device voice is never acceptable. If a clip can't be produced via
  * Google (no language code, network failure), we stay SILENT and
- * fire the "ended" signal so the study countdown still advances —
- * a missing clip is better than a jarring synthetic one.
+ * report a playback error. The learner can retry without the timer
+ * treating silence as a completed recording.
  *
  * ── Autoplay trust (the reason for the single persistent element) ──
  * Browsers grant autoplay permission per-<audio>-element after that
@@ -116,6 +116,8 @@ let audioEverUnlocked = false;
 export function unlockAudio(): void {
   if (typeof window === "undefined") return;
   try {
+    if (activeSpeech) return;
+    const unlock = ++playbackGeneration;
     const audio = getPersistentAudio();
     audio.src = getSilentUnlockUrl();
     audio.muted = false;
@@ -124,6 +126,7 @@ export function unlockAudio(): void {
     if (p && typeof p.then === "function") {
       p.then(() => {
         try {
+          if (unlock !== playbackGeneration) return;
           audio.pause();
           audio.currentTime = 0;
         } catch {
@@ -171,14 +174,10 @@ function installForegroundReunlock(): void {
   window.addEventListener("pageshow", reunlock);
 }
 
-// Tracks the callbacks bound to the audio element so cancel() can
-// detach them cleanly when a new speak() takes over.
-let activeCallbacks: {
-  ended: (() => void)[];
-  error: (() => void)[];
-  endedListener?: () => void;
-  errorListener?: () => void;
-} | null = null;
+// Every utterance owns its callbacks and cancellation. Old React effect
+// cleanups and late lookups must never pause or replace a newer card.
+let playbackGeneration = 0;
+let activeSpeech: SpeakHandle | null = null;
 
 // ── Client-side URL cache ───────────────────────────────────────────
 // (text+lang) → Supabase public URL. Preloader populates it; speak()
@@ -241,7 +240,7 @@ function resolveAudioUrl(
     }
     return url;
   })().finally(() => {
-    inFlight.delete(key);
+    if (inFlight.get(key) === p) inFlight.delete(key);
   });
   inFlight.set(key, p);
   return p;
@@ -263,7 +262,7 @@ export async function preloadAudio(
   languageCode: string,
 ): Promise<void> {
   if (!text || !text.trim() || !languageCode) return;
-  await resolveAudioUrl(text, languageCode);
+  await resolveAudioUrl(text, languageCode).catch(() => null);
 }
 
 // Default TTS playback speed. 1.0 = broadcast standard, matches the
@@ -285,28 +284,10 @@ function getSettings(): { ttsSpeed: number } {
 }
 
 function cancelAll() {
-  if (persistentAudio) {
-    persistentAudio.pause();
-    // Don't set src="" — that destroys the element's autoplay trust
-    // and forces a fresh gesture for the next play. Pausing is enough.
-  }
-  if (activeCallbacks) {
-    if (persistentAudio) {
-      if (activeCallbacks.endedListener) {
-        persistentAudio.removeEventListener(
-          "ended",
-          activeCallbacks.endedListener,
-        );
-      }
-      if (activeCallbacks.errorListener) {
-        persistentAudio.removeEventListener(
-          "error",
-          activeCallbacks.errorListener,
-        );
-      }
-    }
-    activeCallbacks = null;
-  }
+  playbackGeneration++;
+  activeSpeech?.cancel();
+  activeSpeech = null;
+  persistentAudio?.pause();
 }
 
 async function fetchAudioUrlOnce(
@@ -318,6 +299,7 @@ async function fetchAudioUrlOnce(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, languageCode }),
+      signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { audioUrl?: string };
@@ -342,136 +324,100 @@ async function fetchAudioUrl(
   return fetchAudioUrlOnce(text, languageCode);
 }
 
-function playAudioUrl(url: string): SpeakHandle {
-  const callbacks: { ended: (() => void)[]; error: (() => void)[] } = {
-    ended: [],
-    error: [],
-  };
-
-  cancelAll();
-  const audio = getPersistentAudio();
-  audio.src = url;
-  audio.playbackRate = getSettings().ttsSpeed;
-  // Explicit load() so the new src buffers immediately even if the
-  // previous play was paused mid-stream. The MP3 bytes are usually
-  // warm in the HTTP cache (preloader), so this is just the decode.
-  audio.load();
-
-  const endedListener = () => callbacks.ended.forEach((cb) => cb());
-  const errorListener = () => callbacks.error.forEach((cb) => cb());
-  audio.addEventListener("ended", endedListener);
-  audio.addEventListener("error", errorListener);
-
-  activeCallbacks = {
-    ended: callbacks.ended,
-    error: callbacks.error,
-    endedListener,
-    errorListener,
-  };
-
-  void audio.play().catch(() => {
-    // First play of a session may be blocked by autoplay policy
-    // until the element earns trust from a gesture; subsequent plays
-    // on the same element succeed. Surface as an end so the parent's
-    // audioFinished gate doesn't deadlock.
-    callbacks.error.forEach((cb) => cb());
-  });
-
-  return {
-    cancel: () => {
-      audio.pause();
-      audio.removeEventListener("ended", endedListener);
-      audio.removeEventListener("error", errorListener);
-      if (activeCallbacks?.endedListener === endedListener) {
-        activeCallbacks = null;
-      }
-    },
-    onEnded: (cb) => callbacks.ended.push(cb),
-    onError: (cb) => callbacks.error.push(cb),
-  };
-}
-
-/**
- * A no-op handle that fires its onEnded on the next microtask. Used
- * when there's no language code to speak with — we stay silent
- * (never the device voice) but still tell the study session "audio
- * is done" so the auto-flip / auto-advance countdown proceeds.
- */
-function silentHandle(): SpeakHandle {
-  const endedCbs: (() => void)[] = [];
-  // Defer so the caller has registered its onEnded callback by the
-  // time we fire (the caller does handle.onEnded(...) synchronously
-  // right after we return).
-  setTimeout(() => endedCbs.forEach((cb) => cb()), 0);
-  return {
-    cancel: () => {},
-    onEnded: (cb) => endedCbs.push(cb),
-    onError: () => {},
-  };
-}
-
-/**
- * Speak `text` in the given language using the cached native-speaker
- * Google voice. `languageCode` may be null/empty — in that case we
- * stay silent (never the browser device voice). Callers that want a
- * fallback (e.g. the study session falling back to the user's
- * learning language) should resolve that fallback BEFORE calling and
- * pass the resolved code as `languageCode`.
- *
- * `voiceName` is accepted for call-site compatibility but no longer
- * used — voice is fully determined by the language code on the server.
+/** One owned playback operation, with a single bounded retry for a stalled
+ * or interrupted media load. The persistent element retains iOS autoplay trust.
+ * Failure is distinct from completion; the study timer must not skip unheard audio.
  */
 export function speak(
   text: string,
-  options: {
-    languageCode?: string | null;
-    voiceName?: string | null;
-  } = {},
+  options: { languageCode?: string | null; voiceName?: string | null } = {},
 ): SpeakHandle {
-  if (!text || !text.trim()) {
-    return { cancel: () => {} };
-  }
-
-  const languageCode = options.languageCode;
-  if (!languageCode) {
-    // No language → silent. We never fall back to Web Speech.
-    return silentHandle();
-  }
-
-  // Fast path — synchronous cache hit from the preloader.
-  const cached = getCachedAudioUrl(text, languageCode);
-  if (cached) {
-    return playAudioUrl(cached);
-  }
-
-  // Slow path — async fetch, then play. Wire a handle that fills in
-  // once the URL resolves.
+  cancelAll();
+  const generation = playbackGeneration;
+  const ended: (() => void)[] = [], errors: (() => void)[] = [];
+  let cancelled = false, settled = false, attempt = 0;
+  let cleanup = () => {};
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  const current = () => !cancelled && !settled && generation === playbackGeneration;
   const handle: SpeakHandle = {
-    cancel: () => { cancelled = true; cancelAll(); },
-    onEnded: undefined,
-    onError: undefined,
+    cancel: () => {
+      if (cancelled) return;
+      cancelled = true;
+      clearTimeout(retryTimer);
+      cleanup();
+      if (activeSpeech === handle) {
+        persistentAudio?.pause();
+        activeSpeech = null;
+      }
+    },
+    onEnded: cb => ended.push(cb),
+    onError: cb => errors.push(cb),
   };
-  let cancelled = false;
-  const endedCbs: (() => void)[] = [];
-  const errorCbs: (() => void)[] = [];
-  handle.onEnded = (cb) => endedCbs.push(cb);
-  handle.onError = (cb) => errorCbs.push(cb);
-
-  (async () => {
-    const url = await resolveAudioUrl(text, languageCode);
-    if (cancelled) return;
-    if (!url) {
-      // Couldn't produce the Google clip. Stay silent, fire onError
-      // so the countdown still advances.
-      errorCbs.forEach((cb) => cb());
-      return;
+  activeSpeech = handle;
+  const finish = (failed: boolean) => {
+    if (!current()) return;
+    settled = true;
+    clearTimeout(retryTimer);
+    cleanup();
+    if (activeSpeech === handle) {
+      if (failed) persistentAudio?.pause();
+      activeSpeech = null;
     }
-    const inner = playAudioUrl(url);
-    handle.cancel = inner.cancel;
-    inner.onEnded?.(() => endedCbs.forEach((cb) => cb()));
-    inner.onError?.(() => errorCbs.forEach((cb) => cb()));
-  })();
-
+    (failed ? errors : ended).forEach(cb => cb());
+  };
+  const play = (url: string) => {
+    if (!current()) return;
+    const audio = getPersistentAudio();
+    const thisAttempt = ++attempt;
+    let failed = false;
+    const valid = () => current() && thisAttempt === attempt && !failed;
+    const onPlaying = () => { if (valid()) clearTimeout(timeout); };
+    const onEnded = () => { if (valid()) finish(false); };
+    const onFailure = (error?: unknown) => {
+      if (!valid()) return;
+      failed = true;
+      cleanup();
+      audio.pause();
+      // An explicit user gesture is needed for a policy rejection. Don't
+      // loop retries; the existing speaker button can start the clip again.
+      if (attempt >= 2 || (error instanceof DOMException && error.name === "NotAllowedError")) {
+        finish(true);
+        return;
+      }
+      retryTimer = setTimeout(() => play(url), 150);
+    };
+    const onError = () => onFailure();
+    cleanup = () => {
+      clearTimeout(timeout);
+      audio.removeEventListener("playing", onPlaying);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+    };
+    audio.addEventListener("playing", onPlaying);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+    const timeout = setTimeout(() => onFailure(), 8000);
+    try {
+      audio.src = url;
+      audio.playbackRate = getSettings().ttsSpeed;
+      audio.load();
+      void audio.play().then(onPlaying, onFailure);
+    } catch (error) { queueMicrotask(() => onFailure(error)); }
+  };
+  const languageCode = options.languageCode;
+  if (!text.trim() || !languageCode) {
+    queueMicrotask(() => finish(true));
+    return handle;
+  }
+  const cached = getCachedAudioUrl(text, languageCode);
+  if (cached) play(cached);
+  else {
+    void resolveAudioUrl(text, languageCode).then(url => {
+      if (!current()) return;
+      if (url) play(url);
+      else finish(true);
+    }, () => finish(true));
+  }
   return handle;
 }
 

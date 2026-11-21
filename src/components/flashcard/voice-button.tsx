@@ -13,11 +13,13 @@ interface VoiceButtonProps {
    *  when no languageCode is set. */
   voiceName?: string | null;
   className?: string;
+  failed?: boolean;
+  onPlaybackEnd?: () => void;
+  onPlaybackError?: () => void;
 }
 
 /**
- * Speak text using the server TTS API (via language code) with Web Speech
- * as a fallback. Returns a handle so callers can listen for onEnded /
+ * Speak text using the saved/server TTS recording (never a device voice). Returns a handle so callers can listen for onEnded /
  * cancel when the component unmounts or the user advances.
  */
 export function speakText(
@@ -32,6 +34,9 @@ export function VoiceButton({
   languageCode,
   voiceName,
   className,
+  failed = false,
+  onPlaybackEnd,
+  onPlaybackError,
 }: VoiceButtonProps) {
   const [speaking, setSpeaking] = useState(false);
   const handleRef = useRef<SpeakHandle | null>(null);
@@ -47,9 +52,9 @@ export function VoiceButton({
     setSpeaking(true);
     const handle = speak(text, { languageCode, voiceName });
     handleRef.current = handle;
-    handle.onEnded?.(() => setSpeaking(false));
-    handle.onError?.(() => setSpeaking(false));
-  }, [text, languageCode, voiceName, speaking]);
+    handle.onEnded?.(() => { setSpeaking(false); onPlaybackEnd?.(); });
+    handle.onError?.(() => { setSpeaking(false); onPlaybackError?.(); });
+  }, [text, languageCode, voiceName, speaking, onPlaybackEnd, onPlaybackError]);
 
   useEffect(() => {
     return () => handleRef.current?.cancel();
@@ -66,7 +71,9 @@ export function VoiceButton({
         e.stopPropagation();
         handleClick();
       }}
-      aria-label={speaking ? "Stop reading" : "Read aloud"}
+      aria-label={speaking ? "Stop reading" : failed ? "Retry audio" : "Read aloud"}
+      title={failed ? "Audio did not play. Tap to retry." : undefined}
+      style={failed ? { color: "var(--destructive, #ef4444)" } : undefined}
     >
       {speaking ? (
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
