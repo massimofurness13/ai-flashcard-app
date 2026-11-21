@@ -77,3 +77,27 @@ describe('offline progress after reconnect and calendar changes',()=>{
   expect(result.dailyStudy.completed).toBe(2);
  });
 });
+
+it('does not silently classify an older downloaded pack with missing history as new',async()=>{
+ const r=(await readRecord<LocalDeckView>(owner,'query:/api/decks/a/view'))!;
+ delete (r.value.deck.cards[0] as Partial<typeof r.value.deck.cards[0]>).reviews;
+ delete (r.value.deck.cards[0] as Partial<typeof r.value.deck.cards[0]>).recallStates;
+ await writeRecord(owner,r.key,r.value);
+ await expect(selectLocalStudy(owner,new URLSearchParams('filter=daily'),now)).rejects.toThrow('learning history');
+ expect(await readRecord(owner,'plan:2026-11-19')).toBeUndefined();
+});
+it('restores missing history online and preserves pending offline ratings before choosing a daily set',async()=>{
+ const r=(await readRecord<LocalDeckView>(owner,'query:/api/decks/a/view'))!;
+ const restored=structuredClone(r.value);
+ restored.deck.cards[0].reviews=[{quality:4,reviewedAt:new Date('2026-11-17')}];
+ delete (r.value.deck.cards[0] as Partial<typeof r.value.deck.cards[0]>).reviews;
+ await writeRecord(owner,r.key,r.value);
+ const event=await queueReview('a1',4,'front');
+ vi.stubGlobal('navigator',{onLine:true});
+ vi.mocked(fetch).mockResolvedValue(Response.json(restored));
+ const data=await selectLocalStudy(owner,new URLSearchParams('filter=daily'),now);
+ expect(data?.daily?.picks?.find(p=>p.id==='a0')?.group).toBe('retention');
+ expect(data?.daily?.picks?.find(p=>p.id==='a1')?.group).toBe('retention');
+ expect(data?.daily?.resultContext?.historyComplete).toBe(true);
+ expect(await readRecord(owner,'review:'+event.eventId)).toBeDefined();
+});

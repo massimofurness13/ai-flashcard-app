@@ -68,3 +68,6 @@ ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
 
 # Installed app web bundle (rebuilt for every archive)
 /mobile/dist/
+
+# Public production settings for the installed app (kept local).
+.env.native.local

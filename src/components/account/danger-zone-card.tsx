@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { useDeviceAccount } from "@/components/layout/device-provider";
 
 /**
  * Destructive account actions — only "Delete Account" for now. Gated
@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
  */
 export function DangerZoneCard() {
   const router = useRouter();
+  const { signOut } = useDeviceAccount();
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,9 +28,8 @@ export function DangerZoneCard() {
         alert("Delete failed. Please contact support.");
         return;
       }
-      // Sign out client-side so the cookie is cleared.
-      const supabase = createClient();
-      await supabase.auth.signOut();
+      // Explicitly clear the local account selection as well as credentials.
+      signOut();
       router.push("/auth/login");
       invalidateDeviceQueries();
     router.refresh();

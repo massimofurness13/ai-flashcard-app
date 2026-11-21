@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import {describe,it,expect} from 'vitest';
 import {writeRecords} from '@/lib/device-db';
+import {dailyResults} from '@/lib/study-results';
 import {localDailyResults} from '@/lib/local-results';
 describe('offline finishing results',()=>{
  it('counts actual ratings once and reverses an undo, without network or completion writes',async()=>{
@@ -14,4 +15,18 @@ describe('offline finishing results',()=>{
   expect(await localDailyResults(owner,day)).toMatchObject({completed:0,promoted:0});
   expect(await localDailyResults(owner,'2026-11-20')).toBeNull();
  });
+});
+
+it('does not call existing secure snapshot-only history a new promotion',()=>{
+ const pick={id:'a',studyDirection:'front' as const,studyReason:'Retention',group:'retention' as const};
+ const before=[{id:'a',reviews:[],recallStates:[{lastQuality:4,lastReviewedAt:new Date('2026-11-18')}]}];
+ for(const quality of [2,4]){
+  const result=dailyResults([pick],before,[{cardId:'a',direction:'front',quality,reviewedAt:new Date('2026-11-19')}]);
+  expect(result).toMatchObject({promoted:0,returnedToLearning:0,retentionReviewed:1});
+ }
+});
+it('does not assert promotions from old local plans with unverified history',async()=>{
+ const owner=crypto.randomUUID();
+ await writeRecords(owner,[{key:'study:daily',value:{cards:[],daily:{day:'2026-11-19',timingKey:'local:'+owner+':2026-11-19',picks:[],resultContext:{startedAt:'2026-11-19T10:00:00Z',before:[],logs:[]}}}}]);
+ expect(await localDailyResults(owner,'2026-11-19')).toBeNull();
 });

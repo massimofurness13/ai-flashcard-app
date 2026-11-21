@@ -47,8 +47,21 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
   const cards: Array<StudyResumeCard & StudyCandidate> = [];
   for (const id of manifest.deckIds) {
     if (filter !== "daily" && selectedIds?.length && !selectedIds.includes(id)) continue;
-    const record = await readRecord<LocalDeckView>(owner,`query:/api/decks/${id}/view`);
+    let record = await readRecord<LocalDeckView>(owner,`query:/api/decks/${id}/view`);
     if (!record || record.value.deck.archivedAt) continue;
+    // Old saved pack documents contained text/schedules but no recall history.
+    // Missing history is UNKNOWN, never evidence of an unstudied/new card.
+    const incomplete = (view: LocalDeckView) => view.deck.cards.some(c => !Array.isArray(c.reviews) || !Array.isArray(c.recallStates));
+    if (["daily","mastery","due"].includes(filter) && incomplete(record.value)) {
+      if (navigator.onLine === false) throw new Error("Connect once to restore this pack’s learning history. Your saved reviews are safe.");
+      const response = await fetch(`/api/decks/${id}/view`, {cache:"no-store",signal:AbortSignal.timeout(15000)});
+      if (!response.ok) throw new Error("Reconnect your account to restore its learning history. Your saved reviews are safe.");
+      const restored = await response.json() as LocalDeckView;
+      if (restored.deck?.id !== id || !Array.isArray(restored.deck.cards) || incomplete(restored)) throw new Error("Learning history is not available yet. Your saved reviews are safe.");
+      // Native transport overlays pending edits; the review journal is applied below.
+      await writeRecords(owner,[{key:record.key,value:restored}]);
+      record = (await readRecord<LocalDeckView>(owner,record.key))!;
+    }
     const { deck } = record.value;
     for (const raw of deck.cards) {
       let card = reviveCandidate(raw);
@@ -83,7 +96,7 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
     const picks = buildDailyPlan(cards,now,Math.random,previousPicks,storedDailyAllocation(previousPicks));
     const plan: LocalPlan = {day,createdAt:now.toISOString(),picks};
     const data: SavedStudy = {cards:picks.map(p=>({...byId.get(p.id)!,...p})),learningLanguage:manifest.learningLanguage,
-      daily:{resultContext:{startedAt:plan.createdAt,before:picks.map(p=>({id:p.id,reviews:(byId.get(p.id)?.reviews??[]).map(r=>({quality:r.quality,reviewedAt:r.reviewedAt.toISOString()}))})),logs:[]},picks,day,timingKey:`local:${owner}:${day}`,completed:0,total:picks.length,ratings:{},mix:{practice:picks.filter(p=>p.group==="practice").length,retention:picks.filter(p=>p.group==="retention").length,new:picks.filter(p=>p.group==="new").length}}};
+      daily:{resultContext:{historyComplete:true,startedAt:plan.createdAt,before:picks.map(p=>({id:p.id,recallStates:(byId.get(p.id)?.recallStates??[]).map(r=>({lastQuality:r.lastQuality,lastReviewedAt:r.lastReviewedAt.toISOString()})),reviews:(byId.get(p.id)?.reviews??[]).map(r=>({quality:r.quality,reviewedAt:r.reviewedAt.toISOString()}))})),logs:[]},picks,day,timingKey:`local:${owner}:${day}`,completed:0,total:picks.length,ratings:{},mix:{practice:picks.filter(p=>p.group==="practice").length,retention:picks.filter(p=>p.group==="retention").length,new:picks.filter(p=>p.group==="new").length}}};
     // Plan and cards are durable before the first review; completion is never inferred here.
     await writeRecords(owner,[{key:"study:daily",value:data},{key:`plan:${day}`,value:plan}]);
     return data;

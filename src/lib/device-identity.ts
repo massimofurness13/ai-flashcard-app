@@ -127,9 +127,17 @@ export function observeDeviceIdentity({ auth, storage, online, onChange, onAccou
     if (!active) return;
     if (event === "SIGNED_OUT") {
       revision++;
-      remember(null);
-      if (!current) onAccountBoundary?.();
-      publish(null, null);
+      // The SDK also emits SIGNED_OUT when credential recovery fails. That
+      // revokes cloud access, not ownership of this device's saved library.
+      // Only the app's explicit sign-out fence may clear the local selection.
+      signedOut = signedOut ?? readSignOutFence(storage);
+      if (signedOut) {
+        remember(null);
+        if (!current) onAccountBoundary?.();
+        publish(null, null);
+      } else {
+        publish(current, "local", online());
+      }
     } else if (session?.user) {
       revision++;
       acceptSession(session);
@@ -152,7 +160,7 @@ export function observeDeviceIdentity({ auth, storage, online, onChange, onAccou
       // getSession can return null without making a network request. Even
       // navigator.onLine=true only proves a network interface exists, not that
       // Supabase is reachable. Keep the local partition; it grants no server
-      // access. Only explicit sign-out or SIGNED_OUT clears this identity.
+      // access. Only explicit app sign-out clears this identity.
       else publish(current, "local",true);
     } catch {
       if (active && requestRevision === revision) publish(current, "local");
