@@ -148,3 +148,23 @@ against late responses, with an in-place retry. Uploads stay independent.
 Regression coverage includes offline creation of120unique cards at70practice/
 50retention, restoring today's saved set with incomplete old pack documents,
 preserving51/120and queued ratings, timeout/retry and account-boundary guards.
+
+### Build 13 — study viewport and artwork persistence
+
+Study height now measures the actual header, controls and ancestor safe-area
+padding. Phrase text increases to 24–30px. In the signed iOS simulator, both
+faces have zero document overflow and the three rating controls remain above
+the bottom safe area.
+
+Artwork has an independent, account-scoped automatic queue: today's set first,
+then the saved library, with two bounded transfers. It continues during Study,
+does not wait for TTS or auth refresh, retries missing files, and updates visible
+images when bytes arrive. Full pack preparation also saves artwork before audio.
+No image generation is requested. Existing files and queued reviews are retained.
+
+The isolated native test in `scripts/native-tests/artwork-offline.js` downloads
+fixture artwork while Study is open, verifies its native file record and local
+image display, then repeats after a full app restart with networking disabled.
+It records layout measurements on both card faces. Synthetic identity only;
+native HTTP is intercepted as well as browser fetch. Unit coverage checks daily
+priority, duplicates, retry, account boundaries and artwork preceding slow TTS.

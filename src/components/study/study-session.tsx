@@ -1,4 +1,5 @@
 "use client";
+import { useStudyViewport } from "@/hooks/use-study-viewport";
 import { useStudyClock } from "@/hooks/use-study-clock";
 import { checkpointKey } from "@/lib/offline-study";
 import { queueReview, queueUndo } from "@/lib/review-outbox";
@@ -130,6 +131,8 @@ export function StudySession({
   initialFlipped = false,
   progressOffset = 0,
 }: StudySessionProps) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  useStudyViewport(viewportRef);
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -408,7 +411,7 @@ export function StudySession({
   const backVoiceName = showBackFirst ? currentCard.deck.frontVoice : currentCard.deck.backVoice;
 
   return (
-    <div className="study-session space-y-2 max-w-2xl mx-auto">
+    <div ref={viewportRef} className="study-session space-y-2 max-w-2xl mx-auto">
       <ImagePreloader urls={upcomingImageUrls} />
       {reviewError && <p role="alert" className="text-sm text-destructive">{reviewError}</p>}
       <VoicePreloader items={upcomingVoiceItems} />

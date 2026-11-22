@@ -131,6 +131,7 @@ function StudySessionContent() {
       if (!owner) throw new Error("Sign in to open your library.");
       const result = await loadStudySession(owner, params, { signal: controller.signal });
       applySaved(result.data, result.snapshot);
+      if (!cancelled) window.dispatchEvent(new Event("huella:artwork-sync"));
     }
     void load().catch(error => {
       if (!cancelled) { setLoadError(studyLoadError(error)); setLoading(false); }

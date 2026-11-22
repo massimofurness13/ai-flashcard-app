@@ -15,7 +15,13 @@ export function DeviceImage({ src, alt, ...props }: ImgHTMLAttributes<HTMLImageE
       const local = saved || await downloadMedia(user.id, src);
       if (active) setResolved({ key, url: local });
     }).catch(() => { if (active) setResolved({ key, url: src }); });
-    return () => { active = false; };
+    const onSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{owner:string;url:string}>).detail;
+      if (detail?.owner !== user.id || detail.url !== src) return;
+      void savedMedia(user.id, src).then(local => { if (active && local) setResolved({key,url:local}); }).catch(() => {});
+    };
+    window.addEventListener("huella:media-saved", onSaved);
+    return () => { active = false; window.removeEventListener("huella:media-saved", onSaved); };
   }, [user, src, key]);
   // A new file remains viewable even if the device has no space to save it.
   // eslint-disable-next-line @next/next/no-img-element
