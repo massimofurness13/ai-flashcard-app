@@ -528,3 +528,5 @@ body:has(.study-session) > footer { display: none; }
 @media (min-width: 640px) {
   .study-flashcard .flashcard-front, .study-flashcard .flashcard-back { padding: 24px; }
 }
+
+.study-flashcard .flashcard-text { font-size: clamp(1.5rem, 6.2vw, 1.875rem); line-height: 1.35; }

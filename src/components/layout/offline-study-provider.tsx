@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { prepareAppShell } from "./media-service-worker";
 import { useDeviceAccount } from "./device-provider";
+import { syncSavedArtwork } from "@/lib/artwork-sync";
 import { readRecord } from "@/lib/device-db";
 import { syncLibrary, type LibrarySyncStatus } from "@/lib/library-sync";
 
@@ -15,6 +16,19 @@ export function OfflineStudyProvider() {
   const [status,setStatus] = useState("");
   const retry = useRef<()=>void>(()=>{});
   useEffect(()=>{path.current=pathname;},[pathname]);
+  useEffect(() => {
+    if (!ownerId) return;
+    const sync = () => { void syncSavedArtwork(ownerId); };
+    sync();
+    const visible = () => { if (document.visibilityState === "visible") sync(); };
+    const timer = setInterval(visible, 60000);
+    window.addEventListener("online", sync);
+    window.addEventListener("huella:device-saved", sync);
+    window.addEventListener("huella:artwork-sync", sync);
+    document.addEventListener("visibilitychange", visible);
+    return () => { clearInterval(timer); window.removeEventListener("online", sync); window.removeEventListener("huella:device-saved", sync); window.removeEventListener("huella:artwork-sync", sync); document.removeEventListener("visibilitychange", visible); };
+  }, [ownerId]);
+
   useEffect(()=>{
     if (!ownerId) return;
     const owner=ownerId;

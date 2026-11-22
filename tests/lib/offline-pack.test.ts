@@ -45,3 +45,10 @@ describe("verified pack download", () => {
     expect(await isPackDownloaded({ ...pack, cards: [{ ...pack.cards[0], front: "adiós" }] })).toBe(false);
   });
 });
+it('saves artwork before even starting a stalled audio preparation request',async()=>{
+ let started!:()=>void;const began=new Promise<void>(resolve=>{started=resolve;});let finish!:(response:Response)=>void;
+ vi.mocked(fetch).mockImplementationOnce(()=>{started();return new Promise(resolve=>{finish=resolve;});});
+ const result=downloadPack(pack);await began;
+ expect(mock.download).toHaveBeenCalledWith(await mock.owner(),'https://image',false);
+ finish(Response.json({audioUrl:'https://audio'}));await result;
+});

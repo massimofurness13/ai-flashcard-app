@@ -139,7 +139,7 @@ export function Flashcard({
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-xl sm:text-2xl font-medium text-center text-card-foreground">
+            <p className="flashcard-text text-xl sm:text-2xl font-medium text-center text-card-foreground">
               {front}
             </p>
           </div>
@@ -163,7 +163,7 @@ export function Flashcard({
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-xl sm:text-2xl text-center text-card-foreground">{back}</p>
+            <p className="flashcard-text text-xl sm:text-2xl text-center text-card-foreground">{back}</p>
           </div>
         </div>
       </div>

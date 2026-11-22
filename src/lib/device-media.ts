@@ -63,6 +63,7 @@ export async function downloadMedia(owner: string, url: string, keepInMemory = t
       if (!blob.size || !/^(audio|image)\//.test(blob.type)) throw new Error("Invalid media file.");
       if (generation !== mediaGeneration) throw new Error("Download cancelled.");
       await writeRecord(owner, `media:${url}`, blob);
+      if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("huella:media-saved", { detail: { owner, url } }));
       if (generation !== mediaGeneration) throw new Error("Download cancelled.");
       return keepInMemory ? remember(owner, url, blob) : url;
     } finally {

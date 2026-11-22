@@ -45,6 +45,13 @@ export async function downloadPack(input: DownloadPackInput, onProgress?: (progr
     if (navigator.onLine === false || (error instanceof Error && error.name === "QuotaExceededError") || await deviceOwner() !== owner) throw error;
     firstFailure ??= error;
   }
+  // Save existing artwork before a slow or unavailable voice can delay it.
+  for (const url of urls) {
+    await checkActive();
+    try { await downloadMedia(owner, url, false); } catch (error) { await retainFailure(error); }
+    onProgress?.({ phase: "save", done: ++done, total: urls.size });
+  }
+  done = 0;
   // Sequential audio lookup keeps large packs below the TTS rate limit.
   for (const clip of clips) {
     await checkActive();
