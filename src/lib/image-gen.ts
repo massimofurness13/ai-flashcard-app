@@ -1,6 +1,7 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { fal } from "@fal-ai/client";
+import { checkedGeneratedImage, InvalidGeneratedImageError, MAX_GENERATED_IMAGE_BYTES } from "./image-integrity";
 
 const BUCKET = "card-images";
 
@@ -452,10 +453,11 @@ async function generateViaFal(
   const imageUrl = (result.data as { images?: { url?: string }[] })?.images?.[0]?.url;
   if (!imageUrl) throw new Error(`No image URL from ${endpoint}`);
 
-  const imgRes = await fetch(imageUrl);
+  const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(20000) });
   if (!imgRes.ok) throw new Error(`Download failed: ${imgRes.status}`);
+  if (Number(imgRes.headers.get("content-length")) > MAX_GENERATED_IMAGE_BYTES) throw new InvalidGeneratedImageError("invalid file size");
   const arrayBuffer = await imgRes.arrayBuffer();
-  return { bytes: Buffer.from(arrayBuffer), ext: "png" };
+  return checkedGeneratedImage(Buffer.from(arrayBuffer));
 }
 
 async function uploadBytes(
@@ -494,8 +496,8 @@ async function uploadBytes(
  * Validation adds ~1-2s of latency and ~$0.0015 per image but cuts the
  * "embarrassing AI errors" rate (extra limbs, wrong sport, hallucinated
  * text) noticeably. We only retry once — if FLUX still gets it wrong
- * the second time, we ship what we have rather than burning credits in
- * a loop.
+ * the second time, we may keep a structurally valid first image. Blank or
+ * corrupt images are never uploaded. At most two provider calls per request.
  */
 export async function generateAndUploadImage(
   userId: string,
@@ -506,13 +508,21 @@ export async function generateAndUploadImage(
   const concept = await buildVisualConcept(front, back, tier);
   const prompt = wrapConceptInStyle(concept, tier);
 
-  // First attempt.
-  let { bytes, ext } = await generateViaFal(prompt, tier);
+  // One shared retry budget for hard file failures and semantic corrections.
+  let usedRetry = false;
+  let result;
+  try { result = await generateViaFal(prompt, tier); }
+  catch (error) {
+    if (!(error instanceof InvalidGeneratedImageError)) throw error;
+    usedRetry = true;
+    result = await generateViaFal(prompt, tier);
+  }
+  let { bytes, ext } = result;
 
   // Validate. If Haiku flags a problem, retry once with the issue
   // appended as an explicit "avoid this" hint to the prompt.
   const validation = await validateImage(bytes, ext, front, back);
-  if (!validation.valid && validation.issue) {
+  if (!usedRetry && !validation.valid && validation.issue) {
     console.warn(
       `[image-gen] validation flagged "${validation.issue}" — retrying once`
     );
@@ -545,6 +555,11 @@ export async function generateAndUploadFromPrompt(
   prompt: string,
   tier: ImageTier = "quick"
 ): Promise<string> {
-  const { bytes, ext } = await generateViaFal(prompt, tier);
-  return uploadBytes(userId, bytes, ext);
+  let result;
+  try { result = await generateViaFal(prompt, tier); }
+  catch (error) {
+    if (!(error instanceof InvalidGeneratedImageError)) throw error;
+    result = await generateViaFal(prompt, tier);
+  }
+  return uploadBytes(userId, result.bytes, result.ext);
 }

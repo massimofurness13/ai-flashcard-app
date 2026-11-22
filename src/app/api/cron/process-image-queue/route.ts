@@ -1,3 +1,4 @@
+import { InvalidGeneratedImageError } from "@/lib/image-integrity";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { generateAndUploadImage, type ImageTier } from "@/lib/image-gen";
@@ -211,7 +212,7 @@ export async function processQueue(opts: ProcessQueueOptions = {}): Promise<{
       await prisma.card.updateMany({
         where: { id: card.id, imageGenLockedAt: lease },
         data: {
-          imageGenAttempts: { increment: 1 },
+          imageGenAttempts: err instanceof InvalidGeneratedImageError ? MAX_ATTEMPTS : { increment: 1 },
           imageGenLockedAt: null,
           imageGenError: message.slice(0, 500),
         },
