@@ -10,15 +10,11 @@ import { StudyCountdown } from "@/components/study/study-countdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { peekStudyResume, clearStudyResume } from "@/lib/study-resume";
-import { selectLocalStudy } from "@/lib/local-library";
-import { toLocalDateKey } from "@/lib/timezone";
-import { readRecord } from "@/lib/device-db";
-import type { LibraryManifest } from "@/lib/local-library";
-import { deviceOwner } from "@/lib/device-media";
+import { loadStudySession, studyLoadError } from "@/lib/study-loader";
+import { useDeviceAccount } from "@/components/layout/device-provider";
 import { readStudyTime, formatStudyTime } from "@/lib/study-time";
-import { readOfflineStudy, saveStudy, studyKey, type SavedStudy } from "@/lib/offline-study";
+import { studyKey, type SavedStudy } from "@/lib/offline-study";
 import type { StudyResumeSnapshot } from "@/lib/study-resume";
-import { flushReviews } from "@/lib/review-outbox";
 
 interface StudyCard {
   id: string;
@@ -39,6 +35,9 @@ interface StudyCard {
 function StudySessionContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user, ready: accountReady } = useDeviceAccount();
+  const owner = user?.id;
+  const [retry, setRetry] = useState(0);
   const navigate = (path: string) => {
     // Offline navigation needs the cached document, not a server RSC response.
     if (navigator.onLine === false && !isNativeDevice()) window.location.assign(path);
@@ -96,6 +95,7 @@ function StudySessionContent() {
   const offlineKey = studyKey(new URLSearchParams({...(deckIds ? {deckIds} : {}), limit, filter, orientation, ...(tags ? {tags} : {})}));
 
   useEffect(() => {
+    if (!accountReady) return;
     // Resuming from an edit/delete: cards/learningLanguage were already
     // seeded from the snapshot above, so there's nothing to fetch. Just
     // consume the snapshot so a later fresh session doesn't resume.
@@ -112,6 +112,7 @@ function StudySessionContent() {
     if (tags) params.set("tags", tags);
 
     let cancelled = false;
+    const controller = new AbortController();
     const applySaved = (data: SavedStudy, snapshot: StudyResumeSnapshot | null = null) => {
       if (cancelled) return;
       setCards(snapshot?.cards ?? data.cards);
@@ -127,49 +128,15 @@ function StudySessionContent() {
       setLoading(false);
     };
     async function load() {
-      const owner = await deviceOwner();
-      if (!owner) throw new Error("Sign in while connected before studying offline.");
-      const saved = await readOfflineStudy(owner, offlineKey);
-      // The local library is the normal data source, even with slow/no internet.
-      // Never switch a running sequence after a background response arrives.
-      const manifest = (await readRecord<LibraryManifest>(owner,"library:manifest"))?.value;
-      let today: string; try {today=toLocalDateKey(new Date(),manifest?.timeZone || "UTC");}catch{today=toLocalDateKey(new Date(),"UTC");}
-      if (saved?.snapshot && (filter === "daily" ? saved.data.daily?.day === today : saved.snapshot.currentIndex < saved.snapshot.cards.length)) {
-        applySaved(saved.data,saved.snapshot); return;
-      }
-      const local = await selectLocalStudy(owner,params);
-      if (local) {
-        await saveStudy(owner,offlineKey,local);
-        applySaved(local); return;
-      }
-      if (saved && (filter !== "daily" || saved.data.daily?.day === today)) {
-        applySaved(saved.data,saved.snapshot); return;
-      }
-      if (navigator.onLine === false) throw new Error("This device hasn’t saved your library yet. Connect once to sync it.");
-      try {
-        // Uploads have their own durable queue. A slow/offline upload must never
-        // hold the card-loading screen hostage; saved sessions were preferred above.
-        if (filter === "daily") void flushReviews(owner);
-        const response = await fetch(`/api/review?${params}`, {signal: AbortSignal.timeout(8000)});
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) throw new Error("Sign in again to continue.");
-          throw new Error("Unable to load this session.");
-        }
-        const data: SavedStudy = await response.json();
-        if (await deviceOwner() !== owner || cancelled) return;
-        await saveStudy(owner, offlineKey, data);
-        applySaved(data);
-      } catch (error) {
-        if (error instanceof Error && error.message === "Sign in again to continue.") throw error;
-        if (!saved || (filter === "daily" && saved.data.daily?.day !== today)) throw error;
-        applySaved(saved.data, saved.snapshot);
-      }
+      if (!owner) throw new Error("Sign in to open your library.");
+      const result = await loadStudySession(owner, params, { signal: controller.signal });
+      applySaved(result.data, result.snapshot);
     }
     void load().catch(error => {
-      if (!cancelled) { setLoadError(error instanceof Error ? error.message : "Unable to load. Your saved reviews are safe."); setLoading(false); }
+      if (!cancelled) { setLoadError(studyLoadError(error)); setLoading(false); }
     });
-    return () => { cancelled = true; };
-  }, [resume, deckIds, limit, filter, tags, orientation, offlineKey]);
+    return () => { cancelled = true; controller.abort(); };
+  }, [resume, deckIds, limit, filter, tags, orientation, offlineKey, owner, accountReady, retry]);
 
   function handleComplete(sessionStats: StudyStats, undo: () => Promise<void>) {
     setUndoComplete(() => undo);
@@ -186,7 +153,7 @@ function StudySessionContent() {
     );
   }
 
-  if (loadError) return <div role="alert" className="space-y-4 py-12"><p>{loadError}</p><Button onClick={() => navigate("/study")}>Back to study options</Button></div>;
+  if (loadError) return <div role="alert" className="space-y-4 py-12"><p>{loadError}</p><Button onClick={() => { setLoadError(null); setLoading(true); setRetry(r => r + 1); }}>Try again</Button><Button variant="outline" onClick={() => navigate("/study")}>Back to study options</Button></div>;
 
   if (cards.length === 0 && !completed) {
     return (

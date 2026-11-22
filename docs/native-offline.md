@@ -133,3 +133,18 @@ The signed, isolated iOS simulator passed the actual UI exercise: an empty-cache
 seven-day request hit its deadline and exposed retry; a cached 30-day chart
 opened; switching back to seven days preserved the chart during a failed refresh;
 and retry loaded seven days successfully. Only synthetic records were used.
+
+### Build 12 — daily-session opening
+
+The new-day study path could await per-pack history restoration and surface a
+native abort as “Cancelled”, before ever reaching its server fallback. The screen
+also requested identity before the saved-account provider was ready. The loader
+now uses the ready local identity, opens today's saved set/checkpoint first, and
+uses only local history for its initial selection. Legacy incomplete history
+falls back to one canonical server selection when online; it is never relabelled
+as new vocabulary. Whole-operation timeout and navigation cancellation protect
+against late responses, with an in-place retry. Uploads stay independent.
+
+Regression coverage includes offline creation of120unique cards at70practice/
+50retention, restoring today's saved set with incomplete old pack documents,
+preserving51/120and queued ratings, timeout/retry and account-boundary guards.

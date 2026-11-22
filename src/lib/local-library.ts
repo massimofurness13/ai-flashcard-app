@@ -22,7 +22,8 @@ export function reviveCandidate(card: StudyCandidate): StudyCandidate {
 }
 
 /** The same pure scheduler as the server, over the account's device library. */
-export async function selectLocalStudy(owner: string, params: URLSearchParams, now = new Date(), options?: {all?:boolean}): Promise<SavedStudy | null> {
+export async function selectLocalStudy(owner: string, params: URLSearchParams, now = new Date(), options?: {all?:boolean;hydrateHistory?:boolean;signal?:AbortSignal}): Promise<SavedStudy | null> {
+  options?.signal?.throwIfAborted();
   const manifest = (await readRecord<LibraryManifest>(owner,"library:manifest"))?.value;
   if (!manifest) return null;
   const filter = params.get("filter") || "due";
@@ -46,6 +47,7 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
   }
   const cards: Array<StudyResumeCard & StudyCandidate> = [];
   for (const id of manifest.deckIds) {
+    options?.signal?.throwIfAborted();
     if (filter !== "daily" && selectedIds?.length && !selectedIds.includes(id)) continue;
     let record = await readRecord<LocalDeckView>(owner,`query:/api/decks/${id}/view`);
     if (!record || record.value.deck.archivedAt) continue;
@@ -53,7 +55,7 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
     // Missing history is UNKNOWN, never evidence of an unstudied/new card.
     const incomplete = (view: LocalDeckView) => view.deck.cards.some(c => !Array.isArray(c.reviews) || !Array.isArray(c.recallStates));
     if (["daily","mastery","due"].includes(filter) && incomplete(record.value)) {
-      if (navigator.onLine === false) throw new Error("Connect once to restore this pack’s learning history. Your saved reviews are safe.");
+      if (options?.hydrateHistory === false || navigator.onLine === false) throw new Error("Connect once to restore this pack’s learning history. Your saved reviews are safe.");
       const response = await fetch(`/api/decks/${id}/view`, {cache:"no-store",signal:AbortSignal.timeout(15000)});
       if (!response.ok) throw new Error("Reconnect your account to restore its learning history. Your saved reviews are safe.");
       const restored = await response.json() as LocalDeckView;
@@ -98,6 +100,7 @@ export async function selectLocalStudy(owner: string, params: URLSearchParams, n
     const data: SavedStudy = {cards:picks.map(p=>({...byId.get(p.id)!,...p})),learningLanguage:manifest.learningLanguage,
       daily:{resultContext:{historyComplete:true,startedAt:plan.createdAt,before:picks.map(p=>({id:p.id,recallStates:(byId.get(p.id)?.recallStates??[]).map(r=>({lastQuality:r.lastQuality,lastReviewedAt:r.lastReviewedAt.toISOString()})),reviews:(byId.get(p.id)?.reviews??[]).map(r=>({quality:r.quality,reviewedAt:r.reviewedAt.toISOString()}))})),logs:[]},picks,day,timingKey:`local:${owner}:${day}`,completed:0,total:picks.length,ratings:{},mix:{practice:picks.filter(p=>p.group==="practice").length,retention:picks.filter(p=>p.group==="retention").length,new:picks.filter(p=>p.group==="new").length}}};
     // Plan and cards are durable before the first review; completion is never inferred here.
+    options?.signal?.throwIfAborted();
     await writeRecords(owner,[{key:"study:daily",value:data},{key:`plan:${day}`,value:plan}]);
     return data;
   }
