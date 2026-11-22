@@ -15,10 +15,10 @@ beforeEach(async()=>{
  blank=await sharp({create:{width:256,height:256,channels:3,background:'black'}}).png().toBuffer();
  valid=await sharp({create:{width:256,height:256,channels:3,background:'white'}}).composite([{input:Buffer.from('<svg width="256" height="256"><circle cx="128" cy="128" r="60" fill="blue"/></svg>')}]).png().toBuffer();
  m.subscribe.mockResolvedValue({data:{images:[{url:'https://provider.test/image'}]}});m.upload.mockResolvedValue({error:null});m.consume.mockResolvedValue({ok:true,source:'credits',amountUsed:5});m.refund.mockResolvedValue(undefined);
- vi.stubGlobal('fetch',vi.fn().mockImplementation(async()=>new Response(blank)));
+ vi.stubGlobal('fetch',vi.fn().mockImplementation(async()=>new Response(Uint8Array.from(blank))));
 });
 it.each(['prompt','card'])('retries one black output and uploads only validated replacement for %s generation',async type=>{
- vi.mocked(fetch).mockResolvedValueOnce(new Response(blank)).mockResolvedValueOnce(new Response(valid));
+ vi.mocked(fetch).mockResolvedValueOnce(new Response(Uint8Array.from(blank))).mockResolvedValueOnce(new Response(Uint8Array.from(valid)));
  const url=type==='prompt'?await generateAndUploadFromPrompt('owner','room'):await generateAndUploadImage('owner','habitación','room');
  expect(url).toContain('valid.png');expect(m.subscribe).toHaveBeenCalledTimes(2);expect(m.upload).toHaveBeenCalledTimes(1);expect(m.upload.mock.calls[0][1].equals(valid)).toBe(true);
 });
@@ -29,11 +29,11 @@ it.each(['credits','monthly'])('refunds %s balance once when both attempts are b
 });
 it('never replaces a valid original with a blank semantic retry',async()=>{
  vi.stubEnv('ANTHROPIC_API_KEY','fixture');m.vision.mockResolvedValueOnce({content:[{type:'text',text:'a room'}]}).mockResolvedValueOnce({content:[{type:'text',text:'BAD: wrong object'}]});
- vi.mocked(fetch).mockResolvedValueOnce(new Response(valid)).mockResolvedValueOnce(new Response(blank));
+ vi.mocked(fetch).mockResolvedValueOnce(new Response(Uint8Array.from(valid))).mockResolvedValueOnce(new Response(Uint8Array.from(blank)));
  await generateAndUploadImage('owner','habitación','room');expect(m.subscribe).toHaveBeenCalledTimes(2);expect(m.upload.mock.calls[0][1].equals(valid)).toBe(true);
 });
 it('shares a two-call ceiling between blank retries and semantic review',async()=>{
  vi.stubEnv('ANTHROPIC_API_KEY','fixture');m.vision.mockResolvedValueOnce({content:[{type:'text',text:'a room'}]}).mockResolvedValueOnce({content:[{type:'text',text:'BAD: wrong object'}]});
- vi.mocked(fetch).mockResolvedValueOnce(new Response(blank)).mockResolvedValueOnce(new Response(valid));
+ vi.mocked(fetch).mockResolvedValueOnce(new Response(Uint8Array.from(blank))).mockResolvedValueOnce(new Response(Uint8Array.from(valid)));
  await generateAndUploadImage('owner','habitación','room');expect(m.subscribe).toHaveBeenCalledTimes(2);
 });
