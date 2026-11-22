@@ -1,3 +1,4 @@
+import { InvalidGeneratedImageError } from "@/lib/image-integrity";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -83,4 +84,13 @@ describe("image worker ownership and cancellation", () => {
     });
     expect(mocks.generate).not.toHaveBeenCalled();
   });
+});
+
+it("refunds and stops automatic queue retries after the bounded blank-image attempts fail", async () => {
+  mocks.generate.mockRejectedValue(new InvalidGeneratedImageError("black output"));
+  const result=await processQueue();
+  expect(result.succeeded).toBe(0);expect(result.failed).toBe(1);
+  expect(mocks.refund).toHaveBeenCalledExactlyOnceWith("owner","credits",5,expect.any(Object));
+  expect(mocks.card.updateMany.mock.calls[1][0].data).toMatchObject({imageGenAttempts:3,imageGenLockedAt:null});
+  expect(mocks.card.updateMany.mock.calls.some(c=>c[0].data.imageUrl)).toBe(false);
 });
