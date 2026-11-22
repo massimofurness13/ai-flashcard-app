@@ -15,3 +15,8 @@ it('allows a fresh successful retry after a timeout',async()=>{
 it('propagates actual failures and clears its timeout',async()=>{
  vi.useFakeTimers();await expect(withQueryDeadline(async()=>{throw Error('offline');},100)).rejects.toThrow('offline');expect(vi.getTimerCount()).toBe(0);
 });
+it('cancels a departed screen even when storage never resolves',async()=>{
+ const controller=new AbortController();let signal!:AbortSignal;
+ const promise=withQueryDeadline(async s=>{signal=s;return new Promise(()=>{});},10000,controller.signal);
+ await Promise.resolve();controller.abort();await expect(promise).rejects.toMatchObject({name:'AbortError'});expect(signal.aborted).toBe(true);
+});
