@@ -53,6 +53,7 @@ export function StudyCountdown({
   onComplete,
 }: StudyCountdownProps) {
   const [count, setCount] = useState(COUNTDOWN_FROM);
+  const [openingPrepared, setOpeningPrepared] = useState(false);
   // Guard so a tap-to-skip + the natural tick-to-zero don't both
   // fire onComplete.
   const doneRef = useRef(false);
@@ -74,19 +75,26 @@ export function StudyCountdown({
 
   // Preload the opening cards' audio once on mount.
   useEffect(() => {
+    let active = true;
     const fallback = fallbackVoiceCodes(learningLanguage);
-    for (const c of cards.slice(0, PRELOAD_COUNT)) {
+    const opening: Promise<boolean>[] = [];
+    for (const [index, c] of cards.slice(0, PRELOAD_COUNT).entries()) {
       const front = c.deck.frontLanguageCode || fallback.front;
       const back = c.deck.backLanguageCode || fallback.back;
-      if (front && c.front) void preloadAudio(c.front, front);
-      if (back && c.back) void preloadAudio(c.back, back);
+      if (front && c.front) { const task = preloadAudio(c.front, front); if (index === 0) opening.push(task); }
+      if (back && c.back) { const task = preloadAudio(c.back, back); if (index === 0) opening.push(task); }
     }
+    // Normally done well inside the existing countdown. A missing file must
+    // never trap offline study; the card exposes its ordinary speaker retry.
+    const deadline = setTimeout(() => { if (active) setOpeningPrepared(true); }, 3500);
+    void Promise.allSettled(opening).then(() => { if (active) setOpeningPrepared(true); });
+    return () => { active = false; clearTimeout(deadline); };
   }, [cards, learningLanguage]);
 
   // Tick down once per second, then finish.
   useEffect(() => {
     if (count <= 0) {
-      finish();
+      if (openingPrepared) finish();
       return;
     }
     const t = setTimeout(() => setCount((c) => c - 1), 1000);
@@ -94,7 +102,7 @@ export function StudyCountdown({
     // finish is stable enough for this purpose; tying it into deps
     // would re-arm the timer on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [count]);
+  }, [count, openingPrepared]);
 
   return (
     <button

@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { prepareAppShell } from "./media-service-worker";
 import { useDeviceAccount } from "./device-provider";
 import { syncSavedArtwork } from "@/lib/artwork-sync";
+import { startDailyAudioSync, syncDailyAudio } from "@/lib/daily-audio-sync";
 import { readRecord } from "@/lib/device-db";
 import { syncLibrary, type LibrarySyncStatus } from "@/lib/library-sync";
 
@@ -15,7 +16,17 @@ export function OfflineStudyProvider() {
   const path = useRef(pathname);
   const [status,setStatus] = useState("");
   const retry = useRef<()=>void>(()=>{});
+  const dailyAudio = useRef<()=>void>(()=>{});
   useEffect(()=>{path.current=pathname;},[pathname]);
+  useEffect(() => {
+    if (!ownerId) return;
+    const worker = startDailyAudioSync(ownerId, { canPrepare: () => source === "session" });
+    dailyAudio.current = worker.kick;
+    return () => { worker.stop(); dailyAudio.current = () => {}; };
+  }, [ownerId, source]);
+  // A delayed, coalesced check discovers a plan saved while opening Study.
+  // Navigation never awaits or cancels the daily audio pass.
+  useEffect(() => { dailyAudio.current(); }, [pathname]);
   useEffect(() => {
     if (!ownerId) return;
     const sync = () => { void syncSavedArtwork(ownerId); };
@@ -49,6 +60,8 @@ export function OfflineStudyProvider() {
       try {
         // Prepare the launch UI independently; one missing audio file must not block it.
         const shell=prepareAppShell();
+        // Prioritise daily media transfers without holding up text/statistics sync.
+        void syncDailyAudio(owner, { canPrepare: () => source === "session" });
         const result=await syncLibrary(owner,report,()=>!cancelled&&!path.current.startsWith("/study/session"));
         const app=await shell;
         if(!app.ready)show("Library saved · app update still waiting to download");

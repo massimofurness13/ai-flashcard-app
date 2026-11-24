@@ -94,3 +94,36 @@ it("finishes only the current card once when media ends", async () => {
   FakeAudio.instance.dispatchEvent(new Event("ended")); FakeAudio.instance.dispatchEvent(new Event("ended"));
   expect(oldEnded).not.toHaveBeenCalled(); expect(newEnded).toHaveBeenCalledTimes(1);
 });
+
+class PreparedContext extends EventTarget {
+  static instance: PreparedContext;state='suspended';destination={};
+  sources:{buffer:unknown;connect:ReturnType<typeof vi.fn>;disconnect:ReturnType<typeof vi.fn>;start:ReturnType<typeof vi.fn>;stop:ReturnType<typeof vi.fn>;onended:null|(()=>void)}[]=[];
+  resume=vi.fn(async()=>{this.state='running';});
+  decodeAudioData=vi.fn(async()=>{const samples=new Float32Array(1000);samples.fill(.1,500);return {duration:1,length:1000,numberOfChannels:1,sampleRate:1000,getChannelData:()=>samples};});
+  constructor(){super();PreparedContext.instance=this;}
+  createBufferSource(){const s={buffer:null as unknown,connect:vi.fn(),disconnect:vi.fn(),start:vi.fn(),stop:vi.fn(),onended:null as null|(()=>void)};this.sources.push(s);return s;}
+}
+it('offline preloaded speech starts from decoded memory without reloading the HTML player',async()=>{
+  vi.stubGlobal('AudioContext',PreparedContext);vi.stubGlobal('navigator',{onLine:false});
+  const media=await import('@/lib/device-media');
+  vi.spyOn(media,'deviceOwner').mockResolvedValue('owner');
+  vi.mocked(media.resolveSavedAudio).mockResolvedValue('https://saved/clip');vi.mocked(media.savedMedia).mockResolvedValue('blob:saved');
+  vi.mocked(fetch).mockResolvedValue(new Response(new Uint8Array([1,2])));
+  tts.unlockAudio();await tts.preloadAudio('hola','es-MX');await flush();
+  const loads=FakeAudio.instance.load.mock.calls.length;
+  const ended=vi.fn(),h=tts.speak('hola',{languageCode:'es-MX'});h.onEnded?.(ended);
+  expect(PreparedContext.instance.sources[0].start).toHaveBeenCalledWith(0,.38);
+  expect(FakeAudio.instance.load).toHaveBeenCalledTimes(loads);
+  expect(fetch).toHaveBeenCalledTimes(1);expect(fetch).toHaveBeenCalledWith('blob:saved',expect.anything());
+  expect(media.downloadMedia).not.toHaveBeenCalled();
+  expect((await import('@/lib/device-db')).writeRecord).not.toHaveBeenCalled();
+  PreparedContext.instance.sources[0].onended!();expect(ended).toHaveBeenCalledTimes(1);
+  vi.restoreAllMocks();
+});
+it('missing offline audio fails promptly without TTS requests or retries',async()=>{
+  vi.stubGlobal('navigator',{onLine:false});const failed=vi.fn();
+  const media=await import('@/lib/device-media');vi.spyOn(media,'deviceOwner').mockResolvedValue('owner');vi.mocked(media.resolveSavedAudio).mockResolvedValue(null);
+  const h=tts.speak('missing',{languageCode:'es-MX'});h.onError?.(failed);await flush();
+  expect(failed).toHaveBeenCalledTimes(1);expect(fetch).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});

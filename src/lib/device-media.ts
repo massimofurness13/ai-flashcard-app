@@ -5,8 +5,10 @@ const blobs = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
 let downloads = 0;
 const waiting: (() => void)[] = [];
+const urgent: (() => void)[] = [];
 let activeOwner: string | null | undefined;
 let mediaGeneration = 0;
+export function currentMediaGeneration() { return mediaGeneration; }
 export function setDeviceOwner(owner: string | null) { activeOwner = owner; }
 export async function deviceOwner(): Promise<string | null> {
   if (activeOwner !== undefined) return activeOwner;
@@ -42,7 +44,7 @@ export async function savedMedia(owner: string, url: string): Promise<string | n
   if (generation !== mediaGeneration) return null;
   return record?.value?.size ? remember(owner, url, record.value) : null;
 }
-export async function downloadMedia(owner: string, url: string, keepInMemory = true): Promise<string> {
+export async function downloadMedia(owner: string, url: string, keepInMemory = true, priority = keepInMemory): Promise<string> {
   const generation = mediaGeneration;
   if (!validMediaUrl(url)) throw new Error("Unsupported media URL.");
   const key = `${owner}:${url}:${keepInMemory ? "play" : "store"}`;
@@ -52,11 +54,13 @@ export async function downloadMedia(owner: string, url: string, keepInMemory = t
     // Bulk sync stores bytes without retaining thousands of blob URLs in RAM.
     const saved = keepInMemory ? await savedMedia(owner, url) : (await savedMediaUrls(owner, [url])).has(url) ? url : null;
     if (saved) return saved;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) throw new Error("This file is not saved offline yet.");
     // Two transfers at a time; don't flood the audio connection pool.
-    if (downloads >= 2) await new Promise<void>(resolve => waiting.push(resolve));
+    if (downloads >= 2) await new Promise<void>(resolve => (priority ? urgent : waiting).push(resolve));
     else downloads++;
     try {
       if (generation !== mediaGeneration) throw new Error("Download cancelled.");
+      if (typeof navigator !== "undefined" && navigator.onLine === false) throw new Error("Download paused offline.");
       const response = await fetch(url, { cache: "force-cache", signal: AbortSignal.timeout(20000) });
       if (!response.ok) throw new Error("A file could not be downloaded.");
       const blob = await response.blob();
@@ -67,7 +71,7 @@ export async function downloadMedia(owner: string, url: string, keepInMemory = t
       if (generation !== mediaGeneration) throw new Error("Download cancelled.");
       return keepInMemory ? remember(owner, url, blob) : url;
     } finally {
-      const next = waiting.shift();
+      const next = urgent.shift() || waiting.shift();
       if (next) next(); // Transfer this slot directly to the next waiting download.
       else downloads--;
     }
