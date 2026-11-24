@@ -8,7 +8,8 @@
 import { audioKey, deviceOwner, downloadMedia, resolveSavedAudio, savedMedia } from "@/lib/device-media";
 import { writeRecord } from "@/lib/device-db";
 import { requestAudioRecording } from "./audio-request";
-import { clearPreparedAudio, isAudioPrepared, prepareAudioBuffer, playPreparedAudio, unlockPreparedAudio } from "./prepared-audio";
+import { getAppActivity, subscribeAppActivity } from "./app-activity";
+import { clearPreparedAudio, ensurePreparedAudioRunning, isAudioPrepared, prepareAudioBuffer, playPreparedAudio, recoverPreparedAudio, unlockPreparedAudio } from "./prepared-audio";
 
 export interface SpeakHandle {
   /** Stop playback immediately. Safe to call multiple times. */
@@ -121,35 +122,18 @@ export function unlockAudio(): void {
   }
 }
 
-// ── Foreground re-unlock ────────────────────────────────────────────
-// Bug: after the app sits idle or the user multitasks away and comes
-// back, the first card's audio is slow / "times out" / won't play.
-// iOS/WebKit suspends the backgrounded <audio> element and can drop the
-// autoplay activation it earned at session start, so the next play()
-// stalls or is silently blocked.
-//
-// Fix: when the page returns to the foreground, re-run the same silent-
-// clip unlock to wake the element and re-assert its autoplay trust —
-// the urlCache and the browser's MP3 cache are untouched, so once the
-// element is live again playback is instant. Installed lazily (only
-// after the first real unlock) so non-audio pages never trigger it.
+// Native app activity and browser visibility share one transition source.
+// Cancel before iOS suspends JS; returning restarts the same visible card via
+// StudySession's activity generation rather than reviving an obsolete source.
 let foregroundReunlockInstalled = false;
 function installForegroundReunlock(): void {
   if (foregroundReunlockInstalled || typeof document === "undefined") return;
   foregroundReunlockInstalled = true;
-  const reunlock = () => {
+  subscribeAppActivity(() => {
     if (!audioEverUnlocked) return;
-    if (document.visibilityState !== "visible") return;
-    unlockPreparedAudio();
-    // Don't interrupt playback that survived the switch — only re-unlock
-    // when the element is idle, which is the suspended-on-return case.
-    if (persistentAudio && !persistentAudio.paused) return;
-    unlockAudio();
-  };
-  document.addEventListener("visibilitychange", reunlock);
-  // pageshow fires on bfcache restore (iOS Safari back-forward cache),
-  // which visibilitychange alone can miss.
-  window.addEventListener("pageshow", reunlock);
+    if (!getAppActivity().active) { cancelAll(); return; }
+    void recoverPreparedAudio();
+  });
 }
 
 // Every utterance owns its callbacks and cancellation. Old React effect
@@ -336,8 +320,16 @@ export function speak(
     }
     (failed ? errors : ended).forEach(cb => cb());
   };
-  const play = (url: string) => {
+  const play = (url: string, resumed = false) => {
     if (!current()) return;
+    if (!resumed && isAudioPrepared(url) && getSettings().ttsSpeed === 1) {
+      // The ordinary running path remains synchronous. An interrupted output
+      // waits for bounded recovery before falling back, never races resume().
+      const ready = playPreparedAudio(url, 1, () => finish(false), () => finish(true));
+      if (ready) { cleanup = ready; return; }
+      void ensurePreparedAudioRunning().then(() => { if (current()) play(url, true); });
+      return;
+    }
     const prepared = playPreparedAudio(url, getSettings().ttsSpeed, () => finish(false), () => finish(true));
     if (prepared) { cleanup = prepared; return; }
     const audio = getPersistentAudio();

@@ -127,3 +127,23 @@ it('missing offline audio fails promptly without TTS requests or retries',async(
   expect(failed).toHaveBeenCalledTimes(1);expect(fetch).not.toHaveBeenCalled();
   vi.restoreAllMocks();
 });
+it('backgrounding cancels HTML speech without reporting a review completion',async()=>{
+ await warm();const ended=vi.fn(),failed=vi.fn();const h=tts.speak('hello',{languageCode:'en-GB-m'});h.onEnded?.(ended);h.onError?.(failed);
+ Object.assign(document,{visibilityState:'hidden'});document.dispatchEvent(new Event('visibilitychange'));
+ expect(FakeAudio.instance.paused).toBe(true);await vi.advanceTimersByTimeAsync(20000);
+ FakeAudio.instance.dispatchEvent(new Event('ended'));expect(ended).not.toHaveBeenCalled();expect(failed).not.toHaveBeenCalled();
+});
+it('a cancelled delayed resume cannot restart the old card or fall back to HTML',async()=>{
+ vi.stubGlobal('AudioContext',PreparedContext);vi.stubGlobal('navigator',{onLine:false});
+ const media=await import('@/lib/device-media');vi.spyOn(media,'deviceOwner').mockResolvedValue('owner');
+ vi.mocked(media.resolveSavedAudio).mockResolvedValue('https://saved/clip');vi.mocked(media.savedMedia).mockResolvedValue('blob:saved');
+ vi.mocked(fetch).mockResolvedValue(new Response(new Uint8Array([1,2])));
+ tts.unlockAudio();await tts.preloadAudio('hola','es-MX');await flush();
+ const ctx=PreparedContext.instance;ctx.state='interrupted';let resume!:()=>void;
+ ctx.resume.mockImplementationOnce(()=>new Promise<void>(resolve=>{resume=()=>{ctx.state='running';resolve();};}));
+ const loads=FakeAudio.instance.load.mock.calls.length;
+ const old=tts.speak('hola',{languageCode:'es-MX'});old.cancel();resume();await flush();
+ expect(ctx.sources).toHaveLength(0);expect(FakeAudio.instance.load).toHaveBeenCalledTimes(loads);
+ tts.speak('hola',{languageCode:'es-MX'});expect(ctx.sources).toHaveLength(1);
+ vi.restoreAllMocks();
+});

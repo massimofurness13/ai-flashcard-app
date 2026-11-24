@@ -203,3 +203,33 @@ not physical speaker latency. The sample offsets were 300ms and 600ms. The
 fixture also exercises suspended-context recovery, rapid cancellation and timed
 flip/advance. See scripts/native-tests/prepared-audio.js. Only synthetic study
 records were used; no learner audio, reviews or credits were modified.
+
+### Build 15 — returning from another app (24 November 2026)
+
+Native app activity and browser visibility now share one transition store.
+Leaving cancels interrupted speech without reporting a completed recording,
+pauses timers, and retains card/session position. On return, the output resumes
+asynchronously; a stopped render clock triggers bounded output replacement
+without discarding decoded recordings. Concurrent recovery is serialized and
+account-reset guards cover late resume results. Flips/next card still use the
+synchronous prepared-buffer path once recovery finishes.
+
+A fully heard current side stays silent on return. An interrupted side can retry;
+an explicit pause stays paused. Flipping back and forth always starts the newly
+visible side, even if heard previously. Countdown callbacks reject old activity
+generations and resume with their remaining time instead of advancing in the
+background. Completed speech does not replay over a resumed countdown.
+
+Validation: 1,010 unit tests, TypeScript and targeted lint passed. The actual iOS
+simulator app was switched to Settings for 16 seconds three times with all network
+requests blocked, using saved MP3s for “Quisiera un vaso de agua.” / “I would like
+a glass of water.” Completed-side silence, closed-output recovery, both flip
+directions, next-card playback and explicit pause passed. Flip-to-nonzero PCM
+output measured 72–123ms; this is not physical iPhone speaker latency. Only a
+synthetic account was used; no learner reviews or credits were changed.
+
+Reproduce with `make-audio-return-fixture.mjs OUT FRONT_MP3 BACK_MP3`, launch a
+separate DEBUG simulator bundle with `HUELLA_OFFLINE_FIXTURE=OUT`, and read
+`qa:audio-return` in its native records. At each `background-*` phase switch to
+Settings, wait 16 seconds, then return without tapping the card. The fixture
+records output samples, network attempts and a final passed/failed result.

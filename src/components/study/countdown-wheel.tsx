@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { getAppActivity } from "@/lib/app-activity";
+import { useAppActivity } from "@/hooks/use-app-activity";
 
 interface CountdownWheelProps {
   /** Total duration of the countdown in seconds. */
@@ -39,6 +41,7 @@ export function CountdownWheel({
   className,
 }: CountdownWheelProps) {
   const [elapsed, setElapsed] = useState(0);
+  const activity = useAppActivity();
 
   // Latest onComplete in a ref so we don't restart the timer when the
   // parent passes a new arrow function.
@@ -65,8 +68,13 @@ export function CountdownWheel({
     if (!active) return;
     const headStart = elapsed;
     const startedAt = Date.now();
+    const activityGeneration = getAppActivity().generation;
     let fired = false;
     const id = setInterval(() => {
+      // A queued tick can run before React commits the foreground transition.
+      // Never let that old countdown flip/rate the newly replaying card.
+      const activity = getAppActivity();
+      if (!activity.active || activity.generation !== activityGeneration) { clearInterval(id); return; }
       const total = headStart + (Date.now() - startedAt) / 1000;
       const next = Math.min(total, seconds);
       setElapsed(next);
@@ -81,7 +89,7 @@ export function CountdownWheel({
     // captured at effect start. Including it would restart the timer
     // every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, runId, seconds]);
+  }, [active, runId, seconds, activity.generation]);
 
   const remaining = Math.max(0, seconds - elapsed);
   const offset = CIRC * Math.min(1, elapsed / seconds);
