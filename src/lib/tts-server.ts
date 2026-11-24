@@ -117,7 +117,8 @@ function getGoogleClient() {
 async function generateGoogle(
   text: string,
   voiceName: string,
-  languageCode: string
+  languageCode: string,
+  strictVoice = false
 ): Promise<Buffer> {
   const client = getGoogleClient();
   try {
@@ -136,7 +137,7 @@ async function generateGoogle(
     // catalog entry from bricking an entire language.
     const msg = err instanceof Error ? err.message : String(err);
     const isVoiceMissing = /does not exist|not found|INVALID_ARGUMENT/i.test(msg);
-    if (!isVoiceMissing) throw err;
+    if (strictVoice || !isVoiceMissing) throw err;
 
     console.warn(
       `Google TTS voice "${voiceName}" unavailable; falling back to default voice for ${languageCode}`
@@ -179,7 +180,8 @@ export async function listGoogleVoices(
  */
 export async function getOrCreateAudioUrl(
   text: string,
-  entry: VoiceEntry
+  entry: VoiceEntry,
+  options: {strictVoice?: boolean} = {}
 ): Promise<string> {
   const voice = resolveVoice(entry);
   const hash = cacheKey(text, voice);
@@ -190,7 +192,8 @@ export async function getOrCreateAudioUrl(
   const mp3 = await generateGoogle(
     text,
     voice.voiceName,
-    voice.languageCode
+    voice.languageCode,
+    options.strictVoice
   );
 
   return uploadAudio(path, mp3);
