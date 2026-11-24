@@ -1,38 +1,14 @@
-/**
- * Client TTS. The ONLY voice path is the server API (`/api/tts`)
- * which returns a cached Supabase MP3 URL produced by Google Cloud
- * TTS (native-speaker Chirp 3 HD voices).
- *
- * We deliberately do NOT use the browser's Web Speech API as a
- * fallback anymore. Product decision (user feedback): the robotic
- * device voice is never acceptable. If a clip can't be produced via
- * Google (no language code, network failure), we stay SILENT and
- * report a playback error. The learner can retry without the timer
- * treating silence as a completed recording.
- *
- * ── Autoplay trust (the reason for the single persistent element) ──
- * Browsers grant autoplay permission per-<audio>-element after that
- * element has been play()'d inside a user gesture once. A study
- * session auto-plays each card's audio from a useEffect — NOT a
- * gesture — so it only works if we reuse the SAME element that
- * earned trust from the first tap. Creating a fresh Audio() per
- * clip (or a pool of them) loses that trust and the browser
- * silently blocks auto-play. We learned this twice: once with the
- * per-card `new Audio()`, and again with a short-lived pre-decode
- * pool. Hence: exactly one module-level element, src swapped per
- * clip.
- *
- * ── Latency ────────────────────────────────────────────────────────
- * The VoicePreloader warms two caches for upcoming clips:
- *   1. urlCache — (text+lang) → Supabase URL, so speak() skips the
- *      /api/tts round trip.
- *   2. Browser HTTP cache — the MP3 bytes, so the <audio> element's
- *      fetch is instant. Only the MP3→PCM decode remains (~30-80ms),
- *      which is the unavoidable tax of the single-element approach.
+/** Google TTS recordings are saved on the device. Upcoming clips are decoded
+ * into a bounded PCM cache and share one unlocked AudioContext, so normal-speed
+ * flips schedule sound without reloading a media element. The single trusted
+ * HTML element remains the compatibility/pitch-preserving speed fallback.
+ * Missing audio is an error, never a successful recording for study timers.
  */
 
 import { audioKey, deviceOwner, downloadMedia, resolveSavedAudio, savedMedia } from "@/lib/device-media";
 import { writeRecord } from "@/lib/device-db";
+import { requestAudioRecording } from "./audio-request";
+import { clearPreparedAudio, isAudioPrepared, prepareAudioBuffer, playPreparedAudio, unlockPreparedAudio } from "./prepared-audio";
 
 export interface SpeakHandle {
   /** Stop playback immediately. Safe to call multiple times. */
@@ -115,6 +91,7 @@ let audioEverUnlocked = false;
 
 export function unlockAudio(): void {
   if (typeof window === "undefined") return;
+  unlockPreparedAudio();
   try {
     if (activeSpeech) return;
     const unlock = ++playbackGeneration;
@@ -163,6 +140,7 @@ function installForegroundReunlock(): void {
   const reunlock = () => {
     if (!audioEverUnlocked) return;
     if (document.visibilityState !== "visible") return;
+    unlockPreparedAudio();
     // Don't interrupt playback that survived the switch — only re-unlock
     // when the element is idle, which is the suspended-on-return case.
     if (persistentAudio && !persistentAudio.paused) return;
@@ -194,7 +172,9 @@ export function getCachedAudioUrl(
   text: string,
   languageCode: string,
 ): string | null {
-  return urlCache.get(cacheKey(text, languageCode)) ?? null;
+  const url = urlCache.get(cacheKey(text, languageCode));
+  if (url && !url.startsWith("blob:") && typeof navigator !== "undefined" && navigator.onLine === false) return null;
+  return url ?? null;
 }
 
 // ── In-flight generation dedupe ─────────────────────────────────────
@@ -219,24 +199,32 @@ function resolveAudioUrl(
   const key = cacheKey(text, languageCode);
   const generation = audioGeneration;
   const cached = urlCache.get(key);
-  if (cached) return Promise.resolve(cached);
+  if (cached && (cached.startsWith("blob:") || typeof navigator === "undefined" || navigator.onLine !== false)) return Promise.resolve(cached);
   const existing = inFlight.get(key);
   if (existing) return existing;
 
   const p = (async () => {
     const owner = await deviceOwner().catch(() => null);
     const persisted = owner ? await resolveSavedAudio(owner, text, languageCode).catch(() => null) : null;
+    // Read before any write/download: a saved file needs neither a credential
+    // refresh nor a second SQLite write to start playing.
+    if (owner && persisted) {
+      const local = await savedMedia(owner, persisted).catch(() => null);
+      if (generation !== audioGeneration) return null;
+      if (local) { urlCache.set(key, local); return local; }
+    }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
     const url = persisted || await fetchAudioUrl(text, languageCode);
     if (generation !== audioGeneration) return null;
     if (url) {
       if (owner) {
-        await writeRecord(owner, audioKey(text, languageCode), url).catch(() => {});
-        const local = await savedMedia(owner, url).catch(() => null)
-          || await downloadMedia(owner, url).catch(() => null);
+        if (!persisted) await writeRecord(owner, audioKey(text, languageCode), url).catch(() => {});
+        const local = await downloadMedia(owner, url).catch(() => null);
         if (generation !== audioGeneration) return null;
         if (local) { urlCache.set(key, local); return local; }
       }
-      urlCache.set(key, url);
+      if (!owner) urlCache.set(key, url);
+      // A failed download remains retryable; don't cache a remote URL as ready.
     }
     return url;
   })().finally(() => {
@@ -246,23 +234,13 @@ function resolveAudioUrl(
   return p;
 }
 
-/**
- * Preload the audio for a (text, language) pair so the eventual play()
- * is instant. Goes through resolveAudioUrl() so it shares one request
- * per clip with everything else (the flip, other preloads).
- *
- * Fire-and-forget — exceptions are swallowed.
- *
- * NOTE: we intentionally do NOT pre-create <audio> elements here.
- * That was tried (a pre-decode pool) and broke autoplay — see the
- * file header. Warming the URL + HTTP cache is the safe optimisation.
- */
-export async function preloadAudio(
-  text: string,
-  languageCode: string,
-): Promise<void> {
-  if (!text || !text.trim() || !languageCode) return;
-  await resolveAudioUrl(text, languageCode).catch(() => null);
+/** Load saved bytes and decode ahead. Failure is not retained as readiness. */
+export async function preloadAudio(text: string, languageCode: string): Promise<boolean> {
+  if (!text.trim() || !languageCode) return false;
+  const url = await resolveAudioUrl(text, languageCode).catch(() => null);
+  if (!url) return false;
+  if (typeof AudioContext === "undefined") return true;
+  return prepareAudioBuffer(url);
 }
 
 // Default TTS playback speed. 1.0 = broadcast standard, matches the
@@ -294,19 +272,7 @@ async function fetchAudioUrlOnce(
   text: string,
   languageCode: string,
 ): Promise<string | null> {
-  try {
-    const res = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, languageCode }),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { audioUrl?: string };
-    return data.audioUrl ?? null;
-  } catch {
-    return null;
-  }
+  return (await requestAudioRecording(text, languageCode)).audioUrl;
 }
 
 /**
@@ -318,9 +284,11 @@ async function fetchAudioUrl(
   text: string,
   languageCode: string,
 ): Promise<string | null> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
   const first = await fetchAudioUrlOnce(text, languageCode);
   if (first) return first;
   await new Promise((r) => setTimeout(r, 350));
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
   return fetchAudioUrlOnce(text, languageCode);
 }
 
@@ -333,6 +301,9 @@ export function speak(
   options: { languageCode?: string | null; voiceName?: string | null } = {},
 ): SpeakHandle {
   cancelAll();
+  unlockPreparedAudio();
+  audioEverUnlocked = true;
+  installForegroundReunlock();
   const generation = playbackGeneration;
   const ended: (() => void)[] = [], errors: (() => void)[] = [];
   let cancelled = false, settled = false, attempt = 0;
@@ -367,6 +338,8 @@ export function speak(
   };
   const play = (url: string) => {
     if (!current()) return;
+    const prepared = playPreparedAudio(url, getSettings().ttsSpeed, () => finish(false), () => finish(true));
+    if (prepared) { cleanup = prepared; return; }
     const audio = getPersistentAudio();
     const thisAttempt = ++attempt;
     let failed = false;
@@ -410,12 +383,13 @@ export function speak(
     return handle;
   }
   const cached = getCachedAudioUrl(text, languageCode);
-  if (cached) play(cached);
+  if (cached && (!cached.startsWith("blob:") || isAudioPrepared(cached) || typeof AudioContext === "undefined")) play(cached);
   else {
-    void resolveAudioUrl(text, languageCode).then(url => {
+    void (cached ? Promise.resolve(cached) : resolveAudioUrl(text, languageCode)).then(async url => {
       if (!current()) return;
-      if (url) play(url);
-      else finish(true);
+      if (!url) { finish(true); return; }
+      await prepareAudioBuffer(url);
+      if (current()) play(url);
     }, () => finish(true));
   }
   return handle;
@@ -428,6 +402,7 @@ export function stopSpeaking() {
 export function clearAudioMemory() {
   audioGeneration++;
   cancelAll();
+  clearPreparedAudio();
   urlCache.clear();
   inFlight.clear();
 }

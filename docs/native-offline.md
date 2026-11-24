@@ -168,3 +168,38 @@ image display, then repeats after a full app restart with networking disabled.
 It records layout measurements on both card faces. Synthetic identity only;
 native HTTP is intercepted as well as browser fetch. Unit coverage checks daily
 priority, duplicates, retry, account boundaries and artwork preceding slow TTS.
+
+
+### Build 14 — prepared offline audio (24 November 2026)
+
+Normal 1x speech now uses one gesture-unlocked AudioContext and a bounded cache
+of decoded local recordings (32 clips / 24 MiB). Repeated flips schedule the
+existing buffer directly; no per-card HTML media reload or MP3 decode. Custom
+playback speeds retain the pitch-preserving HTML fallback, and unsupported or
+blocked Web Audio uses that same trusted fallback. The app configures playback
+rather than ringer-muted audio. Foregrounding resumes the output without
+throwing away prepared buffers. Cancellation is not an ended recording.
+
+Leading quiet audio is skipped non-destructively during prepared playback.
+The energy detector requires 20ms of sustained energy, retains 120ms before
+it, skips adjustments under 80ms and never searches past 1.5 seconds. Uniformly
+quiet clips are kept intact. This is a conservative heuristic, not exact speech
+recognition; the original MP3s remain available for adjustment without regeneration.
+
+The countdown prepares both sides of the first card, with a bounded 3.5-second
+ceiling and an immediate skip control; missing audio cannot trap study. Lookahead
+retries failed/evicted buffers and wakes on reconnect/foreground. Missing offline
+files fail promptly instead of attempting TTS/network retries. Preparation and
+background daily audio share in-flight TTS requests. Daily audio downloads both
+sides of the saved set automatically, continues while studying, prioritises its
+media transfers, and never delays library metadata or navigation. Resetting
+media cancels the old pass; account boundaries and pending reviews are preserved.
+
+Validation: 996 unit tests, TypeScript and targeted lint; isolated iOS simulator
+using real cached MP3 bytes with all network calls blocked. Both recordings
+were decoded once; six manual flips scheduled prepared audio in 1–8ms with zero
+HTML reloads and zero network calls. These are software scheduling measurements,
+not physical speaker latency. The sample offsets were 300ms and 600ms. The
+fixture also exercises suspended-context recovery, rapid cancellation and timed
+flip/advance. See scripts/native-tests/prepared-audio.js. Only synthetic study
+records were used; no learner audio, reviews or credits were modified.
