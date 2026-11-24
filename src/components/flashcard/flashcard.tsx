@@ -26,6 +26,8 @@ interface FlashcardProps {
   /** When true, the visible side's text auto-plays via TTS each time
    * the card appears or flips. Study/Review use this; the edit form does not. */
   autoPlayVoice?: boolean;
+  /** Retries interrupted speech on return; a fully heard side stays quiet. */
+  replayToken?: number;
   /** Fires only when the TTS clip finishes successfully. Study session
    *  uses this to start the
    *  auto-advance countdown — so the timer never overlaps with the
@@ -62,6 +64,7 @@ export function Flashcard({
   frontLanguageCode,
   backLanguageCode,
   autoPlayVoice = false,
+  replayToken = 0,
   onAudioEnd,
   paused = false,
   isPro = true,
@@ -92,21 +95,27 @@ export function Flashcard({
 
   const [failedAudio, setFailedAudio] = useState<string | null>(null);
   const audioKey = JSON.stringify([isFlipped, front, back, frontLanguageCode, backLanguageCode]);
+  const lastPlayback = useRef<{key: string; finished: boolean} | null>(null);
 
   // Capture this side's completion callback. Cleanup is cancellation, not a
   // completed recording: it must never start the next side's countdown.
   useEffect(() => {
     if (!autoPlayVoice) return;
     if (paused) return;
+    // Returning to an already-heard side is silent. Flipping changes the key,
+    // so either direction still plays again; an interrupted clip can retry.
+    if (lastPlayback.current?.key === audioKey && lastPlayback.current.finished) return;
+    const attempt = {key: audioKey, finished: false};
+    lastPlayback.current = attempt;
     const text = isFlipped ? back : front;
     const voice = isFlipped ? backVoice : frontVoice;
     const lang = isFlipped ? backLanguageCode : frontLanguageCode;
     const onEnd = onAudioEndRef.current;
     const handle = speakText(text, { languageCode: lang, voiceName: voice });
-    handle.onEnded?.(() => { setFailedAudio(null); onEnd?.(); });
+    handle.onEnded?.(() => { attempt.finished = true; setFailedAudio(null); onEnd?.(); });
     handle.onError?.(() => setFailedAudio(audioKey));
     return () => handle.cancel();
-  }, [autoPlayVoice, paused, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode, audioKey]);
+  }, [autoPlayVoice, paused, isFlipped, front, back, frontVoice, backVoice, frontLanguageCode, backLanguageCode, audioKey, replayToken]);
 
   return (
     // Study sessions supply a viewport-sized height; other surfaces keep 520px.
@@ -177,7 +186,7 @@ export function Flashcard({
       <VoiceButton
         key={audioKey}
         failed={failedAudio === audioKey}
-        onPlaybackEnd={() => { setFailedAudio(null); onAudioEndRef.current?.(); }}
+        onPlaybackEnd={() => { lastPlayback.current = {key: audioKey, finished: true}; setFailedAudio(null); onAudioEndRef.current?.(); }}
         onPlaybackError={() => setFailedAudio(audioKey)}
         text={isFlipped ? back : front}
         languageCode={isFlipped ? backLanguageCode : frontLanguageCode}

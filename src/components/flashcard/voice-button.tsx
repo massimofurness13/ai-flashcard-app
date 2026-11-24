@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { subscribeAppActivity } from "@/lib/app-activity";
 import { Button } from "@/components/ui/button";
 import { speak, type SpeakHandle } from "@/lib/tts";
 
@@ -57,7 +58,12 @@ export function VoiceButton({
   }, [text, languageCode, voiceName, speaking, onPlaybackEnd, onPlaybackError]);
 
   useEffect(() => {
-    return () => handleRef.current?.cancel();
+    const unsubscribe = subscribeAppActivity(() => {
+      handleRef.current?.cancel();
+      handleRef.current = null;
+      setSpeaking(false);
+    });
+    return () => { unsubscribe(); handleRef.current?.cancel(); };
   }, []);
 
   if (typeof window === "undefined") return null;

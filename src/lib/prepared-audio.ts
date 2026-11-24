@@ -9,6 +9,9 @@ const MAX_BYTES = 24 * 1024 * 1024;
 const MAX_CLIPS = 32;
 let bytes = 0, epoch = 0;
 let context: AudioContext | undefined;
+let waking: Promise<boolean> | undefined;
+let recovering: Promise<boolean> | undefined;
+let healthy = true;
 function audioContext(): AudioContext | undefined {
   if (typeof window === "undefined" || typeof AudioContext === "undefined") return;
   if (!context || context.state === "closed") {
@@ -22,13 +25,62 @@ function audioContext(): AudioContext | undefined {
   return context;
 }
 
-/** Call inside the Start/tap gesture; also safe when returning to foreground. */
-export function unlockPreparedAudio() {
+async function resumeOutput(ctx: AudioContext): Promise<boolean> {
+  if (ctx.state === "running") return true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      ctx.resume().then(() => ctx.state === "running"),
+      new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), 500); }),
+    ]);
+  } catch { return false; }
+  finally { clearTimeout(timer); }
+}
+
+/** Await iOS's asynchronous resume before choosing the compatibility player. */
+export function ensurePreparedAudioRunning(): Promise<boolean> {
+  if (waking) return waking;
   try {
     const ctx = audioContext();
-    if (!ctx || ctx.state === "running") return;
-    void ctx.resume().catch(() => {});
-  } catch { /* The persistent HTML player remains the fallback. */ }
+    if (!ctx || !healthy) return Promise.resolve(false);
+    if (ctx.state === "running") return Promise.resolve(true);
+    const task = resumeOutput(ctx).finally(() => { if (waking === task) waking = undefined; });
+    waking = task; return task;
+  } catch { return Promise.resolve(false); }
+}
+
+/** Call synchronously inside Start/retry gestures to request activation. */
+export function unlockPreparedAudio() { void (healthy ? ensurePreparedAudioRunning() : recoverPreparedAudio()); }
+
+/** Foreground recovery includes WebKit's interrupted/closed and frozen-running
+ * states. Recreate a broken OUTPUT only; decoded recordings remain reusable.
+ * The caller cancels the interrupted source before starting this operation.
+ */
+export function recoverPreparedAudio(): Promise<boolean> {
+  if (recovering) return recovering;
+  const generation = epoch;
+  const task = (async () => {
+    let ctx = audioContext(); if (!ctx) return false;
+    if (await resumeOutput(ctx)) {
+      const before = ctx.currentTime;
+      await new Promise(resolve => setTimeout(resolve, 60));
+      if (generation !== epoch) return false;
+      if (ctx.state === "running" && ctx.currentTime > before) { healthy = true; return true; }
+    }
+    if (generation !== epoch) return false;
+    // iOS can report running while its render clock is still stopped.
+    const old = ctx; context = undefined;
+    void old.close().catch(() => {});
+    ctx = audioContext();
+    const resumed = !!ctx && await resumeOutput(ctx);
+    if (generation !== epoch) return false;
+    healthy = resumed;
+    return healthy;
+  })().catch(() => { if (generation === epoch) healthy = false; return false; }).finally(() => {
+    if (waking === task) waking = undefined;
+    if (recovering === task) recovering = undefined;
+  });
+  recovering = task; waking = task; return task;
 }
 
 export function isAudioPrepared(url: string): boolean { return clips.has(url); }
@@ -71,7 +123,7 @@ export function prepareAudioBuffer(url: string): Promise<boolean> {
  */
 export function playPreparedAudio(url: string, rate: number, ended: () => void, failed: () => void): (() => void) | null {
   const clip = clips.get(url), ctx = context;
-  if (!clip || !ctx || ctx.state !== "running" || rate !== 1) return null;
+  if (!clip || !ctx || waking || !healthy || ctx.state !== "running" || rate !== 1) return null;
   clips.delete(url); clips.set(url, clip);
   let stopped = false;
   let source: AudioBufferSourceNode;
@@ -85,7 +137,7 @@ export function playPreparedAudio(url: string, rate: number, ended: () => void, 
   const onState = () => {
     // iOS may interrupt the context when switching apps. Wake it on return;
     // the duration deadline still bounds a recording that never resumes.
-    if (ctx.state === "suspended" && typeof document !== "undefined" && document.visibilityState === "visible") unlockPreparedAudio();
+    if (ctx.state !== "running" && typeof document !== "undefined" && document.visibilityState === "visible") unlockPreparedAudio();
   };
   const deadline = setTimeout(() => { if (!stopped) { stop(); failed(); } }, (clip.buffer.duration - clip.offset) * 1000 + 8000);
   ctx.addEventListener("statechange", onState);
@@ -97,6 +149,7 @@ export function playPreparedAudio(url: string, rate: number, ended: () => void, 
 
 export function clearPreparedAudio() {
   epoch++; clips.clear(); pending.clear(); bytes = 0;
+  waking = undefined; recovering = undefined; healthy = true;
   // Keep the same unlocked context across SPA navigation/account switches.
   // The caller cancels active speech before clearing account-owned buffers.
 }

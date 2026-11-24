@@ -31,3 +31,44 @@ it('account reset discards late decoded buffers',async()=>{player.unlockPrepared
 it('bounds memory and rereads an evicted clip',async()=>{player.unlockPreparedAudio();Context.instance.buffer=pcm(0,.1,1000);for(let i=0;i<9;i++)await player.prepareAudioBuffer('blob:'+i);expect(player.isAudioPrepared('blob:0')).toBe(false);expect(player.isAudioPrepared('blob:8')).toBe(true);});
 it('resumes a suspended output without discarding prepared recordings',async()=>{player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');Context.instance.state='suspended';player.unlockPreparedAudio();expect(Context.instance.state).toBe('running');expect(player.isAudioPrepared('blob:one')).toBe(true);});
 it('reports an interrupted recording that never ends without counting it as heard',async()=>{player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');const ended=vi.fn(),failed=vi.fn();player.playPreparedAudio('blob:one',1,ended,failed);await vi.advanceTimersByTimeAsync(10000);expect(failed).toHaveBeenCalledTimes(1);expect(ended).not.toHaveBeenCalled();});
+it('waits for delayed interrupted-state resume without dropping prepared buffers',async()=>{
+ player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');
+ Context.instance.state='interrupted';let resume!:()=>void;
+ Context.instance.resume.mockImplementationOnce(()=>new Promise<void>(resolve=>{resume=()=>{Context.instance.state='running';resolve();};}));
+ const ready=player.ensurePreparedAudioRunning();expect(player.playPreparedAudio('blob:one',1,vi.fn(),vi.fn())).toBeNull();
+ resume();expect(await ready).toBe(true);expect(player.playPreparedAudio('blob:one',1,vi.fn(),vi.fn())).not.toBeNull();
+});
+it('bounds a never-settling resume instead of hanging playback forever',async()=>{
+ player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');Context.instance.state='interrupted';Context.instance.resume.mockImplementationOnce(()=>new Promise(()=>{}));
+ const ready=player.ensurePreparedAudioRunning();await vi.advanceTimersByTimeAsync(501);expect(await ready).toBe(false);
+});
+it('replaces a frozen output on foreground while keeping decoded recordings',async()=>{
+ player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');const old=Context.instance;
+ Object.assign(old,{currentTime:0,close:vi.fn(async()=>{old.state='closed';})});
+ const recovering=player.recoverPreparedAudio();await vi.advanceTimersByTimeAsync(61);expect(await recovering).toBe(true);
+ expect(Context.instance).not.toBe(old);expect(player.isAudioPrepared('blob:one')).toBe(true);expect(player.playPreparedAudio('blob:one',1,vi.fn(),vi.fn())).not.toBeNull();expect(fetch).toHaveBeenCalledTimes(1);
+});
+it('keeps a healthy advancing context on foreground',async()=>{
+ player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');const old=Context.instance;
+ Object.defineProperty(old,'currentTime',{get:()=>Date.now()/1000});const recovering=player.recoverPreparedAudio();await vi.advanceTimersByTimeAsync(61);expect(await recovering).toBe(true);expect(Context.instance).toBe(old);
+});
+it('a reset prevents a late foreground recovery from replacing the new output',async()=>{
+ player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');const old=Context.instance;Object.assign(old,{currentTime:0,close:vi.fn()});
+ const recovering=player.recoverPreparedAudio();player.clearPreparedAudio();await vi.advanceTimersByTimeAsync(61);expect(await recovering).toBe(false);expect(Context.instance).toBe(old);expect(player.isAudioPrepared('blob:one')).toBe(false);
+});
+it('deduplicates simultaneous foreground recovery requests',async()=>{
+ player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');
+ Object.defineProperty(Context.instance,'currentTime',{get:()=>Date.now()/1000});
+ const a=player.recoverPreparedAudio(),b=player.recoverPreparedAudio();expect(a).toBe(b);
+ await vi.advanceTimersByTimeAsync(61);expect(await a).toBe(true);
+});
+it('reset during replacement resume ignores the obsolete recovery result',async()=>{
+ player.unlockPreparedAudio();await player.prepareAudioBuffer('blob:one');const old=Context.instance;
+ Object.assign(old,{currentTime:0,close:vi.fn(async()=>{old.state='closed';})});
+ let done!:()=>void;
+ class SlowReplacement extends Context { resume=vi.fn(()=>new Promise<void>(resolve=>{done=resolve;})); }
+ vi.stubGlobal('AudioContext',SlowReplacement);
+ const recovering=player.recoverPreparedAudio();await vi.advanceTimersByTimeAsync(61);
+ player.clearPreparedAudio();done();expect(await recovering).toBe(false);
+ Context.instance.state='running';expect(await player.ensurePreparedAudioRunning()).toBe(true);
+});

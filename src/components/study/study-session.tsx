@@ -1,4 +1,5 @@
 "use client";
+import { useAppActivity } from "@/hooks/use-app-activity";
 import { useStudyViewport } from "@/hooks/use-study-viewport";
 import { useStudyClock } from "@/hooks/use-study-clock";
 import { checkpointKey } from "@/lib/offline-study";
@@ -131,6 +132,7 @@ export function StudySession({
   initialFlipped = false,
   progressOffset = 0,
 }: StudySessionProps) {
+  const activity = useAppActivity();
   const viewportRef = useRef<HTMLDivElement>(null);
   useStudyViewport(viewportRef);
   const pathname = usePathname();
@@ -159,7 +161,7 @@ export function StudySession({
   // User-facing pause: freezes the countdown wheel and cancels any
   // in-flight audio. Resume picks up from the same offset.
   const [isPaused, setIsPaused] = useState(false);
-  const { stop: stopClock, reviewed: timeReview, undoReviewed: undoTimeReview } = useStudyClock(isPaused || completed, timingKey,
+  const { stop: stopClock, reviewed: timeReview, undoReviewed: undoTimeReview } = useStudyClock(isPaused || completed || !activity.active, timingKey,
     { elapsedMs: initialStats?.elapsedMs ?? 0, timedCards: initialStats?.timedCards ?? 0 });
   const [stats, setStats] = useState<StudyStats>(
     () =>
@@ -516,7 +518,8 @@ export function StudySession({
                 : effBack(currentCard.deck.backLanguageCode)
             }
             autoPlayVoice
-            paused={isPaused || completed || undoing}
+            replayToken={activity.generation}
+            paused={isPaused || completed || undoing || !activity.active}
             onAudioEnd={() => setLastAudioKey(currentAudioKey)}
           />
         </div>
@@ -534,10 +537,10 @@ export function StudySession({
             <CountdownWheel
               seconds={autoFlipSeconds}
               runId={`flip:${currentCard.id}`}
-              active={audioFinished && !isPaused && !completed && !undoing}
+              active={activity.active && audioFinished && !isPaused && !completed && !undoing}
               onComplete={() => setIsFlipped(true)}
             />
-            <PauseToggle paused={isPaused || completed || undoing} onToggle={() => setIsPaused((p) => !p)} />
+            <PauseToggle paused={isPaused || completed || undoing || !activity.active} onToggle={() => setIsPaused((p) => !p)} />
           </div>
         )}
 
@@ -555,10 +558,10 @@ export function StudySession({
             <CountdownWheel
               seconds={autoAdvanceSeconds}
               runId={`adv:${currentCard.id}`}
-              active={audioFinished && !isPaused && !completed && !undoing}
+              active={activity.active && audioFinished && !isPaused && !completed && !undoing}
               onComplete={handleCountdownComplete}
             />
-            <PauseToggle paused={isPaused || completed || undoing} onToggle={() => setIsPaused((p) => !p)} />
+            <PauseToggle paused={isPaused || completed || undoing || !activity.active} onToggle={() => setIsPaused((p) => !p)} />
           </div>
         )}
       </div>
