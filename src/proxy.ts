@@ -1,7 +1,9 @@
-import { type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function proxy(request: NextRequest) {
+  // This exact endpoint verifies its own body-bound server signature.
+  if(request.nextUrl.pathname === "/api/tts/dele") return NextResponse.next();
   return await updateSession(request);
 }
 
