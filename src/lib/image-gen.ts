@@ -18,7 +18,7 @@ export type ImageTier = "quick" | "premium";
  *     sensory) and biases toward characters over static objects.
  *
  * V2: pushes harder on caricature, outrageous-in-service-of-meaning,
- *     and stylistic anchors. Designed for Premium (FLUX dev, 28 steps)
+ *     and stylistic anchors. Designed for Premium (FLUX.2 Dev)
  *     which can render the extra complexity coherently.
  *
  * Default routing: Premium → v2, Quick → v1.
@@ -427,10 +427,15 @@ async function generateViaFal(
   fal.config({ credentials: apiKey });
 
   const quick = tier === "quick";
-  const endpoint = quick ? "fal-ai/flux-2/klein/9b" : "fal-ai/flux/dev";
-  const input = quick
-    ? { prompt, image_size: { width: 768, height: 768 }, num_images: 1, output_format: "png", enable_safety_checker: true }
-    : { prompt, image_size: "square", num_inference_steps: 28, num_images: 1, enable_safety_checker: false };
+  const endpoint = quick ? "fal-ai/flux-2/klein/9b" : "fal-ai/flux-2";
+  const size = quick ? 768 : 1024;
+  const input = {
+    prompt,
+    image_size: { width: size, height: size },
+    num_images: 1,
+    output_format: "png",
+    enable_safety_checker: true,
+  };
   const result = await fal.subscribe(endpoint, { input });
   const data = result.data as { images?: { url?: string }[]; has_nsfw_concepts?: boolean[] };
   if (data.has_nsfw_concepts?.[0]) throw new InvalidGeneratedImageError("provider filtered this image");
@@ -475,7 +480,7 @@ async function uploadBytes(
  * Full pipeline: Claude concept → FLUX image → Haiku validation →
  * (optional) one retry with the issue hinted in the prompt → Supabase
  * upload. tier="quick" uses FLUX.2 Klein 9B, tier="premium" uses
- * FLUX dev ($0.025).
+ * FLUX.2 Dev.
  *
  * Validation adds ~1-2s of latency and ~$0.0015 per image but cuts the
  * "embarrassing AI errors" rate (extra limbs, wrong sport, hallucinated
