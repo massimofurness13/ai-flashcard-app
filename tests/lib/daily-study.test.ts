@@ -144,3 +144,17 @@ describe("dated home progress", () => {
     expect(currentReviewCount(23, "2026-11-17", "America/Bogota", new Date("2026-11-18T02:00:00Z"))).toBe(23);
   });
 });
+
+it("carries the three-general one-slang sequence through reviews, unfinished cards and the next day", () => {
+  const regular = Array.from({length:12},(_,i)=>card("g"+String(i).padStart(2,"0"),"new"));
+  const slang = Array.from({length:5},(_,i)=>({...card("slang"+i,"new"),tags:"huella-slang"}));
+  const base = pool(64,50,0);
+  const first = buildDailyPlan([...base,...regular,...slang],now,()=>0.2);
+  const ids = (picks:ReturnType<typeof buildDailyPlan>)=>picks.filter(p=>p.group==="new").map(p=>p.id);
+  expect(ids(first)).toEqual(["g00","g01","g02","slang0","g03","g04"]);
+  expect(counts(first)).toEqual([64,50,6]);
+  const finished = new Set(ids(first).slice(0,5));
+  const tomorrow = [...base,...regular,...slang].map(c=>finished.has(c.id)?{...card(c.id,"secure"),tags:c.tags}:c);
+  const second = buildDailyPlan(tomorrow,now,()=>0.6,first);
+  expect(ids(second)).toEqual(["g04","g05","slang1","g06","g07","g08"]);
+});
