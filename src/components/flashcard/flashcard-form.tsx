@@ -95,6 +95,8 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const field = document.activeElement;
+    if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.blur();
     setSaving(true);
     setSaveError("");
     setSavedConfirm(false);
@@ -197,7 +199,7 @@ export function FlashcardForm({ deckId, mode, isPro, initialData }: FlashcardFor
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-lg">
+    <form onSubmit={handleSubmit} className="flashcard-editor space-y-6 max-w-lg">
       <Textarea
         id="front"
         label="Front (Question)"
