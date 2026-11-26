@@ -222,11 +222,15 @@ export function EditCardsClient({
       if (res.ok && data?.imageUrl) {
         // Persist the new imageUrl on the card row before reflecting
         // it locally — otherwise a refresh would lose it.
-        await fetch(`/api/cards/${id}`, {
+        const saved = await fetch(`/api/cards/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageUrl: data.imageUrl }),
+          body: JSON.stringify({ imageUrl: data.imageUrl, imageTier: tier }),
         });
+        if (!saved.ok) {
+          setImageErrors(prev => ({ ...prev, [id]: "Image generated, but the card could not be saved." }));
+          return;
+        }
         setCards((prev) =>
           prev.map((c) => (c.id === id ? { ...c, imageUrl: data.imageUrl } : c))
         );

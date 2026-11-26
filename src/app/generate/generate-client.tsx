@@ -20,6 +20,7 @@ interface GeneratedCard {
   back: string;
   hint?: string;
   imageUrl?: string;
+  imageTier?: "quick" | "premium" | null;
   /** Server-side card ID after auto-save. Set once /api/decks
    *  completes; used to PATCH each card with its imageUrl as the
    *  illustration loop runs, so closing the tab mid-generation no
@@ -396,7 +397,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
               }
               setCards((prev) =>
                 prev.map((c, idx) =>
-                  idx === card.index ? { ...c, imageUrl: data.imageUrl } : c
+                  idx === card.index ? { ...c, imageUrl: data.imageUrl, imageTier: tier } : c
                 )
               );
             }
@@ -624,6 +625,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       back: c.back,
       hint: c.hint || null,
       imageUrl: c.imageUrl || null,
+      imageTier: c.imageUrl ? c.imageTier ?? null : null,
     }));
 
     // Auto-saved earlier → cards already exist on the server with
@@ -748,25 +750,30 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
   async function handleRegenerateImage(index: number) {
     const card = cards[index];
     setPendingImageIndices((prev) => new Set(prev).add(index));
+    const tier = card.imageTier ?? "quick";
+    setError("");
     try {
       const res = await fetch("/api/images/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          front: card.front,
-          back: card.back,
+          front: card.front, back: card.back, tier,
           deckId: autoSavedDeckId ?? targetDeckId ?? undefined,
           deckName: packName.trim() || undefined,
         }),
       });
       const data = await res.json();
-      if (res.ok && data.imageUrl) {
-        setCards((prev) =>
-          prev.map((c, i) => (i === index ? { ...c, imageUrl: data.imageUrl } : c))
-        );
+      if (!res.ok || !data.imageUrl) throw new Error(data.error || "Image generation failed.");
+      const image = { imageUrl: data.imageUrl, imageTier: tier };
+      if (card.id) {
+        const saved = await fetch(`/api/cards/${card.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(image),
+        });
+        if (!saved.ok) throw new Error("Image generated, but the card could not be saved.");
       }
-    } catch {
-      // Silently fail — user can retry
+      setCards(prev => prev.map((c, i) => i === index ? { ...c, ...image } : c));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Image generation failed.");
     }
     setPendingImageIndices((prev) => {
       const next = new Set(prev);
@@ -797,7 +804,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
       if (res.ok && data.url) {
         const idx = uploadTargetIndex;
         setCards((prev) =>
-          prev.map((c, i) => (i === idx ? { ...c, imageUrl: data.url } : c))
+          prev.map((c, i) => (i === idx ? { ...c, imageUrl: data.url, imageTier: null } : c))
         );
       }
     } catch {

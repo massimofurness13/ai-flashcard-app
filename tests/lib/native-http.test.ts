@@ -10,6 +10,13 @@ describe('native request deadlines',()=>{
   const rejected=expect(request).rejects.toMatchObject({name:'AbortError'});
   await vi.waitFor(()=>expect(bridge.request).toHaveBeenCalledOnce());controller.abort();await rejected;
  });
+ it.each([
+  ['/api/images/generate-ai',180000], ['/api/images/feedback',180000], ['/api/review',15000],
+ ])('uses the iOS request timeout for %s',async(path,timeout)=>{
+  bridge.request.mockResolvedValue({status:200,headers:{'content-type':'application/json'},data:{}});
+  await nativeFetch('https://storage.invalid'+path,{method:'POST',body:'{}'});
+  expect(bridge.request).toHaveBeenCalledWith(expect.objectContaining({connectTimeout:timeout}));
+ });
  it('also stops waiting for a stalled token refresh',async()=>{
   const controller=new AbortController();const result=withAbort(new Promise(()=>{}),controller.signal);
   const rejected=expect(result).rejects.toMatchObject({name:'AbortError'});controller.abort();await rejected;
