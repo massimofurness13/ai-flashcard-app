@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { toLocalDateKey } from "@/lib/timezone";
 import type { Prisma } from "@/generated/prisma/client";
-const input = z.object({day:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),createdAt:z.string().datetime(),picks:z.array(z.object({id:z.string().min(1).max(128),studyDirection:z.enum(["front","back"]),studyReason:z.string().max(120),group:z.enum(["practice","retention","new"]),dailyAllocation:z.object({version:z.literal(1),retentionTarget:z.number().int().min(40).max(80),assessedThroughDay:z.string().nullable(),reason:z.enum(["starting","collecting","strong-recall","weak-recall","steady"])}).optional()})).max(120)});
+const input = z.object({day:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),createdAt:z.string().datetime(),picks:z.array(z.object({id:z.string().min(1).max(128),studyDirection:z.enum(["front","back"]),studyReason:z.string().max(120),group:z.enum(["practice","retention","new"]),generalSinceSlang:z.number().int().min(0).max(3).optional(),dailyAllocation:z.object({version:z.literal(1),retentionTarget:z.number().int().min(40).max(80),assessedThroughDay:z.string().nullable(),reason:z.enum(["starting","collecting","strong-recall","weak-recall","steady"])}).optional()})).max(120)});
 /** A device-created selection, never evidence of review or completion. */
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(); if (auth.error) return auth.error;

@@ -8,7 +8,7 @@ export const DAILY_LEARNING_TARGET = DAILY_STUDY_TARGET - DAILY_RETENTION_TARGET
 
 export const DAILY_OLDEST_RETENTION_TARGET = 20;
 
-export type DailyPick = StudyPick & { group: "practice" | "retention" | "new"; dailyAllocation?: DailyAllocation };
+export type DailyPick = StudyPick & { group: "practice" | "retention" | "new"; generalSinceSlang?: number; dailyAllocation?: DailyAllocation };
 export type RecallBand = "unrated" | "dont-know" | "kind-of" | "secure";
 
 /** Read historical scores in place; passive views are never proof of recall. */
@@ -68,8 +68,24 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
     if (learning.length >= learningTarget) break;
     if (!included.has(pick.id)) { learning.push(pick); included.add(pick.id); }
   }
-  if (learning.length < learningTarget) {
-    learning.push(...fresh.filter(p => !included.has(p.id)).slice(0, learningTarget - learning.length));
+  const slangIds = new Set(cards.filter(card => card.tags?.split(",").some(tag => tag.trim().toLowerCase() === "huella-slang")).map(card => card.id));
+  const available = fresh.filter(pick => !included.has(pick.id));
+  let generalSinceSlang = previousPicks.find(pick => pick.generalSinceSlang !== undefined)?.generalSinceSlang ?? 0;
+  if (slangIds.size) {
+    const general = available.filter(pick => !slangIds.has(pick.id));
+    const slang = available.filter(pick => slangIds.has(pick.id));
+    let g = 0, s = 0;
+    while (learning.length < learningTarget && (g < general.length || s < slang.length)) {
+      if (s < slang.length && (generalSinceSlang === 3 || g === general.length)) {
+        learning.push(slang[s++]);
+        generalSinceSlang = 0;
+      } else {
+        learning.push(general[g++]);
+        generalSinceSlang = Math.min(3, generalSinceSlang + 1);
+      }
+    }
+  } else {
+    learning.push(...available.slice(0, learningTarget - learning.length));
   }
   // Keep the workload predictable: missing retention must not turn into extra
   // difficult/new cards. A smaller pool yields a shorter, unique-card session.
@@ -77,6 +93,16 @@ export function buildDailyPlan(cards: StudyCandidate[], now = new Date(), random
   // Interleave the chosen groups so the session does not arrive pack by pack.
   for (let i=selected.length-1;i>0;i--) {
     const j=Math.floor(random()*(i+1)); [selected[i],selected[j]]=[selected[j],selected[i]];
+  }
+  if (slangIds.size) {
+    // Keep the review slots shuffled while presenting introductions in sequence.
+    // Carried, unfinished introductions already consumed their slot on the previous day.
+    const orderedNew = learning.filter(pick => pick.group === "new");
+    let nextNew = 0;
+    for (let i = 0; i < selected.length; i++) {
+      const pick = selected[i].group === "new" ? orderedNew[nextNew++] : selected[i];
+      selected[i] = { ...pick, generalSinceSlang };
+    }
   }
   if (selected.length) selected[0] = {...selected[0], dailyAllocation: allocation};
   return selected;

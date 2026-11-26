@@ -333,9 +333,7 @@ function StudyConfigInner({ decks }: StudyConfigProps) {
   }
 
   function startStudy() {
-    // Unlock audio NOW, inside this tap, so the session's get-ready
-    // countdown doesn't outlive the browser's autoplay-gesture window
-    // and leave every card silent. See unlockAudio() in lib/tts.
+    // Unlock speech during the user's start gesture.
     unlockAudio();
     const params = new URLSearchParams({
       deckIds: selectedDeckIds.join(","),

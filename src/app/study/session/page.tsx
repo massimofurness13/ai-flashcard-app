@@ -6,7 +6,6 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import { StudySession, type StudyStats } from "@/components/study/study-session";
 import Link from "next/link";
 import { DailyResultsPanel } from "@/components/study/daily-results";
-import { StudyCountdown } from "@/components/study/study-countdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { peekStudyResume, clearStudyResume } from "@/lib/study-resume";
@@ -71,15 +70,6 @@ function StudySessionContent() {
     () => resume?.learningLanguage ?? null,
   );
 
-  // Gate the session behind a short "get ready" countdown. While it
-  // runs we preload the opening cards' audio so the session starts
-  // with zero delay instead of the user waiting on card 1.
-  //
-  // EXCEPT when resuming mid-session: the user was already in the flow,
-  // so a fresh 3·2·1 would be jarring — skip straight in.
-  const [prepared, setPrepared] = useState(() => resume !== null);
-  const handlePrepared = useCallback(() => setPrepared(true), []);
-
   const deckIds = searchParams.get("deckIds") || "";
   const limit = searchParams.get("limit") || "25";
   const filter = searchParams.get("filter") || "due";
@@ -118,7 +108,7 @@ function StudySessionContent() {
       setCards(snapshot?.cards ?? data.cards);
       setLearningLanguage(snapshot?.learningLanguage ?? data.learningLanguage ?? null);
       if (snapshot) {
-        setResume(snapshot); setPrepared(true); setStats({...snapshot.stats, ...readStudyTime(snapshot.timingKey)});
+        setResume(snapshot); setStats({...snapshot.stats, ...readStudyTime(snapshot.timingKey)});
         if (snapshot.currentIndex >= snapshot.cards.length) setCompleted(true);
       } else if (data.daily) {
         setDaily(data.daily);
@@ -223,20 +213,6 @@ function StudySessionContent() {
         </div>
       </div>
     ) : null;
-
-  // Cards are loaded but the user hasn't passed the get-ready
-  // countdown yet — show it (and preload the opening audio behind it).
-  if (!prepared && !completed) {
-    return (
-      <>
-      <StudyCountdown
-        cards={cards}
-        learningLanguage={learningLanguage}
-        onComplete={handlePrepared}
-      />
-      </>
-    );
-  }
 
   return (
     <>
