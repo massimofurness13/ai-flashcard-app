@@ -511,3 +511,10 @@ body:has(.study-session) > footer { display: none; }
 }
 
 .study-flashcard .flashcard-text { font-size: clamp(1.5rem, 6.2vw, 1.875rem); line-height: 1.35; }
+
+
+/* iPhone zooms the page when a smaller text field gains focus and can
+   retain that zoom after the editor unmounts. Keep manual pinch zoom available. */
+@media (any-pointer: coarse) {
+  .flashcard-editor :is(input, textarea) { font-size: max(16px, 1rem); }
+}
