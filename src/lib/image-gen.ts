@@ -1,5 +1,6 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 import { fal } from "@fal-ai/client";
 import { checkedGeneratedImage, InvalidGeneratedImageError, MAX_GENERATED_IMAGE_BYTES } from "./image-integrity";
 
@@ -22,7 +23,6 @@ export type ImageTier = "quick" | "premium";
  */
 async function validateImage(
   imageBytes: Buffer,
-  ext: string,
   cardFront: string,
   cardBack: string
 ): Promise<{ valid: boolean; issue?: string }> {
@@ -31,18 +31,8 @@ async function validateImage(
 
   const client = new Anthropic({ apiKey, timeout: 10000, maxRetries: 0 });
 
-  // Anthropic's vision API takes base64-encoded image data with an
-  // explicit media type. We support png/jpeg/webp (whatever FLUX
-  // returned upstream).
-  const mediaType =
-    ext === "png"
-      ? "image/png"
-      : ext === "webp"
-        ? "image/webp"
-        : "image/jpeg";
-  const base64 = imageBytes.toString("base64");
-
   try {
+    const preview = await sharp(imageBytes).resize(768, 768, { fit: "inside", withoutEnlargement: true }).jpeg().toBuffer();
     const message = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 80,
@@ -54,8 +44,8 @@ async function validateImage(
               type: "image",
               source: {
                 type: "base64",
-                media_type: mediaType,
-                data: base64,
+                media_type: "image/jpeg",
+                data: preview.toString("base64"),
               },
             },
             {
@@ -64,12 +54,12 @@ async function validateImage(
 Front: "${cardFront}"
 Back: "${cardBack}"
 
-Check whether the picture clearly shows the intended meaning. Flag an unrelated scene, obvious visual defects, or captions that give away the answer.
+Check the action and the positions of the objects against the card. Flag a wrong meaning, obvious defects, or a caption giving away the answer. For a correction, describe what should be visible.
 
 Reply on a SINGLE LINE in one of these two formats:
 OK
 or
-BAD: <one short phrase describing the specific problem>`,
+BAD: <one short correction>`,
             },
           ],
         },
@@ -157,45 +147,26 @@ export async function generateAndUploadImage(
   back: string,
   tier: ImageTier = "quick"
 ): Promise<string> {
-  const sides = [front.trim(), back.trim()].filter(Boolean);
-  const prompt = `Illustrate the meaning of this flashcard without captions.\n${sides.join("\n")}`;
+  // Use the answer or translation as the subject. Two printed versions of
+  // the phrase can make the model draw a vocabulary worksheet.
+  const subject = back.trim() || front.trim();
+  const prompt = `Show this in a single image without any writing: ${subject}`;
 
-  // One shared retry budget for hard file failures and semantic corrections.
-  let usedRetry = false;
-  let result;
-  try { result = await generateViaFal(prompt, tier); }
-  catch (error) {
-    if (!(error instanceof InvalidGeneratedImageError)) throw error;
-    usedRetry = true;
-    result = await generateViaFal(prompt, tier);
-  }
-  let { bytes, ext } = result;
-
-  // Validate. If Haiku flags a problem, retry once with the issue
-  // appended as an explicit "avoid this" hint to the prompt.
-  const validation = await validateImage(bytes, ext, front, back);
-  if (!usedRetry && !validation.valid && validation.issue) {
-    console.warn(
-      `[image-gen] validation flagged "${validation.issue}" — retrying once`
-    );
-    const refinedPrompt = [
-      prompt,
-      `Correction: ${validation.issue}`,
-    ].join(" ");
+  let nextPrompt = prompt;
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const retry = await generateViaFal(refinedPrompt, tier);
-      bytes = retry.bytes;
-      ext = retry.ext;
-    } catch (err) {
-      // Retry network error — keep the original. Better a slightly-off
-      // image than no image.
-      console.warn(
-        `[image-gen] retry failed (${err instanceof Error ? err.message : err}), using original`
-      );
+      const { bytes, ext } = await generateViaFal(nextPrompt, tier);
+      const review = await validateImage(bytes, front, back);
+      if (!review.valid) {
+        nextPrompt = `${prompt} ${review.issue}`;
+        throw new InvalidGeneratedImageError("image does not match the card");
+      }
+      return await uploadBytes(userId, bytes, ext);
+    } catch (error) {
+      if (!(error instanceof InvalidGeneratedImageError) || attempt === 1) throw error;
     }
   }
-
-  return uploadBytes(userId, bytes, ext);
+  throw new Error("Image generation failed");
 }
 
 /**
