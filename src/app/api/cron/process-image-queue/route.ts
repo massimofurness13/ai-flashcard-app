@@ -8,7 +8,7 @@ import {
 } from "@/lib/image-quota";
 
 // Vercel function config:
-//   60s gives us comfortable headroom — a single FLUX schnell call is
+//   60s gives us comfortable headroom — a single Quick image call is
 //   <2s, but the validation round-trip + Supabase upload + occasional
 //   slow path can push past 10s. We bound the BATCH to ~50s below so
 //   we always exit cleanly before Vercel kills us.

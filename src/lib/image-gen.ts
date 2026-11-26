@@ -19,9 +19,7 @@ export type ImageTier = "quick" | "premium";
  *
  * V2: pushes harder on caricature, outrageous-in-service-of-meaning,
  *     and stylistic anchors. Designed for Premium (FLUX dev, 28 steps)
- *     which can render the extra complexity coherently. Schnell (Quick
- *     tier) struggles with the loaded prompts — produces glitchy
- *     anatomy, oversized sensory anchors — so Quick stays on v1.
+ *     which can render the extra complexity coherently.
  *
  * Default routing: Premium → v2, Quick → v1.
  * Env override: IMAGE_PROMPT_VERSION=v1|v2 forces a single version
@@ -400,15 +398,6 @@ BAD: <one short phrase describing the specific problem>`,
   }
 }
 
-/**
- * Style preset differs per tier so Premium looks visibly more elaborate
- * than Quick, giving users a real reason to spend 5 credits instead of 1.
- *
- * Premium leans into character-led storybook illustration — expressive
- * faces, exaggerated proportions, dramatic lighting. The point is
- * MEMORABILITY: a vivid frame the brain wants to encode. Quick stays
- * deliberately plain (flat vector) so the upgrade is obvious.
- */
 function wrapConceptInStyle(concept: string, tier: ImageTier): string {
   if (tier === "premium") {
     return [
@@ -422,8 +411,8 @@ function wrapConceptInStyle(concept: string, tier: ImageTier): string {
   }
   return [
     concept,
-    "Flat vector illustration style with soft pastel colours.",
-    "Clean minimal background. Iconic, simple shapes.",
+    "Vivid editorial illustration with rich gouache colours and expressive poses.",
+    "One clear focal action, readable at flashcard size, with a simple background.",
     "No text, no letters, no numbers, no writing, no signs, no labels, no words anywhere in the image.",
   ].join(" ");
 }
@@ -437,20 +426,15 @@ async function generateViaFal(
 
   fal.config({ credentials: apiKey });
 
-  const endpoint = tier === "premium" ? "fal-ai/flux/dev" : "fal-ai/flux/schnell";
-  const steps = tier === "premium" ? 28 : 4;
-
-  const result = await fal.subscribe(endpoint, {
-    input: {
-      prompt,
-      image_size: "square",
-      num_inference_steps: steps,
-      num_images: 1,
-      enable_safety_checker: false,
-    },
-  });
-
-  const imageUrl = (result.data as { images?: { url?: string }[] })?.images?.[0]?.url;
+  const quick = tier === "quick";
+  const endpoint = quick ? "fal-ai/flux-2/klein/9b" : "fal-ai/flux/dev";
+  const input = quick
+    ? { prompt, image_size: { width: 768, height: 768 }, num_images: 1, output_format: "png", enable_safety_checker: true }
+    : { prompt, image_size: "square", num_inference_steps: 28, num_images: 1, enable_safety_checker: false };
+  const result = await fal.subscribe(endpoint, { input });
+  const data = result.data as { images?: { url?: string }[]; has_nsfw_concepts?: boolean[] };
+  if (data.has_nsfw_concepts?.[0]) throw new InvalidGeneratedImageError("provider filtered this image");
+  const imageUrl = data.images?.[0]?.url;
   if (!imageUrl) throw new Error(`No image URL from ${endpoint}`);
 
   const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(20000) });
@@ -490,7 +474,7 @@ async function uploadBytes(
 /**
  * Full pipeline: Claude concept → FLUX image → Haiku validation →
  * (optional) one retry with the issue hinted in the prompt → Supabase
- * upload. tier="quick" uses FLUX schnell ($0.003), tier="premium" uses
+ * upload. tier="quick" uses FLUX.2 Klein 9B, tier="premium" uses
  * FLUX dev ($0.025).
  *
  * Validation adds ~1-2s of latency and ~$0.0015 per image but cuts the
