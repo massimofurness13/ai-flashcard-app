@@ -312,7 +312,7 @@ export function GenerateClient({ decks, isPro }: GenerateClientProps) {
 
   /**
    * Generate images for `currentCards`, with the FIRST `premiumCount`
-   * cards getting the Premium tier (FLUX dev, 5 credits) and the rest
+   * cards getting the Premium tier (FLUX.2 Dev, 5 credits) and the rest
    * getting Quick (1 credit). `cap` truncates the work
    * to the first N cards positionally — used when the user is over
    * budget and chose "Generate what I can afford" rather than topping

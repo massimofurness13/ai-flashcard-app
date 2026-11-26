@@ -14,7 +14,7 @@ export type CreditContext = {
 /**
  * Unified credit system:
  *   Quick ✨  = 1 credit (FLUX.2 Klein 9B)
- *   Premium 🎨 = 5 credits (FLUX dev, $0.025 cost)
+ *   Premium 🎨 = 5 credits (FLUX.2 Dev)
  *
  * Free tier:    15 lifetime credits (= 15 Quick or 3 Premium) to try the feature
  * Pro Monthly:  500 credits per month, refreshes on Stripe billing cycle

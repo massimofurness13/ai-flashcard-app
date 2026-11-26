@@ -21,10 +21,8 @@
  *
  * Run: `npx tsx scripts/seed-starter-pack-images.ts`
  *
- * Cost estimate: ~$0.025/Premium + ~$0.003/Quick on FLUX = roughly
- * $0.20-$0.30 per 15-card pack. For the three seeded packs combined,
- * call it $0.50-$1 total in FAL credits + a few cents in Anthropic
- * API for the concept-builder + validator passes.
+ * At one billed megapixel, fal generation costs $0.012 for Premium and
+ * $0.006 for Quick, before retries and concept or validation calls.
  */
 
 import "dotenv/config";
