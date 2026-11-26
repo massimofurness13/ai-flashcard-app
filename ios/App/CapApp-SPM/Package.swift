@@ -12,9 +12,9 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.5.2"),
-        .package(name: "CapacitorApp", path: "../../../../../../Users/massimofurness13/Documents/GitHub/ai-flashcard-app/.claude/worktrees/eloquent-ardinghelli-fb5506/node_modules/@capacitor/app"),
-        .package(name: "CapacitorSplashScreen", path: "../../../../../../Users/massimofurness13/Documents/GitHub/ai-flashcard-app/.claude/worktrees/eloquent-ardinghelli-fb5506/node_modules/@capacitor/splash-screen"),
-        .package(name: "CapacitorStatusBar", path: "../../../../../../Users/massimofurness13/Documents/GitHub/ai-flashcard-app/.claude/worktrees/eloquent-ardinghelli-fb5506/node_modules/@capacitor/status-bar")
+        .package(name: "CapacitorApp", path: "../../../node_modules/@capacitor/app"),
+        .package(name: "CapacitorSplashScreen", path: "../../../node_modules/@capacitor/splash-screen"),
+        .package(name: "CapacitorStatusBar", path: "../../../node_modules/@capacitor/status-bar")
     ],
     targets: [
         .target(
