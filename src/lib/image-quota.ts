@@ -13,7 +13,7 @@ export type CreditContext = {
 
 /**
  * Unified credit system:
- *   Quick ✨  = 1 credit (FLUX schnell, $0.003 cost)
+ *   Quick ✨  = 1 credit (FLUX.2 Klein 9B)
  *   Premium 🎨 = 5 credits (FLUX dev, $0.025 cost)
  *
  * Free tier:    15 lifetime credits (= 15 Quick or 3 Premium) to try the feature
