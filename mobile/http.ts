@@ -28,7 +28,9 @@ export async function nativeFetch(input:RequestInfo|URL,init?:RequestInit):Promi
   for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
   data=btoa(binary);
  }
- const result=await withAbort(CapacitorHttp.request({url:url.href,method:request.method,headers,data,dataType:"file",responseType:"arraybuffer",connectTimeout:15000,readTimeout:url.pathname==="/api/generate"?180000:30000,disableRedirects:true}),request.signal);
+ // Capacitor on iOS uses connectTimeout for the entire URLRequest when both are supplied.
+ const imageGeneration = ["/api/images/generate-ai", "/api/images/feedback"].includes(url.pathname);
+ const result=await withAbort(CapacitorHttp.request({url:url.href,method:request.method,headers,data,dataType:"file",responseType:"arraybuffer",connectTimeout:imageGeneration?180000:15000,readTimeout:imageGeneration||url.pathname==="/api/generate"?180000:30000,disableRedirects:true}),request.signal);
  if(request.signal.aborted)throw new DOMException("Cancelled","AbortError");
  const responseHeaders=new Headers(result.headers);
  const body=responseHeaders.get("content-type")?.includes("application/json")?JSON.stringify(result.data):Uint8Array.from(atob(result.data||""),c=>c.charCodeAt(0));
@@ -70,7 +72,7 @@ export function installApiTransport(token:()=>Promise<{accessToken:string;userId
    const saved=await cachedApi(path);if(saved!==undefined)return Response.json(saved);
   }
   const options=input instanceof Request?{method:input.method,body:["GET","HEAD"].includes(input.method)?undefined:await input.text(),signal:input.signal,...init}:{...init};
-  if(method!=="GET" && (url.pathname.startsWith("/api/images/") || ["/api/review","/api/offline/plans"].includes(url.pathname))){
+  if(method!=="GET" && url.pathname!=="/api/images/generate-ai" && (url.pathname.startsWith("/api/images/") || ["/api/review","/api/offline/plans"].includes(url.pathname))){
    await flushMutations(body=>remote("/api/offline/mutations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}));
    const owner=readDeviceIdentity(localStorage)?.id;
    if(owner&&(await pendingMutations(owner)).some(p=>url.pathname.startsWith("/api/images/") || !["card:delete","deck:delete"].includes(p.operation.kind)))return Response.json({error:"Your changes are saved on this iPhone. Connect and finish syncing them before this operation can sync."},{status:503});

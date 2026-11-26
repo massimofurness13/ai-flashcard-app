@@ -28,12 +28,21 @@ it.each(['credits','monthly'])('refunds %s balance once when both attempts are b
  expect(r.status).toBe(500);expect((await r.json()).imageUrl).toBeUndefined();expect(m.subscribe).toHaveBeenCalledTimes(2);expect(m.upload).not.toHaveBeenCalled();expect(m.refund).toHaveBeenCalledExactlyOnceWith('owner',source,5,expect.any(Object));
 });
 it('never replaces a valid original with a blank semantic retry',async()=>{
- vi.stubEnv('ANTHROPIC_API_KEY','fixture');m.vision.mockResolvedValueOnce({content:[{type:'text',text:'a room'}]}).mockResolvedValueOnce({content:[{type:'text',text:'BAD: wrong object'}]});
+ vi.stubEnv('ANTHROPIC_API_KEY','fixture');m.vision.mockResolvedValueOnce({content:[{type:'text',text:'BAD: wrong object'}]});
  vi.mocked(fetch).mockResolvedValueOnce(new Response(Uint8Array.from(valid))).mockResolvedValueOnce(new Response(Uint8Array.from(blank)));
  await generateAndUploadImage('owner','habitación','room');expect(m.subscribe).toHaveBeenCalledTimes(2);expect(m.upload.mock.calls[0][1].equals(valid)).toBe(true);
 });
 it('shares a two-call ceiling between blank retries and semantic review',async()=>{
- vi.stubEnv('ANTHROPIC_API_KEY','fixture');m.vision.mockResolvedValueOnce({content:[{type:'text',text:'a room'}]}).mockResolvedValueOnce({content:[{type:'text',text:'BAD: wrong object'}]});
+ vi.stubEnv('ANTHROPIC_API_KEY','fixture');m.vision.mockResolvedValueOnce({content:[{type:'text',text:'BAD: wrong object'}]});
  vi.mocked(fetch).mockResolvedValueOnce(new Response(Uint8Array.from(blank))).mockResolvedValueOnce(new Response(Uint8Array.from(valid)));
  await generateAndUploadImage('owner','habitación','room');expect(m.subscribe).toHaveBeenCalledTimes(2);
+});
+
+it.each([['quick','fal-ai/flux-2/klein/9b'],['premium','fal-ai/flux-2']])('passes the same plain card prompt for %s', async (tier, endpoint) => {
+ vi.stubEnv('IMAGE_PROMPT_VERSION','v2');
+ vi.mocked(fetch).mockResolvedValueOnce(new Response(Uint8Array.from(valid)));
+ const response = await POST(new Request('https://app.test/api/images/generate-ai',{method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify({front:'Mi teléfono está debajo del cojín.',back:'My phone is under the cushion.',tier})}));
+ expect(response.status).toBe(200);
+ expect((await response.json()).tier).toBe(tier);
+ expect(m.subscribe).toHaveBeenCalledWith(endpoint,{input:expect.objectContaining({prompt:'Illustrate the meaning of this flashcard without captions.\nMi teléfono está debajo del cojín.\nMy phone is under the cushion.'})});
 });
